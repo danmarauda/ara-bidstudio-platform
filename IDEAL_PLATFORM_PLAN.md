@@ -33,7 +33,7 @@ Build a world-class bid and tender management platform that combines:
 | **AI Agents** | Mastra 0.16 + LangGraph | Mastra orchestration + LangGraph workflows |
 | **Document AI** | Docling + Unstructured | ML-based layout parsing + entity extraction |
 | **Vector DB** | LibSQL + pgvector | Fast local + production vector search |
-| **Auth** | Clerk + WorkOS | Clerk primary, WorkOS for enterprise SSO |
+| **Auth** | Clerk | Primary authentication with billing integration |
 | **Streaming** | Vercel AI SDK + Server-Sent Events | Real-time AI responses |
 | **File Storage** | Cloudflare R2 + Encryption | S3-compatible with edge caching |
 | **Observability** | OpenTelemetry + New Relic | Production monitoring |
@@ -707,8 +707,8 @@ Step 5: Approval
 - API access
 
 #### 14. **Enterprise Features**
-- SSO (SAML, OIDC)
-- SCIM provisioning
+- Advanced organization management (Clerk)
+- Billing integration (Stripe)
 - Advanced audit logs
 - Compliance reports
 
@@ -845,15 +845,13 @@ export default defineSchema({
 ### Multi-Layer Security
 
 ```
-Layer 1: Authentication
-├── Clerk (primary)
-│   - Email/password
-│   - OAuth (Google, Microsoft)
-│   - MFA support
-└── WorkOS (enterprise)
-    - SAML SSO
-    - OIDC
-    - SCIM provisioning
+Layer 1: Authentication (Clerk)
+├── Email/Password authentication
+├── OAuth providers (Google, Microsoft)
+├── Multi-factor authentication (MFA)
+├── Organization-based tenants (already configured)
+├── User management via Clerk Dashboard
+└── Billing integration (Clerk Billing or Stripe)
 
 Layer 2: Authorization
 ├── Role-Based Access Control (RBAC)
@@ -877,6 +875,90 @@ Layer 4: Audit & Compliance
 ├── GDPR Compliance
 └── SOC 2 Type II Ready
 ```
+
+### Leveraging Existing ARA Clerk Setup
+
+**Current Configuration**:
+- ARA Property Services tenant already exists in Clerk
+- Organization-based multi-tenancy configured
+- Default tenant slug: `ara-property-services`
+- URL structure: `/t/[tenant-slug]/[page]`
+
+**Implementation**:
+```typescript
+// middleware.ts - Clerk auth with tenant detection
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+
+const isProtectedRoute = createRouteMatcher([
+  '/t/(.*)/dashboard(.*)',
+  '/t/(.*)/bids(.*)',
+  '/t/(.*)/documents(.*)',
+]);
+
+export default clerkMiddleware(async (auth, req) => {
+  if (isProtectedRoute(req)) {
+    await auth.protect();
+  }
+});
+
+// Extract tenant from URL
+export function getTenantFromRequest(req: Request) {
+  const url = new URL(req.url);
+  const pathParts = url.pathname.split('/');
+  // /t/tenant-slug/page -> tenant-slug
+  return pathParts[2]; // Assuming /t/[tenant]/[page] structure
+}
+```
+
+**Billing Integration Options**:
+
+1. **Clerk Billing** (Simplest - built-in)
+   - Use Clerk's billing portal
+   - Stripe integration via Clerk
+   - Automatic subscription management
+
+2. **Direct Stripe** (More control)
+   - Stripe Customer Portal
+   - Usage-based billing
+   - Per-seat or per-bid pricing
+
+3. **Hybrid Approach**
+   - Clerk for auth + user management
+   - Stripe for billing (webhook sync)
+   - Store subscription in Convex
+
+```typescript
+// Clerk + Stripe integration
+import { clerkClient } from "@clerk/clerk-sdk-node";
+
+// Sync Clerk org to Stripe customer
+export async function syncOrganizationToBilling(clerkOrgId: string) {
+  const org = await clerkClient.organizations.getOrganization({
+    organizationId: clerkOrgId,
+  });
+
+  // Create or get Stripe customer
+  const customer = await stripe.customers.create({
+    name: org.name,
+    metadata: { clerkOrgId },
+    email: org.createdBy,
+  });
+
+  // Store mapping in Convex
+  await ctx.runMutation(api.billing.linkStripeCustomer, {
+    clerkOrgId,
+    stripeCustomerId: customer.id,
+  });
+}
+```
+
+**Tenant Management**:
+- Use Clerk Organizations for tenants
+- Each organization = one tenant
+- Users can belong to multiple organizations
+- Organization metadata stores tenant settings
+
+---
 
 ### Security Best Practices
 
@@ -1104,8 +1186,9 @@ Week 15-16: Analytics
 
 ```
 Week 17-18: Enterprise Features
-├── WorkOS SSO
-├── Advanced permissions
+├── Clerk advanced features (organizations, permissions)
+├── Billing integration (Stripe or Clerk Billing)
+├── Advanced permissions (RBAC)
 ├── Audit logging
 ├── Data export
 └── API access
@@ -1277,7 +1360,7 @@ to reuse the pricing model from the XYZ Center bid?"
 | Real-Time Collaboration | High | Medium |
 | File Encryption | Medium | Low |
 | Langflow Integration | Medium | High |
-| WorkOS SSO | High | Low |
+| Billing Integration | High | Medium |
 
 ### C. Tech Stack Justification
 
@@ -1288,7 +1371,7 @@ to reuse the pricing model from the XYZ Center bid?"
 | **Mastra** | Modern agent framework, observability |
 | **Docling** | Best PDF parser, ML-based |
 | **LibSQL** | Fast, edge-compatible, vector search |
-| **Clerk** | Best auth UX, multi-tenant support |
+| **Clerk** | Best auth UX, multi-tenant support, existing ARA setup, billing integration |
 | **Liveblocks** | Purpose-built for collaboration |
 | **Shadcn/ui** | Customizable, accessible, beautiful |
 

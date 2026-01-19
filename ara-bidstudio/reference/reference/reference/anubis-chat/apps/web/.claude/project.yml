@@ -1,0 +1,66 @@
+project:
+  name: "anubis-chat-web"
+  type: "web-application"
+  created: "2025-08-06"
+  description: "Next.js web app for ANUBIS Chat - Solana-native AI chat SaaS platform"
+  scope: "Web app only - /apps/web directory within monorepo"
+
+stack:
+  frontend:
+    framework: "nextjs-15"
+    styling: "tailwindcss"
+    ui: "shadcn-ui"
+    typescript: true
+    ai_sdk: "vercel-ai-sdk-v5"
+    blockchain: "solana-web3js"
+  backend:
+    service: "convex"
+    type: "baas"
+    database: "convex-db"
+    realtime: true
+  architecture: "monorepo-web-app"
+  package_manager: "bun"
+
+context:
+  working_directory: "/apps/web"
+  monorepo_root: "../../"
+  ignore_paths:
+    - "../api"
+    - "../contracts"
+    - "../packages"
+  focus_areas:
+    - "app/" # Next.js app directory
+    - "components/" # React components
+    - "hooks/" # Custom React hooks
+    - "lib/" # Utilities and services
+    - "public/" # Static assets
+    - "convex/" # Convex backend functions
+
+modes:
+  default: "nextjs-15 + solana-2025 + continuous-verification"
+  available:
+    - nextjs-15
+    - solana-2025
+    - continuous-verification
+    - test-driven
+    - ai-agent-protocol
+
+features:
+  verification: true
+  indexing: true
+  security: true
+  mcp_servers: true
+  documentation: true
+
+preferences:
+  package_manager: "bun"
+  typescript: true
+  linting: "strict"
+  formatter: "biome"
+  git_hooks: "husky"
+
+quality:
+  type_safety: "strict"
+  nullish_coalescing: true
+  no_any_types: true
+  warnings_as_errors: true

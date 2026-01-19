@@ -1,0 +1,778 @@
+---
+category: testing
+subcategory: e2e-tests
+tags: [e2e, playwright, user-workflows, browser-testing]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["./integration-tests.mdc"]
+  exports: ["e2e-patterns", "user-workflow-testing"]
+  references: ["./wallet-testing.mdc", "./performance-tests.mdc"]
+---
+
+# End-to-End Testing with Playwright (2025)
+
+## E2E Testing Framework Setup
+
+### Playwright Configuration
+```typescript
+// playwright.config.ts
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: [
+    ['html'],
+    ['json', { outputFile: 'test-results/results.json' }],
+    ['junit', { outputFile: 'test-results/results.xml' }]
+  ],
+  use: {
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    actionTimeout: 15000,
+    navigationTimeout: 30000
+  },
+
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'Mobile Chrome',
+      use: { ...devices['Pixel 5'] },
+    },
+    {
+      name: 'Mobile Safari',
+      use: { ...devices['iPhone 12'] },
+    },
+  ],
+
+  webServer: {
+    command: 'bun run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000
+  },
+});
+```
+
+### E2E Test Setup and Utilities
+```typescript
+// e2e/setup/fixtures.ts
+import { test as base, expect } from '@playwright/test';
+import { MockWallet } from './wallet-mock';
+import { TestData } from './test-data';
+
+interface E2EFixtures {
+  mockWallet: MockWallet;
+  testData: TestData;
+}
+
+export const test = base.extend<E2EFixtures>({
+  mockWallet: async ({ page }, use) => {
+    const wallet = new MockWallet(page);
+    await wallet.setup();
+    await use(wallet);
+  },
+
+  testData: async ({}, use) => {
+    const data = new TestData();
+    await data.setup();
+    await use(data);
+    await data.cleanup();
+  }
+});
+
+export { expect };
+```
+
+### Page Object Models
+```typescript
+// e2e/pages/chat.page.ts
+import { Page, Locator, expect } from '@playwright/test';
+
+export class ChatPage {
+  readonly page: Page;
+  readonly messageInput: Locator;
+  readonly sendButton: Locator;
+  readonly messagesContainer: Locator;
+  readonly conversationList: Locator;
+  readonly newChatButton: Locator;
+  readonly typingIndicator: Locator;
+
+  constructor(page: Page) {
+    this.page = page;
+    this.messageInput = page.getByTestId('message-input');
+    this.sendButton = page.getByTestId('send-button');
+    this.messagesContainer = page.getByTestId('messages-container');
+    this.conversationList = page.getByTestId('conversation-list');
+    this.newChatButton = page.getByTestId('new-chat-button');
+    this.typingIndicator = page.getByTestId('typing-indicator');
+  }
+
+  async goto() {
+    await this.page.goto('/');
+    await expect(this.messageInput).toBeVisible();
+  }
+
+  async sendMessage(message: string) {
+    await this.messageInput.fill(message);
+    await this.sendButton.click();
+  }
+
+  async waitForResponse() {
+    // Wait for typing indicator to appear and disappear
+    await expect(this.typingIndicator).toBeVisible();
+    await expect(this.typingIndicator).not.toBeVisible({ timeout: 30000 });
+  }
+
+  async getLastMessage() {
+    const messages = this.messagesContainer.locator('[data-testid="message"]');
+    const lastMessage = messages.last();
+    await expect(lastMessage).toBeVisible();
+    return await lastMessage.textContent();
+  }
+
+  async getMessageCount() {
+    const messages = this.messagesContainer.locator('[data-testid="message"]');
+    return await messages.count();
+  }
+
+  async startNewConversation() {
+    await this.newChatButton.click();
+    await expect(this.messagesContainer).toBeEmpty();
+  }
+
+  async selectConversation(conversationTitle: string) {
+    const conversation = this.conversationList.getByText(conversationTitle);
+    await conversation.click();
+    await expect(this.messagesContainer).toBeVisible();
+  }
+
+  async waitForMessageContaining(text: string, timeout = 30000) {
+    await expect(
+      this.messagesContainer.locator(`text*="${text}"`).first()
+    ).toBeVisible({ timeout });
+  }
+
+  async copyMessage(messageIndex = -1) {
+    const messages = this.messagesContainer.locator('[data-testid="message"]');
+    const message = messageIndex === -1 ? messages.last() : messages.nth(messageIndex);
+    
+    await message.hover();
+    const copyButton = message.getByTestId('copy-button');
+    await copyButton.click();
+    
+    // Verify copy success
+    await expect(message.getByText('Copied!')).toBeVisible({ timeout: 2000 });
+  }
+
+  async regenerateLastResponse() {
+    const messages = this.messagesContainer.locator('[data-testid="message"]');
+    const lastMessage = messages.last();
+    
+    await lastMessage.hover();
+    const regenerateButton = lastMessage.getByTestId('regenerate-button');
+    await regenerateButton.click();
+    
+    await this.waitForResponse();
+  }
+}
+```
+
+```typescript
+// e2e/pages/wallet-connection.page.ts
+import { Page, Locator, expect } from '@playwright/test';
+
+export class WalletConnectionPage {
+  readonly page: Page;
+  readonly connectWalletButton: Locator;
+  readonly walletModal: Locator;
+  readonly phantomOption: Locator;
+  readonly solflareOption: Locator;
+  readonly disconnectButton: Locator;
+  readonly walletAddress: Locator;
+
+  constructor(page: Page) {
+    this.page = page;
+    this.connectWalletButton = page.getByTestId('connect-wallet-button');
+    this.walletModal = page.getByTestId('wallet-modal');
+    this.phantomOption = page.getByTestId('phantom-wallet');
+    this.solflareOption = page.getByTestId('solflare-wallet');
+    this.disconnectButton = page.getByTestId('disconnect-wallet');
+    this.walletAddress = page.getByTestId('wallet-address');
+  }
+
+  async connectWallet(walletType: 'phantom' | 'solflare' = 'phantom') {
+    await this.connectWalletButton.click();
+    await expect(this.walletModal).toBeVisible();
+    
+    const walletOption = walletType === 'phantom' ? this.phantomOption : this.solflareOption;
+    await walletOption.click();
+    
+    // Wait for connection to complete
+    await expect(this.walletAddress).toBeVisible({ timeout: 10000 });
+  }
+
+  async disconnectWallet() {
+    await this.disconnectButton.click();
+    await expect(this.connectWalletButton).toBeVisible();
+  }
+
+  async getConnectedAddress() {
+    return await this.walletAddress.textContent();
+  }
+}
+```
+
+## Core User Workflow Tests
+
+### Authentication and Onboarding
+```typescript
+// e2e/tests/auth-onboarding.spec.ts
+import { test, expect } from '../setup/fixtures';
+import { WalletConnectionPage } from '../pages/wallet-connection.page';
+import { ChatPage } from '../pages/chat.page';
+
+test.describe('Authentication and Onboarding', () => {
+  test('should complete wallet connection flow', async ({ page, mockWallet }) => {
+    const walletPage = new WalletConnectionPage(page);
+    const chatPage = new ChatPage(page);
+
+    // Visit homepage
+    await page.goto('/');
+
+    // Should show connect wallet prompt
+    await expect(walletPage.connectWalletButton).toBeVisible();
+
+    // Connect wallet
+    await walletPage.connectWallet('phantom');
+    
+    // Should show connected state
+    const address = await walletPage.getConnectedAddress();
+    expect(address).toMatch(/^[A-Za-z0-9]{32,44}$/);
+
+    // Should enable chat interface
+    await expect(chatPage.messageInput).toBeEnabled();
+  });
+
+  test('should handle wallet connection failure', async ({ page, mockWallet }) => {
+    const walletPage = new WalletConnectionPage(page);
+
+    await page.goto('/');
+
+    // Simulate wallet rejection
+    await mockWallet.simulateRejection();
+    
+    await walletPage.connectWalletButton.click();
+    await walletPage.phantomOption.click();
+
+    // Should show error message
+    await expect(page.getByText('Wallet connection failed')).toBeVisible();
+    await expect(walletPage.connectWalletButton).toBeVisible();
+  });
+
+  test('should persist wallet connection across page reloads', async ({ page, mockWallet }) => {
+    const walletPage = new WalletConnectionPage(page);
+
+    await page.goto('/');
+    await walletPage.connectWallet();
+    
+    const originalAddress = await walletPage.getConnectedAddress();
+
+    // Reload page
+    await page.reload();
+
+    // Should remain connected
+    await expect(walletPage.walletAddress).toBeVisible();
+    const newAddress = await walletPage.getConnectedAddress();
+    expect(newAddress).toBe(originalAddress);
+  });
+
+  test('should show onboarding flow for new users', async ({ page, mockWallet }) => {
+    await page.goto('/');
+    
+    const walletPage = new WalletConnectionPage(page);
+    await walletPage.connectWallet();
+
+    // Should show welcome message
+    await expect(page.getByText('Welcome to ANUBIS Chat!')).toBeVisible();
+    
+    // Should show feature highlights
+    await expect(page.getByText('AI-powered Solana assistance')).toBeVisible();
+    await expect(page.getByText('Real-time blockchain data')).toBeVisible();
+    
+    // Skip onboarding
+    await page.getByTestId('skip-onboarding').click();
+    
+    // Should go to main chat interface
+    const chatPage = new ChatPage(page);
+    await expect(chatPage.messageInput).toBeVisible();
+  });
+});
+```
+
+### Chat Functionality Tests
+```typescript
+// e2e/tests/chat-functionality.spec.ts
+import { test, expect } from '../setup/fixtures';
+import { ChatPage } from '../pages/chat.page';
+import { WalletConnectionPage } from '../pages/wallet-connection.page';
+
+test.describe('Chat Functionality', () => {
+  test.beforeEach(async ({ page, mockWallet }) => {
+    const walletPage = new WalletConnectionPage(page);
+    const chatPage = new ChatPage(page);
+    
+    await chatPage.goto();
+    await walletPage.connectWallet();
+  });
+
+  test('should handle basic chat flow', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    // Send first message
+    await chatPage.sendMessage('Hello, can you help me with Solana development?');
+    
+    // Should show user message immediately
+    let messageCount = await chatPage.getMessageCount();
+    expect(messageCount).toBe(1);
+
+    // Wait for AI response
+    await chatPage.waitForResponse();
+    
+    // Should have both user and assistant messages
+    messageCount = await chatPage.getMessageCount();
+    expect(messageCount).toBe(2);
+
+    // Response should contain relevant content
+    const lastMessage = await chatPage.getLastMessage();
+    expect(lastMessage).toMatch(/(solana|development|help|assist)/i);
+  });
+
+  test('should handle streaming responses', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    await chatPage.sendMessage('Explain how Solana consensus works');
+    
+    // Should show typing indicator
+    await expect(chatPage.typingIndicator).toBeVisible();
+    
+    // Should start showing response before completion
+    const messageLocator = chatPage.messagesContainer.locator('[data-testid="message"]').last();
+    
+    // Wait for partial content to appear
+    await expect(messageLocator).toContainText(/.+/, { timeout: 5000 });
+    
+    // Wait for full response
+    await chatPage.waitForResponse();
+    
+    // Should have complete response
+    const fullResponse = await chatPage.getLastMessage();
+    expect(fullResponse?.length).toBeGreaterThan(50);
+  });
+
+  test('should handle conversation context', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    // First message about Solana
+    await chatPage.sendMessage('What is Solana?');
+    await chatPage.waitForResponse();
+
+    // Follow-up that requires context
+    await chatPage.sendMessage('How fast is it compared to Ethereum?');
+    await chatPage.waitForResponse();
+
+    const lastMessage = await chatPage.getLastMessage();
+    // Should reference the comparison context
+    expect(lastMessage).toMatch(/(faster|speed|transaction|ethereum|solana)/i);
+  });
+
+  test('should handle code examples in responses', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    await chatPage.sendMessage('Show me a simple Anchor program example');
+    await chatPage.waitForResponse();
+
+    // Should contain code block
+    const codeBlock = chatPage.messagesContainer.locator('pre code');
+    await expect(codeBlock).toBeVisible();
+
+    // Should have copy button for code
+    const copyButton = codeBlock.locator('..').getByTestId('copy-code-button');
+    await expect(copyButton).toBeVisible();
+    
+    // Test copy functionality
+    await copyButton.click();
+    await expect(page.getByText('Code copied!')).toBeVisible({ timeout: 2000 });
+  });
+
+  test('should handle message actions (copy, regenerate)', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    await chatPage.sendMessage('What is DeFi?');
+    await chatPage.waitForResponse();
+
+    // Test copy message
+    await chatPage.copyMessage();
+    
+    // Verify clipboard (in real implementation, would need to mock clipboard API)
+    // For now, just verify the UI feedback
+    await expect(
+      chatPage.messagesContainer.getByText('Copied!')
+    ).toBeVisible({ timeout: 2000 });
+
+    // Test regenerate response
+    const originalResponse = await chatPage.getLastMessage();
+    await chatPage.regenerateLastResponse();
+    
+    const newResponse = await chatPage.getLastMessage();
+    // Response might be different due to AI randomness
+    expect(newResponse?.length).toBeGreaterThan(10);
+  });
+
+  test('should handle multiple conversations', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    // Start first conversation
+    await chatPage.sendMessage('Tell me about Solana validators');
+    await chatPage.waitForResponse();
+
+    // Start new conversation
+    await chatPage.startNewConversation();
+    
+    // Send different topic message
+    await chatPage.sendMessage('How does React state management work?');
+    await chatPage.waitForResponse();
+
+    // Should have separate conversation
+    const messageCount = await chatPage.getMessageCount();
+    expect(messageCount).toBe(2); // Only the new conversation messages
+
+    // Check conversation list shows both
+    const conversations = chatPage.conversationList.locator('[data-testid="conversation-item"]');
+    await expect(conversations).toHaveCount(2);
+  });
+
+  test('should handle error scenarios gracefully', async ({ page, mockWallet }) => {
+    const chatPage = new ChatPage(page);
+
+    // Simulate network error
+    await page.route('**/api/chat', route => {
+      route.fulfill({
+        status: 500,
+        body: JSON.stringify({ error: 'Internal server error' })
+      });
+    });
+
+    await chatPage.sendMessage('This should fail');
+    
+    // Should show error message
+    await expect(page.getByText('Something went wrong')).toBeVisible();
+    await expect(page.getByText('Try again')).toBeVisible();
+
+    // Should be able to retry
+    await page.unroute('**/api/chat');
+    await page.getByText('Try again').click();
+    
+    await chatPage.waitForResponse();
+    const messageCount = await chatPage.getMessageCount();
+    expect(messageCount).toBe(2); // Original + retry response
+  });
+});
+```
+
+### Advanced Feature Tests
+```typescript
+// e2e/tests/advanced-features.spec.ts
+import { test, expect } from '../setup/fixtures';
+import { ChatPage } from '../pages/chat.page';
+import { WalletConnectionPage } from '../pages/wallet-connection.page';
+
+test.describe('Advanced Features', () => {
+  test.beforeEach(async ({ page, mockWallet }) => {
+    const walletPage = new WalletConnectionPage(page);
+    const chatPage = new ChatPage(page);
+    
+    await chatPage.goto();
+    await walletPage.connectWallet();
+  });
+
+  test('should handle RAG-enhanced responses', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    // Ask about specific Solana documentation
+    await chatPage.sendMessage('How do I use the Solana CLI to create a new program?');
+    await chatPage.waitForResponse();
+
+    const response = await chatPage.getLastMessage();
+    
+    // Should reference specific documentation
+    expect(response).toMatch(/(solana program|cli|anchor init|cargo build)/i);
+    
+    // Should show source citations
+    const citations = chatPage.messagesContainer.locator('[data-testid="citation"]');
+    await expect(citations.first()).toBeVisible();
+  });
+
+  test('should handle real-time blockchain data queries', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    // Mock blockchain API
+    await page.route('**/api/solana/**', route => {
+      route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          slot: 123456789,
+          blockTime: Date.now() / 1000,
+          transactions: 1234
+        })
+      });
+    });
+
+    await chatPage.sendMessage('What is the current Solana slot height?');
+    await chatPage.waitForResponse();
+
+    const response = await chatPage.getLastMessage();
+    expect(response).toContain('123456789');
+  });
+
+  test('should handle image upload and analysis', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    // Test image upload
+    const fileInput = page.getByTestId('file-upload-input');
+    await fileInput.setInputFiles('e2e/fixtures/test-diagram.png');
+
+    // Should show image preview
+    const imagePreview = page.getByTestId('image-preview');
+    await expect(imagePreview).toBeVisible();
+
+    // Send with image
+    await chatPage.sendMessage('Analyze this diagram');
+    await chatPage.waitForResponse();
+
+    const response = await chatPage.getLastMessage();
+    expect(response).toMatch(/(diagram|image|shows|depicts)/i);
+  });
+
+  test('should handle dark/light mode toggle', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+    
+    // Should start in light mode
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
+
+    // Toggle to dark mode
+    const themeToggle = page.getByTestId('theme-toggle');
+    await themeToggle.click();
+
+    // Should switch to dark mode
+    await expect(page.locator('html')).toHaveClass(/dark/);
+    
+    // Should persist across reloads
+    await page.reload();
+    await expect(page.locator('html')).toHaveClass(/dark/);
+  });
+
+  test('should handle keyboard shortcuts', async ({ page }) => {
+    const chatPage = new ChatPage(page);
+
+    // Send message with Ctrl+Enter
+    await chatPage.messageInput.fill('Test message with keyboard shortcut');
+    await page.keyboard.press('Control+Enter');
+    
+    await chatPage.waitForResponse();
+    const messageCount = await chatPage.getMessageCount();
+    expect(messageCount).toBe(2);
+
+    // New conversation with Ctrl+N
+    await page.keyboard.press('Control+n');
+    
+    const newMessageCount = await chatPage.getMessageCount();
+    expect(newMessageCount).toBe(0);
+  });
+});
+```
+
+## Performance E2E Tests
+```typescript
+// e2e/tests/performance.spec.ts
+import { test, expect } from '../setup/fixtures';
+import { ChatPage } from '../pages/chat.page';
+import { WalletConnectionPage } from '../pages/wallet-connection.page';
+
+test.describe('Performance E2E Tests', () => {
+  test('should meet performance benchmarks', async ({ page, mockWallet }) => {
+    const chatPage = new ChatPage(page);
+    const walletPage = new WalletConnectionPage(page);
+
+    // Measure page load time
+    const startTime = Date.now();
+    await chatPage.goto();
+    const loadTime = Date.now() - startTime;
+    
+    expect(loadTime).toBeLessThan(3000); // Should load in < 3 seconds
+
+    // Measure wallet connection time
+    const connectStart = Date.now();
+    await walletPage.connectWallet();
+    const connectTime = Date.now() - connectStart;
+    
+    expect(connectTime).toBeLessThan(5000); // Should connect in < 5 seconds
+
+    // Measure response time
+    const messageStart = Date.now();
+    await chatPage.sendMessage('Quick test question');
+    await chatPage.waitForResponse();
+    const responseTime = Date.now() - messageStart;
+    
+    expect(responseTime).toBeLessThan(10000); // Should respond in < 10 seconds
+  });
+
+  test('should handle long conversations efficiently', async ({ page, mockWallet }) => {
+    const chatPage = new ChatPage(page);
+    const walletPage = new WalletConnectionPage(page);
+    
+    await chatPage.goto();
+    await walletPage.connectWallet();
+
+    // Send multiple messages to build conversation history
+    for (let i = 0; i < 10; i++) {
+      await chatPage.sendMessage(`Message ${i + 1}: Tell me something about topic ${i}`);
+      await chatPage.waitForResponse();
+    }
+
+    // Measure performance with long history
+    const start = Date.now();
+    await chatPage.sendMessage('Summarize our conversation');
+    await chatPage.waitForResponse();
+    const responseTime = Date.now() - start;
+
+    // Should handle context efficiently
+    expect(responseTime).toBeLessThan(15000);
+
+    // Page should remain responsive
+    const messageCount = await chatPage.getMessageCount();
+    expect(messageCount).toBe(22); // 10 pairs + 1 summary pair
+  });
+
+  test('should handle concurrent users simulation', async ({ browser }) => {
+    const contexts = await Promise.all([
+      browser.newContext(),
+      browser.newContext(),
+      browser.newContext()
+    ]);
+
+    const pages = await Promise.all(contexts.map(ctx => ctx.newPage()));
+    
+    // Simulate 3 concurrent users
+    const userSessions = pages.map(async (page, index) => {
+      const chatPage = new ChatPage(page);
+      const walletPage = new WalletConnectionPage(page);
+      
+      await chatPage.goto();
+      await walletPage.connectWallet();
+      
+      // Each user sends different messages
+      await chatPage.sendMessage(`User ${index + 1}: What is Solana?`);
+      await chatPage.waitForResponse();
+      
+      return chatPage.getMessageCount();
+    });
+
+    const results = await Promise.all(userSessions);
+    
+    // All users should get responses
+    expect(results.every(count => count === 2)).toBe(true);
+    
+    // Cleanup
+    await Promise.all(contexts.map(ctx => ctx.close()));
+  });
+});
+```
+
+## Visual Regression Tests
+```typescript
+// e2e/tests/visual-regression.spec.ts
+import { test, expect } from '../setup/fixtures';
+import { ChatPage } from '../pages/chat.page';
+
+test.describe('Visual Regression Tests', () => {
+  test('should match chat interface design', async ({ page, mockWallet }) => {
+    const chatPage = new ChatPage(page);
+    
+    await chatPage.goto();
+    
+    // Take screenshot of initial state
+    await expect(page).toHaveScreenshot('chat-initial-state.png');
+
+    // Connect wallet and take screenshot
+    const walletPage = new WalletConnectionPage(page);
+    await walletPage.connectWallet();
+    await expect(page).toHaveScreenshot('chat-connected-state.png');
+
+    // Send message and take screenshot
+    await chatPage.sendMessage('Test message for visual regression');
+    await expect(page).toHaveScreenshot('chat-with-user-message.png');
+
+    // Wait for response and take screenshot
+    await chatPage.waitForResponse();
+    await expect(page).toHaveScreenshot('chat-with-conversation.png');
+  });
+
+  test('should handle responsive design across devices', async ({ page, mockWallet }) => {
+    const chatPage = new ChatPage(page);
+    await chatPage.goto();
+
+    // Test different viewport sizes
+    const viewports = [
+      { width: 375, height: 667 }, // Mobile
+      { width: 768, height: 1024 }, // Tablet
+      { width: 1920, height: 1080 } // Desktop
+    ];
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await expect(page).toHaveScreenshot(`chat-${viewport.width}x${viewport.height}.png`);
+    }
+  });
+});
+```
+
+## E2E Test Best Practices
+
+### Test Organization
+1. **Page Object Pattern**: Encapsulate page interactions in reusable classes
+2. **Test Data Management**: Use fixtures for consistent test data
+3. **Selective Testing**: Focus on critical user journeys
+4. **Parallel Execution**: Run tests in parallel for faster feedback
+
+### Reliability Strategies
+1. **Wait Strategies**: Use explicit waits for dynamic content
+2. **Retry Logic**: Configure retries for flaky tests
+3. **Error Handling**: Graceful handling of test failures
+4. **Cleanup**: Proper test data cleanup between runs
+
+### Performance Considerations
+1. **Resource Management**: Efficient browser and context management
+2. **Network Mocking**: Mock external services for consistent performance
+3. **Screenshot Strategy**: Take screenshots only on failure
+4. **Video Recording**: Record videos for debugging complex failures

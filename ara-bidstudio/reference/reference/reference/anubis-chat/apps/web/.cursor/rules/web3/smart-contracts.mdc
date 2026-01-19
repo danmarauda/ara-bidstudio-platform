@@ -1,0 +1,493 @@
+---
+category: web3
+subcategory: smart-contracts
+tags: [anchor, rust, solana, programs, pda]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../security/audit-checklist.mdc"]
+  exports: ["anchor-patterns", "program-security"]
+  references: ["./subscriptions.mdc"]
+---
+
+# Smart Contract Patterns - Anchor 0.29
+
+## Program Structure
+
+### 1. abubis.chat Subscription Program
+```rust
+use anchor_lang::prelude::*;
+use anchor_lang::system_program::{transfer, Transfer};
+
+declare_id!("11111111111111111111111111111111"); // Replace with actual program ID
+
+#[program]
+pub mod anubis_chat_subscriptions {
+    use super::*;
+
+    pub fn initialize_subscription(
+        ctx: Context<InitializeSubscription>,
+        plan_type: PlanType,
+        amount: u64,
+    ) -> Result<()> {
+        let subscription = &mut ctx.accounts.subscription;
+        let user = &ctx.accounts.user;
+        let clock = Clock::get()?;
+
+        // Validate plan amount
+        require!(
+            amount == plan_type.price(),
+            ErrorCode::InvalidPlanAmount
+        );
+
+        // Transfer SOL from user to program treasury
+        let transfer_accounts = Transfer {
+            from: user.to_account_info(),
+            to: ctx.accounts.treasury.to_account_info(),
+        };
+        
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            transfer_accounts,
+        );
+        
+        transfer(cpi_ctx, amount)?;
+
+        // Initialize subscription record
+        subscription.owner = user.key();
+        subscription.plan_type = plan_type;
+        subscription.amount_paid = amount;
+        subscription.created_at = clock.unix_timestamp;
+        subscription.expires_at = clock.unix_timestamp + plan_type.duration();
+        subscription.is_active = true;
+        subscription.bump = ctx.bumps.subscription;
+
+        emit!(SubscriptionCreated {
+            owner: user.key(),
+            plan_type,
+            amount,
+            expires_at: subscription.expires_at,
+        });
+
+        Ok(())
+    }
+
+    pub fn renew_subscription(
+        ctx: Context<RenewSubscription>,
+        amount: u64,
+    ) -> Result<()> {
+        let subscription = &mut ctx.accounts.subscription;
+        let user = &ctx.accounts.user;
+        let clock = Clock::get()?;
+
+        // Validate subscription ownership
+        require!(
+            subscription.owner == user.key(),
+            ErrorCode::UnauthorizedAccess
+        );
+
+        // Validate plan amount
+        require!(
+            amount == subscription.plan_type.price(),
+            ErrorCode::InvalidPlanAmount
+        );
+
+        // Transfer SOL from user to program treasury
+        let transfer_accounts = Transfer {
+            from: user.to_account_info(),
+            to: ctx.accounts.treasury.to_account_info(),
+        };
+        
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            transfer_accounts,
+        );
+        
+        transfer(cpi_ctx, amount)?;
+
+        // Extend subscription
+        let new_expiry = if subscription.expires_at > clock.unix_timestamp {
+            subscription.expires_at + subscription.plan_type.duration()
+        } else {
+            clock.unix_timestamp + subscription.plan_type.duration()
+        };
+
+        subscription.expires_at = new_expiry;
+        subscription.is_active = true;
+        subscription.amount_paid += amount;
+
+        emit!(SubscriptionRenewed {
+            owner: user.key(),
+            amount,
+            new_expires_at: new_expiry,
+        });
+
+        Ok(())
+    }
+
+    pub fn cancel_subscription(ctx: Context<CancelSubscription>) -> Result<()> {
+        let subscription = &mut ctx.accounts.subscription;
+        let user = &ctx.accounts.user;
+
+        // Validate subscription ownership
+        require!(
+            subscription.owner == user.key(),
+            ErrorCode::UnauthorizedAccess
+        );
+
+        subscription.is_active = false;
+
+        emit!(SubscriptionCancelled {
+            owner: user.key(),
+        });
+
+        Ok(())
+    }
+}
+```
+
+### 2. Account Structures
+```rust
+#[account]
+pub struct Subscription {
+    pub owner: Pubkey,           // 32 bytes
+    pub plan_type: PlanType,     // 1 byte
+    pub amount_paid: u64,        // 8 bytes
+    pub created_at: i64,         // 8 bytes
+    pub expires_at: i64,         // 8 bytes
+    pub is_active: bool,         // 1 byte
+    pub bump: u8,               // 1 byte
+}
+
+impl Subscription {
+    pub const LEN: usize = 8 + // discriminator
+        32 + // owner
+        1 +  // plan_type
+        8 +  // amount_paid
+        8 +  // created_at
+        8 +  // expires_at
+        1 +  // is_active
+        1;   // bump
+
+    pub fn is_valid(&self) -> bool {
+        let clock = Clock::get().unwrap();
+        self.is_active && self.expires_at > clock.unix_timestamp
+    }
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum PlanType {
+    Monthly,
+    Yearly,
+}
+
+impl PlanType {
+    pub fn price(&self) -> u64 {
+        match self {
+            PlanType::Monthly => 150_000_000,  // 0.15 SOL in lamports
+            PlanType::Yearly => 1_500_000_000, // 1.5 SOL in lamports
+        }
+    }
+
+    pub fn duration(&self) -> i64 {
+        match self {
+            PlanType::Monthly => 30 * 24 * 60 * 60,  // 30 days in seconds
+            PlanType::Yearly => 365 * 24 * 60 * 60,  // 365 days in seconds
+        }
+    }
+}
+```
+
+### 3. Context Structs
+```rust
+#[derive(Accounts)]
+pub struct InitializeSubscription<'info> {
+    #[account(
+        init,
+        payer = user,
+        space = Subscription::LEN,
+        seeds = [b"subscription", user.key().as_ref()],
+        bump
+    )]
+    pub subscription: Account<'info, Subscription>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [b"treasury"],
+        bump
+    )]
+    /// CHECK: Treasury account validated by seeds
+    pub treasury: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RenewSubscription<'info> {
+    #[account(
+        mut,
+        seeds = [b"subscription", user.key().as_ref()],
+        bump = subscription.bump,
+        has_one = owner @ ErrorCode::UnauthorizedAccess
+    )]
+    pub subscription: Account<'info, Subscription>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [b"treasury"],
+        bump
+    )]
+    /// CHECK: Treasury account validated by seeds
+    pub treasury: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CancelSubscription<'info> {
+    #[account(
+        mut,
+        seeds = [b"subscription", user.key().as_ref()],
+        bump = subscription.bump,
+        has_one = owner @ ErrorCode::UnauthorizedAccess
+    )]
+    pub subscription: Account<'info, Subscription>,
+    
+    pub user: Signer<'info>,
+}
+```
+
+## Security Patterns
+
+### 1. Access Control
+```rust
+// Always validate signer authority
+#[account(
+    mut,
+    has_one = owner @ ErrorCode::UnauthorizedAccess
+)]
+pub subscription: Account<'info, Subscription>,
+
+// Use constraints for ownership validation
+#[derive(Accounts)]
+#[instruction(new_owner: Pubkey)]
+pub struct TransferOwnership<'info> {
+    #[account(
+        mut,
+        has_one = owner @ ErrorCode::NotOwner
+    )]
+    pub subscription: Account<'info, Subscription>,
+    
+    pub owner: Signer<'info>,
+}
+```
+
+### 2. PDA (Program Derived Address) Security
+```rust
+// Use deterministic seeds for PDAs
+#[account(
+    init,
+    payer = user,
+    space = Subscription::LEN,
+    seeds = [
+        b"subscription",
+        user.key().as_ref()
+    ],
+    bump
+)]
+pub subscription: Account<'info, Subscription>,
+
+// Store bump for efficient validation
+pub struct Subscription {
+    pub bump: u8,
+    // ... other fields
+}
+```
+
+### 3. Arithmetic Safety
+```rust
+use anchor_lang::prelude::*;
+
+pub fn safe_add_duration(current: i64, addition: i64) -> Result<i64> {
+    current
+        .checked_add(addition)
+        .ok_or(ErrorCode::ArithmeticOverflow.into())
+}
+
+pub fn calculate_prorated_refund(
+    amount_paid: u64,
+    time_remaining: i64,
+    total_duration: i64,
+) -> Result<u64> {
+    if time_remaining <= 0 || total_duration <= 0 {
+        return Ok(0);
+    }
+    
+    let refund = (amount_paid as u128)
+        .checked_mul(time_remaining as u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(total_duration as u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    
+    Ok(refund as u64)
+}
+```
+
+### 4. Event Logging
+```rust
+#[event]
+pub struct SubscriptionCreated {
+    pub owner: Pubkey,
+    pub plan_type: PlanType,
+    pub amount: u64,
+    pub expires_at: i64,
+}
+
+#[event]
+pub struct SubscriptionRenewed {
+    pub owner: Pubkey,
+    pub amount: u64,
+    pub new_expires_at: i64,
+}
+
+#[event]
+pub struct SubscriptionCancelled {
+    pub owner: Pubkey,
+}
+```
+
+## Error Handling
+
+### 1. Custom Errors
+```rust
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Unauthorized access to subscription")]
+    UnauthorizedAccess,
+    
+    #[msg("Invalid plan amount")]
+    InvalidPlanAmount,
+    
+    #[msg("Subscription has expired")]
+    SubscriptionExpired,
+    
+    #[msg("Subscription is not active")]
+    SubscriptionNotActive,
+    
+    #[msg("Arithmetic overflow")]
+    ArithmeticOverflow,
+    
+    #[msg("Invalid plan type")]
+    InvalidPlanType,
+    
+    #[msg("Insufficient funds")]
+    InsufficientFunds,
+}
+```
+
+### 2. Input Validation
+```rust
+pub fn validate_plan_amount(plan_type: PlanType, amount: u64) -> Result<()> {
+    require!(
+        amount == plan_type.price(),
+        ErrorCode::InvalidPlanAmount
+    );
+    Ok(())
+}
+
+pub fn validate_subscription_active(subscription: &Subscription) -> Result<()> {
+    require!(
+        subscription.is_active,
+        ErrorCode::SubscriptionNotActive
+    );
+    
+    let clock = Clock::get()?;
+    require!(
+        subscription.expires_at > clock.unix_timestamp,
+        ErrorCode::SubscriptionExpired
+    );
+    
+    Ok(())
+}
+```
+
+## Testing Patterns
+
+### 1. Unit Tests
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anchor_lang::prelude::*;
+
+    #[test]
+    fn test_plan_pricing() {
+        assert_eq!(PlanType::Monthly.price(), 150_000_000);
+        assert_eq!(PlanType::Yearly.price(), 1_500_000_000);
+    }
+
+    #[test]
+    fn test_plan_duration() {
+        assert_eq!(PlanType::Monthly.duration(), 30 * 24 * 60 * 60);
+        assert_eq!(PlanType::Yearly.duration(), 365 * 24 * 60 * 60);
+    }
+
+    #[test]
+    fn test_subscription_validation() {
+        let mut subscription = Subscription {
+            owner: Pubkey::new_unique(),
+            plan_type: PlanType::Monthly,
+            amount_paid: 150_000_000,
+            created_at: 1000000,
+            expires_at: 2000000, // Future timestamp
+            is_active: true,
+            bump: 255,
+        };
+        
+        // Mock clock for testing
+        // assert!(subscription.is_valid());
+        
+        subscription.is_active = false;
+        // assert!(!subscription.is_valid());
+    }
+}
+```
+
+## Deployment Checklist
+
+### 1. Pre-Deployment Validation
+- [ ] All accounts properly validated with constraints
+- [ ] PDA seeds are deterministic and collision-resistant  
+- [ ] Arithmetic operations use checked methods
+- [ ] Access control implemented for all instructions
+- [ ] Events emitted for state changes
+- [ ] Error codes defined for all failure cases
+- [ ] Unit tests cover edge cases
+- [ ] Integration tests with frontend
+- [ ] Security audit completed
+
+### 2. Network Configuration
+```rust
+// Set correct cluster in Anchor.toml
+[provider]
+cluster = "mainnet"
+wallet = "~/.config/solana/id.json"
+
+[programs.mainnet]
+anubis_chat_subscriptions = "YourProgramId11111111111111111111111"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider.cluster]
+mainnet = "https://api.mainnet-beta.solana.com"
+```

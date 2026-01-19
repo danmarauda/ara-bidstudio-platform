@@ -1,0 +1,41 @@
+# Omn1-ACE Dependencies
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Database
+asyncpg==0.29.0
+sqlalchemy==2.0.25
+alembic==1.13.1
+
+# Vector Search
+qdrant-client==1.7.0
+
+# Caching
+redis==5.0.1
+hiredis==2.3.2
+lz4==4.3.3
+
+# Embeddings
+numpy==1.26.3
+sentence-transformers==2.3.1
+
+# Knowledge Graph
+networkx==3.2.1
+
+# Compression
+transformers==4.37.0
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Monitoring
+prometheus-client==0.19.0
+
+# Utilities
+python-dotenv==1.0.0
+httpx==0.26.0

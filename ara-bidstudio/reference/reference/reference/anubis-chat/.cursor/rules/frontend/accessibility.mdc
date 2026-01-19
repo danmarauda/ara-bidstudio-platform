@@ -1,0 +1,1190 @@
+---
+category: frontend
+subcategory: accessibility
+tags: [a11y, wcag, aria, keyboard-navigation, screen-readers]
+cursor:
+  context_window: 8192
+  temperature: 0.6
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["./index.mdc", "./components.mdc"]
+  exports: ["accessibility-patterns", "aria-patterns", "keyboard-navigation"]
+  references: ["./styling.mdc", "./state-management.mdc"]
+---
+
+# Accessibility Guidelines & WCAG 2.1 AA Compliance
+
+## Core Accessibility Principles
+
+### WCAG 2.1 AA Standards
+
+```typescript
+// Accessibility compliance targets for ANUBIS Chat
+const accessibilityStandards = {
+  // Level A Requirements (must have)
+  levelA: {
+    nonTextContent: 'All images have alt text',
+    audioOnly: 'Text alternatives for audio content',
+    captionsPrerecorded: 'Captions for prerecorded video',
+    audioDescription: 'Audio descriptions for video',
+    infoAndRelationships: 'Content structure is programmatically determinable',
+    meaningfulSequence: 'Content order is meaningful',
+    sensoryCharacteristics: 'Instructions don\'t rely solely on sensory characteristics',
+    useOfColor: 'Color is not the only means of conveying information',
+    audioControl: 'Audio that plays automatically can be controlled',
+    keyboardAccessible: 'All functionality is keyboard accessible',
+    noKeyboardTrap: 'Keyboard focus is never trapped',
+    timingAdjustable: 'Time limits can be extended or disabled',
+    pauseStopHide: 'Moving content can be paused or hidden',
+    threeFlashesOrBelow: 'Content doesn\'t cause seizures',
+    bypassBlocks: 'Mechanism to skip repeated content',
+    pageTitle: 'Web pages have descriptive titles',
+    focusOrder: 'Focus order is logical and intuitive',
+    linkPurpose: 'Link purpose is clear from context',
+    language: 'Page language is programmatically determined',
+    onFocus: 'Focus doesn\'t change context unexpectedly',
+    onInput: 'Input doesn\'t change context unexpectedly',
+    errorIdentification: 'Input errors are identified',
+    labelsOrInstructions: 'Form elements have labels or instructions',
+    parsing: 'Content can be parsed reliably',
+    nameRoleValue: 'User interface components have accessible names and roles'
+  },
+  
+  // Level AA Requirements (target compliance)
+  levelAA: {
+    captionsLive: 'Captions for live audio',
+    audioDescriptionPrerecorded: 'Audio description for prerecorded video',
+    contrastMinimum: 'Text has 4.5:1 contrast ratio (3:1 for large text)',
+    resizeText: 'Text can be resized up to 200% without assistive technology',
+    imagesOfText: 'Text is used instead of images of text when possible',
+    keyboardNoException: 'All functionality is keyboard accessible without exception',
+    timingEssential: 'Timing is not essential or can be adjusted',
+    interruptionsPauses: 'Interruptions can be postponed or suppressed',
+    reAuthenticate: 'User can continue activity after re-authentication',
+    multipleWays: 'Multiple ways to locate web pages',
+    headingsAndLabels: 'Headings and labels are descriptive',
+    focusVisible: 'Keyboard focus indicator is visible',
+    languageOfParts: 'Language of parts is programmatically determined',
+    consistentNavigation: 'Navigation is consistent',
+    consistentIdentification: 'Components are identified consistently',
+    errorSuggestion: 'Suggestions are provided for input errors',
+    errorPreventionLegal: 'Error prevention for legal/financial transactions',
+    helpContext: 'Context-sensitive help is available',
+    errorPreventionAll: 'Error prevention for all user input'
+  }
+} as const;
+```
+
+### Color and Contrast Standards
+
+```css
+/* High contrast color system for WCAG AA compliance */
+:root {
+  /* 4.5:1 contrast ratio for normal text */
+  --contrast-normal-light: #1a1a1a; /* on white background */
+  --contrast-normal-dark: #e5e5e5;  /* on dark background */
+  
+  /* 3:1 contrast ratio for large text (18pt+ or 14pt+ bold) */
+  --contrast-large-light: #4a4a4a;
+  --contrast-large-dark: #b8b8b8;
+  
+  /* Interactive elements minimum contrast */
+  --contrast-interactive: 3; /* 3:1 for UI components */
+  
+  /* Focus indicators */
+  --focus-ring-color: #005fcc;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+}
+
+/* Focus indicators */
+.focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --border: hsl(0 0% 0%);
+    --background: hsl(0 0% 100%);
+    --foreground: hsl(0 0% 0%);
+  }
+  
+  .dark {
+    --border: hsl(0 0% 100%);
+    --background: hsl(0 0% 0%);
+    --foreground: hsl(0 0% 100%);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+```
+
+## Semantic HTML and ARIA Patterns
+
+### Chat Interface Structure
+
+```typescript
+// Accessible chat interface with proper semantics
+function AccessibleChatInterface({ chatId }: { chatId: string }) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+  
+  // Announce new messages to screen readers
+  const announceNewMessage = (message: Message) => {
+    const announcement = `New message from ${message.sender}: ${message.content}`;
+    // Use live region or programmatically focus
+    announceToScreenReader(announcement);
+  };
+  
+  return (
+    <div
+      className="chat-container"
+      role="application"
+      aria-label="Chat conversation"
+      aria-describedby="chat-instructions"
+    >
+      {/* Instructions for screen reader users */}
+      <div id="chat-instructions" className="sr-only">
+        Use arrow keys to navigate messages, Enter to send, Escape to focus message input
+      </div>
+      
+      {/* Chat header */}
+      <header className="chat-header" role="banner">
+        <h1 id="chat-title" className="text-lg font-semibold">
+          AI Assistant Chat
+        </h1>
+        
+        {/* Status indicator */}
+        <div className="flex items-center gap-2">
+          <div
+            className="status-indicator"
+            role="status"
+            aria-label={isTyping ? 'AI is typing' : 'AI is ready'}
+            aria-live="polite"
+          >
+            {isTyping && (
+              <span className="flex items-center gap-1">
+                <TypingIndicator />
+                <span className="sr-only">AI is typing</span>
+              </span>
+            )}
+          </div>
+          
+          {/* Unread count */}
+          {unreadCount > 0 && (
+            <div
+              className="unread-badge"
+              role="status"
+              aria-label={`${unreadCount} unread messages`}
+            >
+              {unreadCount}
+            </div>
+          )}
+        </div>
+      </header>
+      
+      {/* Messages area */}
+      <main
+        className="messages-container"
+        role="log"
+        aria-live="polite"
+        aria-label="Chat messages"
+        aria-labelledby="chat-title"
+        tabIndex={0}
+      >
+        <MessageList messages={messages} />
+        
+        {/* Anchor for auto-scroll */}
+        <div ref={messagesEndRef} aria-hidden="true" />
+      </main>
+      
+      {/* Input area */}
+      <footer className="chat-input-container" role="contentinfo">
+        <AccessibleChatInput 
+          onSend={handleSendMessage}
+          disabled={isTyping}
+        />
+      </footer>
+    </div>
+  );
+}
+```
+
+### Message Components with ARIA
+
+```typescript
+// Accessible message bubble component
+interface AccessibleMessageProps {
+  message: Message;
+  isOwn: boolean;
+  showTimestamp?: boolean;
+  onEdit?: (id: string, content: string) => void;
+  onDelete?: (id: string) => void;
+}
+
+function AccessibleMessage({ 
+  message, 
+  isOwn, 
+  showTimestamp = true,
+  onEdit,
+  onDelete 
+}: AccessibleMessageProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  
+  const messageId = `message-${message.id}`;
+  const timestampId = `${messageId}-timestamp`;
+  const actionsId = `${messageId}-actions`;
+  
+  return (
+    <div
+      id={messageId}
+      className={cn(
+        'message-wrapper group',
+        isOwn ? 'message-own' : 'message-other'
+      )}
+      role="article"
+      aria-labelledby={`${messageId}-content`}
+      aria-describedby={showTimestamp ? timestampId : undefined}
+    >
+      {/* Author/Role indicator for screen readers */}
+      <div className="sr-only">
+        {isOwn ? 'You said:' : `${message.role} said:`}
+      </div>
+      
+      {/* Avatar */}
+      <div className="message-avatar" aria-hidden="true">
+        <Avatar>
+          <AvatarImage 
+            src={isOwn ? '/user-avatar.png' : '/ai-avatar.png'}
+            alt={isOwn ? 'Your avatar' : 'AI assistant avatar'}
+          />
+          <AvatarFallback>
+            {isOwn ? 'You' : 'AI'}
+          </AvatarFallback>
+        </Avatar>
+      </div>
+      
+      {/* Message content */}
+      <div className="message-content-wrapper">
+        <div
+          id={`${messageId}-content`}
+          className="message-content"
+          role="group"
+          aria-label="Message content"
+        >
+          {isEditing ? (
+            <MessageEditor
+              initialContent={message.content}
+              onSave={(content) => {
+                onEdit?.(message.id, content);
+                setIsEditing(false);
+              }}
+              onCancel={() => setIsEditing(false)}
+            />
+          ) : (
+            <MessageContent content={message.content} />
+          )}
+        </div>
+        
+        {/* Timestamp */}
+        {showTimestamp && (
+          <time
+            id={timestampId}
+            dateTime={message.timestamp.toISOString()}
+            className="message-timestamp text-xs text-muted-foreground"
+            aria-label={`Sent at ${formatTime(message.timestamp)}`}
+          >
+            {formatTime(message.timestamp)}
+          </time>
+        )}
+        
+        {/* Message actions */}
+        {(onEdit || onDelete) && (
+          <div
+            id={actionsId}
+            className="message-actions opacity-0 group-hover:opacity-100"
+            role="toolbar"
+            aria-label="Message actions"
+          >
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  aria-label="Message options"
+                  aria-expanded={menuOpen}
+                  aria-haspopup="menu"
+                >
+                  <MoreVerticalIcon className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              
+              <DropdownMenuContent align="end" role="menu">
+                {onEdit && (
+                  <DropdownMenuItem
+                    onClick={() => setIsEditing(true)}
+                    role="menuitem"
+                  >
+                    <EditIcon className="mr-2 h-4 w-4" />
+                    Edit message
+                  </DropdownMenuItem>
+                )}
+                
+                <DropdownMenuItem
+                  onClick={() => navigator.clipboard.writeText(message.content)}
+                  role="menuitem"
+                >
+                  <CopyIcon className="mr-2 h-4 w-4" />
+                  Copy message
+                </DropdownMenuItem>
+                
+                {onDelete && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => onDelete(message.id)}
+                      className="text-destructive focus:text-destructive"
+                      role="menuitem"
+                    >
+                      <TrashIcon className="mr-2 h-4 w-4" />
+                      Delete message
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+### Accessible Chat Input
+
+```typescript
+// Fully accessible chat input with keyboard support
+interface AccessibleChatInputProps {
+  onSend: (message: string, files?: File[]) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  maxLength?: number;
+}
+
+function AccessibleChatInput({ 
+  onSend, 
+  disabled = false,
+  placeholder = "Type your message...",
+  maxLength = 4000 
+}: AccessibleChatInputProps) {
+  const [message, setMessage] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Character count for screen readers
+  const charactersRemaining = maxLength - message.length;
+  const isNearLimit = charactersRemaining < 100;
+  
+  const handleSubmit = useCallback((e: FormEvent) => {
+    e.preventDefault();
+    
+    if (!message.trim() || disabled) return;
+    
+    onSend(message.trim(), files.length > 0 ? files : undefined);
+    setMessage('');
+    setFiles([]);
+    
+    // Announce successful send to screen readers
+    announceToScreenReader('Message sent successfully');
+  }, [message, files, disabled, onSend]);
+  
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Send with Enter (unless Shift+Enter for new line)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+      return;
+    }
+    
+    // File upload with Ctrl/Cmd+U
+    if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+      e.preventDefault();
+      fileInputRef.current?.click();
+      return;
+    }
+    
+    // Voice recording with Ctrl/Cmd+R
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+      e.preventDefault();
+      toggleRecording();
+      return;
+    }
+  }, [handleSubmit]);
+  
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [message]);
+  
+  return (
+    <form 
+      onSubmit={handleSubmit}
+      className="chat-input-form"
+      role="form"
+      aria-label="Send message"
+    >
+      {/* File previews */}
+      {files.length > 0 && (
+        <div
+          className="file-previews"
+          role="region"
+          aria-label={`${files.length} file${files.length === 1 ? '' : 's'} selected`}
+        >
+          {files.map((file, index) => (
+            <FilePreview
+              key={`${file.name}-${index}`}
+              file={file}
+              onRemove={() => {
+                const newFiles = files.filter((_, i) => i !== index);
+                setFiles(newFiles);
+                announceToScreenReader(`Removed file ${file.name}`);
+              }}
+            />
+          ))}
+        </div>
+      )}
+      
+      <div className="input-container">
+        {/* Main textarea */}
+        <div className="textarea-wrapper">
+          <label htmlFor="message-input" className="sr-only">
+            Type your message
+          </label>
+          
+          <textarea
+            id="message-input"
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            maxLength={maxLength}
+            rows={1}
+            className="chat-input-textarea"
+            aria-describedby="input-help character-count"
+            aria-invalid={message.length > maxLength}
+          />
+          
+          {/* Input help text */}
+          <div id="input-help" className="sr-only">
+            Press Enter to send, Shift+Enter for new line, 
+            Ctrl+U to attach files, Ctrl+R to start voice recording
+          </div>
+        </div>
+        
+        {/* Action buttons */}
+        <div className="input-actions" role="toolbar" aria-label="Message actions">
+          {/* File upload */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
+            aria-label="Attach file (Ctrl+U)"
+            title="Attach file (Ctrl+U)"
+          >
+            <PaperclipIcon className="h-4 w-4" />
+          </Button>
+          
+          {/* Voice recording */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={toggleRecording}
+            disabled={disabled}
+            aria-label={isRecording ? 'Stop recording' : 'Start voice recording (Ctrl+R)'}
+            aria-pressed={isRecording}
+            className={cn(isRecording && 'bg-destructive text-destructive-foreground')}
+          >
+            <MicIcon className="h-4 w-4" />
+          </Button>
+          
+          {/* Send button */}
+          <Button
+            type="submit"
+            size="sm"
+            disabled={disabled || !message.trim()}
+            aria-label="Send message"
+          >
+            <SendIcon className="h-4 w-4" />
+            <span className="sr-only">Send</span>
+          </Button>
+        </div>
+        
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.txt,.md,.doc,.docx,.png,.jpg,.jpeg"
+          onChange={(e) => {
+            const selectedFiles = Array.from(e.target.files || []);
+            setFiles(prev => [...prev, ...selectedFiles]);
+            
+            // Announce to screen readers
+            if (selectedFiles.length > 0) {
+              const fileNames = selectedFiles.map(f => f.name).join(', ');
+              announceToScreenReader(`Added files: ${fileNames}`);
+            }
+            
+            // Reset input
+            e.target.value = '';
+          }}
+          className="sr-only"
+        />
+      </div>
+      
+      {/* Character count */}
+      {maxLength && (
+        <div
+          id="character-count"
+          className={cn(
+            'character-count text-xs',
+            isNearLimit && 'text-warning',
+            message.length > maxLength && 'text-destructive'
+          )}
+          role="status"
+          aria-live="polite"
+          aria-label={`${charactersRemaining} characters remaining`}
+        >
+          <span aria-hidden="true">
+            {message.length}/{maxLength}
+          </span>
+        </div>
+      )}
+    </form>
+  );
+}
+```
+
+## Keyboard Navigation
+
+### Focus Management
+
+```typescript
+// Focus trap for modals and dialogs
+function useFocusTrap(isActive: boolean) {
+  const containerRef = useRef<HTMLElement>(null);
+  
+  useEffect(() => {
+    if (!isActive) return;
+    
+    const container = containerRef.current;
+    if (!container) return;
+    
+    // Get all focusable elements
+    const focusableElements = container.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    
+    const firstFocusable = focusableElements[0] as HTMLElement;
+    const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+    
+    // Focus first element
+    firstFocusable?.focus();
+    
+    const handleTabKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      
+      if (e.shiftKey) {
+        // Shift + Tab
+        if (document.activeElement === firstFocusable) {
+          e.preventDefault();
+          lastFocusable?.focus();
+        }
+      } else {
+        // Tab
+        if (document.activeElement === lastFocusable) {
+          e.preventDefault();
+          firstFocusable?.focus();
+        }
+      }
+    };
+    
+    container.addEventListener('keydown', handleTabKey);
+    
+    return () => {
+      container.removeEventListener('keydown', handleTabKey);
+    };
+  }, [isActive]);
+  
+  return containerRef;
+}
+
+// Usage in modal
+function AccessibleModal({ isOpen, onClose, children }: ModalProps) {
+  const focusTrapRef = useFocusTrap(isOpen);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+  
+  useEffect(() => {
+    if (isOpen) {
+      previousActiveElement.current = document.activeElement as HTMLElement;
+    } else {
+      // Return focus when modal closes
+      previousActiveElement.current?.focus();
+    }
+  }, [isOpen]);
+  
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose();
+    }
+  };
+  
+  if (!isOpen) return null;
+  
+  return (
+    <div className="modal-overlay" role="presentation">
+      <div
+        ref={focusTrapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        className="modal-content"
+        onKeyDown={handleKeyDown}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+```
+
+### Keyboard Shortcuts
+
+```typescript
+// Global keyboard shortcuts system
+const keyboardShortcuts = {
+  // Navigation
+  'ctrl+1': () => navigateTo('/chat'),
+  'ctrl+2': () => navigateTo('/settings'),
+  'ctrl+shift+n': () => navigateTo('/chat/new'),
+  
+  // Chat actions
+  'ctrl+enter': () => sendMessage(),
+  'ctrl+u': () => uploadFile(),
+  'ctrl+r': () => startRecording(),
+  
+  // Accessibility
+  'ctrl+/': () => showKeyboardShortcuts(),
+  'alt+m': () => toggleMute(),
+  'alt+h': () => toggleHighContrast(),
+  
+  // Focus management
+  'ctrl+shift+f': () => focusSearch(),
+  'escape': () => clearFocus(),
+} as const;
+
+function useKeyboardShortcuts() {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = [
+        e.ctrlKey && 'ctrl',
+        e.shiftKey && 'shift',
+        e.altKey && 'alt',
+        e.metaKey && 'meta',
+        e.key.toLowerCase()
+      ].filter(Boolean).join('+');
+      
+      const action = keyboardShortcuts[key as keyof typeof keyboardShortcuts];
+      
+      if (action) {
+        e.preventDefault();
+        action();
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+}
+
+// Keyboard shortcuts help modal
+function KeyboardShortcutsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  return (
+    <AccessibleModal isOpen={isOpen} onClose={onClose}>
+      <div className="p-6">
+        <h2 id="modal-title" className="text-xl font-semibold mb-4">
+          Keyboard Shortcuts
+        </h2>
+        
+        <div className="space-y-4">
+          <div>
+            <h3 className="font-medium mb-2">Navigation</h3>
+            <dl className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <dt>Go to chats</dt>
+                <dd><kbd>Ctrl + 1</kbd></dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Go to settings</dt>
+                <dd><kbd>Ctrl + 2</kbd></dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>New chat</dt>
+                <dd><kbd>Ctrl + Shift + N</kbd></dd>
+              </div>
+            </dl>
+          </div>
+          
+          <div>
+            <h3 className="font-medium mb-2">Chat Actions</h3>
+            <dl className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <dt>Send message</dt>
+                <dd><kbd>Enter</kbd></dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>New line</dt>
+                <dd><kbd>Shift + Enter</kbd></dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Upload file</dt>
+                <dd><kbd>Ctrl + U</kbd></dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+        
+        <div className="mt-6">
+          <Button onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    </AccessibleModal>
+  );
+}
+```
+
+## Screen Reader Support
+
+### Live Regions and Announcements
+
+```typescript
+// Screen reader announcement system
+function useAnnouncer() {
+  const announcerRef = useRef<HTMLDivElement>(null);
+  
+  const announce = useCallback((message: string, priority: 'polite' | 'assertive' = 'polite') => {
+    if (!announcerRef.current) return;
+    
+    // Clear previous announcement
+    announcerRef.current.textContent = '';
+    
+    // Use a timeout to ensure the screen reader picks up the change
+    setTimeout(() => {
+      if (announcerRef.current) {
+        announcerRef.current.setAttribute('aria-live', priority);
+        announcerRef.current.textContent = message;
+      }
+    }, 100);
+  }, []);
+  
+  const AnnouncerComponent = useCallback(() => (
+    <div
+      ref={announcerRef}
+      aria-live="polite"
+      aria-atomic="true"
+      className="sr-only"
+      role="status"
+    />
+  ), []);
+  
+  return { announce, AnnouncerComponent };
+}
+
+// Usage in chat interface
+function ChatInterface() {
+  const { announce, AnnouncerComponent } = useAnnouncer();
+  
+  const handleNewMessage = useCallback((message: Message) => {
+    announce(`New message from ${message.sender}: ${message.content}`);
+  }, [announce]);
+  
+  const handleMessageSent = useCallback(() => {
+    announce('Message sent successfully');
+  }, [announce]);
+  
+  const handleTypingStatus = useCallback((isTyping: boolean) => {
+    announce(isTyping ? 'AI is typing' : 'AI finished typing');
+  }, [announce]);
+  
+  return (
+    <div>
+      {/* Screen reader announcements */}
+      <AnnouncerComponent />
+      
+      {/* Chat content */}
+      <div className="chat-content">
+        {/* ... */}
+      </div>
+    </div>
+  );
+}
+```
+
+### Skip Links and Landmarks
+
+```typescript
+// Skip navigation component
+function SkipLinks() {
+  return (
+    <div className="skip-links">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-primary-foreground px-4 py-2 rounded z-50"
+      >
+        Skip to main content
+      </a>
+      <a
+        href="#navigation"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-32 bg-primary text-primary-foreground px-4 py-2 rounded z-50"
+      >
+        Skip to navigation
+      </a>
+      <a
+        href="#search"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-60 bg-primary text-primary-foreground px-4 py-2 rounded z-50"
+      >
+        Skip to search
+      </a>
+    </div>
+  );
+}
+
+// Page structure with proper landmarks
+function AppLayout({ children }: { children: ReactNode }) {
+  return (
+    <div className="app-layout">
+      <SkipLinks />
+      
+      <header role="banner" className="app-header">
+        <nav id="navigation" role="navigation" aria-label="Main navigation">
+          {/* Navigation content */}
+        </nav>
+      </header>
+      
+      <aside role="complementary" aria-label="Chat sidebar">
+        <div id="search" role="search">
+          <SearchInput />
+        </div>
+        <ChatSidebar />
+      </aside>
+      
+      <main id="main-content" role="main" tabIndex={-1}>
+        {children}
+      </main>
+      
+      <footer role="contentinfo" className="app-footer">
+        {/* Footer content */}
+      </footer>
+    </div>
+  );
+}
+```
+
+## Form Accessibility
+
+### Accessible Form Components
+
+```typescript
+// Accessible form input with error handling
+interface AccessibleInputProps extends InputHTMLAttributes<HTMLInputElement> {
+  label: string;
+  error?: string;
+  helper?: string;
+  required?: boolean;
+}
+
+function AccessibleInput({ 
+  label, 
+  error, 
+  helper, 
+  required,
+  className,
+  ...props 
+}: AccessibleInputProps) {
+  const id = useId();
+  const errorId = `${id}-error`;
+  const helperId = `${id}-helper`;
+  
+  const describedBy = [
+    error && errorId,
+    helper && helperId,
+  ].filter(Boolean).join(' ');
+  
+  return (
+    <div className="form-field">
+      <label 
+        htmlFor={id}
+        className="form-label"
+      >
+        {label}
+        {required && (
+          <span className="required-indicator" aria-label="required">
+            *
+          </span>
+        )}
+      </label>
+      
+      <input
+        id={id}
+        className={cn(
+          'form-input',
+          error && 'form-input-error',
+          className
+        )}
+        aria-invalid={!!error}
+        aria-describedby={describedBy || undefined}
+        aria-required={required}
+        {...props}
+      />
+      
+      {helper && !error && (
+        <div id={helperId} className="form-helper">
+          {helper}
+        </div>
+      )}
+      
+      {error && (
+        <div 
+          id={errorId} 
+          className="form-error"
+          role="alert"
+          aria-live="polite"
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Accessible fieldset for grouped controls
+interface AccessibleFieldsetProps {
+  legend: string;
+  children: ReactNode;
+  error?: string;
+  required?: boolean;
+}
+
+function AccessibleFieldset({ 
+  legend, 
+  children, 
+  error,
+  required 
+}: AccessibleFieldsetProps) {
+  const errorId = useId();
+  
+  return (
+    <fieldset 
+      className="form-fieldset"
+      aria-invalid={!!error}
+      aria-describedby={error ? errorId : undefined}
+    >
+      <legend className="form-legend">
+        {legend}
+        {required && (
+          <span className="required-indicator" aria-label="required">
+            *
+          </span>
+        )}
+      </legend>
+      
+      {children}
+      
+      {error && (
+        <div 
+          id={errorId}
+          className="form-error"
+          role="alert"
+          aria-live="polite"
+        >
+          {error}
+        </div>
+      )}
+    </fieldset>
+  );
+}
+```
+
+## Testing Accessibility
+
+### Automated Testing Setup
+
+```typescript
+// Jest + Testing Library accessibility tests
+import { render, screen } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
+import { ChatInput } from './ChatInput';
+
+expect.extend(toHaveNoViolations);
+
+describe('ChatInput Accessibility', () => {
+  it('should not have accessibility violations', async () => {
+    const { container } = render(
+      <ChatInput onSend={jest.fn()} placeholder="Type a message..." />
+    );
+    
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+  
+  it('should have proper focus management', () => {
+    render(<ChatInput onSend={jest.fn()} />);
+    
+    const textarea = screen.getByRole('textbox', { name: /type your message/i });
+    expect(textarea).toBeInTheDocument();
+    expect(textarea).toHaveAccessibleName();
+  });
+  
+  it('should announce character count to screen readers', () => {
+    render(<ChatInput onSend={jest.fn()} maxLength={100} />);
+    
+    const characterCount = screen.getByRole('status');
+    expect(characterCount).toHaveTextContent('0/100');
+    expect(characterCount).toHaveAttribute('aria-live', 'polite');
+  });
+  
+  it('should support keyboard navigation', () => {
+    render(<ChatInput onSend={jest.fn()} />);
+    
+    const textarea = screen.getByRole('textbox');
+    const sendButton = screen.getByRole('button', { name: /send/i });
+    
+    // Tab should move focus to send button
+    textarea.focus();
+    expect(textarea).toHaveFocus();
+    
+    // Should be able to reach send button via keyboard
+    expect(sendButton).toHaveAttribute('tabindex', '0');
+  });
+});
+
+// Custom accessibility test utilities
+export function getAccessibilityTree(element: HTMLElement) {
+  return element.getAttribute('aria-label') ||
+         element.getAttribute('aria-labelledby') ||
+         element.textContent ||
+         'No accessible name';
+}
+
+export function checkKeyboardNavigation(container: HTMLElement) {
+  const focusableElements = container.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  
+  return Array.from(focusableElements).map(el => ({
+    element: el,
+    tagName: el.tagName,
+    accessibleName: getAccessibilityTree(el as HTMLElement),
+    tabIndex: el.getAttribute('tabindex') || '0',
+  }));
+}
+```
+
+### Manual Testing Checklist
+
+```typescript
+// Accessibility testing checklist
+const accessibilityChecklist = {
+  keyboard: [
+    'Tab moves focus forward through all interactive elements',
+    'Shift+Tab moves focus backward through all interactive elements',
+    'Enter activates buttons and links',
+    'Space activates buttons',
+    'Arrow keys navigate within composite widgets',
+    'Escape closes modals and dropdowns',
+    'No keyboard traps (focus can always move away)',
+    'Focus indicators are visible and high contrast',
+  ],
+  
+  screenReader: [
+    'All images have alt text or are marked decorative',
+    'Form fields have labels or accessible names',
+    'Headings create a logical hierarchy',
+    'Lists are properly marked up',
+    'Tables have headers and captions',
+    'Error messages are announced',
+    'Dynamic content changes are announced',
+    'All interactive elements have accessible names',
+  ],
+  
+  visual: [
+    'Color contrast meets WCAG AA standards (4.5:1 for normal text)',
+    'Large text meets 3:1 contrast ratio',
+    'Color is not the only way to convey information',
+    'Text can be resized to 200% without horizontal scrolling',
+    'Content reflows properly at different screen sizes',
+    'Focus indicators are visible',
+    'Animations respect prefers-reduced-motion',
+  ],
+  
+  motor: [
+    'Click targets are at least 44x44px',
+    'Drag and drop has keyboard alternatives',
+    'Time limits can be extended or disabled',
+    'Auto-playing content can be paused',
+    'Content doesn\'t cause seizures (no more than 3 flashes per second)',
+  ],
+  
+  cognitive: [
+    'Error messages are clear and provide suggestions',
+    'Instructions are easy to understand',
+    'Important information is not conveyed by color alone',
+    'Consistent navigation and layout',
+    'Help is available when needed',
+  ],
+} as const;
+```
+
+## Related Files
+
+- [Component Architecture](./components.mdc) - Accessible component patterns
+- [Styling System](./styling.mdc) - Accessible color and typography
+- [State Management](./state-management.mdc) - Focus and announcement state
+- [Keyboard Navigation](./animations.mdc) - Focus management in animations

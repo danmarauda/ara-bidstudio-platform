@@ -1,0 +1,446 @@
+---
+category: testing
+subcategory: overview
+tags: [testing, overview, strategy, navigation]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["./unit-tests.mdc", "./integration-tests.mdc", "./e2e-tests.mdc"]
+  exports: ["testing-overview"]
+  references: ["../index.mdc"]
+---
+
+# Testing Strategy Overview - abubis.chat
+
+## Testing Architecture
+
+abubis.chat implements a comprehensive testing strategy designed for AI-powered Web3 applications. The testing pyramid emphasizes automated testing at all levels with specialized patterns for AI responses, blockchain interactions, and real-time streaming.
+
+### Testing Pyramid Distribution
+
+```
+                    🔺 E2E Tests (5-10%)
+                   /                    \
+                  /    User Workflows    \
+                 /     Cross-Browser      \
+                /       Visual Tests      \
+               /________________________\
+              
+          🔹 Integration Tests (15-20%)
+         /                               \
+        /    API Testing                  \
+       /     Database Integration         \
+      /      Service Communication        \
+     /_____________________________\
+    
+🔻 Unit Tests (70-80%)
+    Components | Services | Utils | AI Testing
+```
+
+## Core Testing Components
+
+### 🧪 [Unit Tests](./unit-tests.mdc)
+**Component-level testing with Vitest**
+
+**Framework**: Vitest + React Testing Library + Playwright (for browser APIs)
+
+**Coverage Areas**:
+- **React Components**: Chat interface, wallet connection, message display
+- **Custom Hooks**: useChat, useWallet, useAI streaming hooks
+- **Service Layer**: AI service, vector search, embedding pipeline
+- **Utility Functions**: Text processing, token estimation, validation
+
+**Key Features**:
+```typescript
+// Example: AI service unit test
+describe('AIService', () => {
+  it('should generate appropriate responses', async () => {
+    const response = await aiService.generateResponse('What is Solana?');
+    
+    expect(response).toMatch(/solana|blockchain/i);
+    expect(response.length).toBeGreaterThan(50);
+  });
+});
+```
+
+**Performance Targets**:
+- **Execution Speed**: <100ms per test
+- **Coverage**: 90%+ statements, 85%+ branches
+- **Reliability**: 99.9%+ consistency across runs
+
+### 🔗 [Integration Tests](./integration-tests.mdc)
+**Service interaction and API testing**
+
+**Framework**: Vitest + Hono test client + Mock databases
+
+**Coverage Areas**:
+- **API Routes**: Chat endpoints, conversation management, search APIs
+- **Database Operations**: User management, message persistence, vector storage
+- **External Services**: AI model integration, vector database operations
+- **Authentication**: Wallet-based auth, session management
+
+**Key Features**:
+```typescript
+// Example: API integration test
+describe('Chat API Integration', () => {
+  it('should handle streaming responses', async () => {
+    const response = await client.api.chat.$post({
+      json: { message: 'Test', sessionId: 'test-1' }
+    });
+    
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/stream');
+  });
+});
+```
+
+**Database Testing**:
+- **Test Isolation**: Fresh database state per test
+- **Transaction Testing**: ACID compliance validation
+- **Performance Testing**: Query optimization verification
+- **Data Integrity**: Foreign key and constraint validation
+
+### 🌐 [E2E Tests](./e2e-tests.mdc)
+**Full user workflow testing with Playwright**
+
+**Framework**: Playwright + Page Object Model + Visual Testing
+
+**Coverage Areas**:
+- **User Authentication**: Wallet connection flows, multi-wallet support
+- **Chat Interactions**: Message sending, conversation management
+- **Real-time Features**: Streaming responses, live updates
+- **Cross-browser Compatibility**: Chrome, Firefox, Safari, Edge
+
+**Key Features**:
+```typescript
+// Example: E2E user flow test
+test('complete chat workflow', async ({ page, mockWallet }) => {
+  const chatPage = new ChatPage(page);
+  await chatPage.connectWallet();
+  
+  await chatPage.sendMessage('How do I deploy on Solana?');
+  await chatPage.waitForResponse();
+  
+  expect(await chatPage.getLastMessage()).toContain('deploy');
+});
+```
+
+**Multi-Device Testing**:
+- **Desktop**: 1920x1080, 1366x768 viewports
+- **Tablet**: iPad, Android tablet simulations
+- **Mobile**: iPhone, Android phone simulations
+- **Accessibility**: Screen reader, keyboard navigation
+
+### 🤖 [AI Testing](./ai-testing.mdc)
+**AI response quality and safety validation**
+
+**Framework**: Custom AI validation framework + Response quality metrics
+
+**Coverage Areas**:
+- **Response Quality**: Relevance, accuracy, completeness, coherence
+- **Safety Testing**: Prompt injection prevention, content filtering
+- **Context Handling**: RAG integration, conversation memory
+- **Model Comparison**: Performance across different AI models
+
+**Key Features**:
+```typescript
+// Example: AI quality validation
+const metrics = await validator.validateResponse(query, response);
+
+expect(metrics.relevance).toBeGreaterThan(0.8);
+expect(metrics.safety).toBeGreaterThan(0.95);
+expect(metrics.accuracy).toBeGreaterThan(0.7);
+```
+
+**AI-Specific Testing**:
+- **Prompt Engineering**: System prompt effectiveness, injection resistance
+- **Model Behavior**: Consistency, hallucination detection, bias analysis
+- **Streaming Quality**: Chunk coherence, interruption handling
+- **RAG Integration**: Context relevance, source attribution
+
+### 🔒 [Wallet Testing](./wallet-testing.mdc)
+**Web3 and Solana blockchain interaction testing**
+
+**Framework**: Mock Solana wallets + Transaction simulation
+
+**Coverage Areas**:
+- **Wallet Connection**: Multi-wallet support (Phantom, Solflare, etc.)
+- **Transaction Signing**: Single and batch transaction handling
+- **Program Interaction**: Anchor program method calls
+- **Error Scenarios**: User rejection, network failures, insufficient funds
+
+**Key Features**:
+```typescript
+// Example: Wallet integration test
+test('should sign transactions', async () => {
+  const mockWallet = new MockSolanaWallet({ connected: true });
+  const transaction = createTestTransaction();
+  
+  const signed = await wallet.signTransaction(transaction);
+  expect(signed.signatures).toHaveLength(1);
+});
+```
+
+**Blockchain Testing**:
+- **Connection Management**: Network switching, RPC failures
+- **Account Management**: Balance checking, account creation
+- **Program Testing**: Smart contract interaction simulation
+- **Security Testing**: Transaction validation, signature verification
+
+### ⚡ [Performance Tests](./performance-tests.mdc)
+**Load testing and performance benchmarking**
+
+**Framework**: Playwright + Custom performance monitoring
+
+**Coverage Areas**:
+- **Core Web Vitals**: LCP, FID, CLS measurement and optimization
+- **API Performance**: Response time, throughput, concurrent user handling
+- **Memory Management**: Leak detection, garbage collection efficiency
+- **Streaming Performance**: Real-time response delivery, interruption handling
+
+**Key Features**:
+```typescript
+// Example: Performance benchmark
+test('should meet Core Web Vitals', async ({ page }) => {
+  const metrics = await measurePagePerformance(page);
+  
+  expect(metrics.LCP).toBeLessThan(2500); // 2.5s
+  expect(metrics.FID).toBeLessThan(100);  // 100ms
+  expect(metrics.CLS).toBeLessThan(0.1);  // 0.1
+});
+```
+
+**Performance Benchmarks**:
+- **Page Load**: <3s on 3G, <1s on WiFi
+- **API Response**: <200ms average, <500ms P95
+- **Memory Usage**: <100MB baseline, stable over time
+- **Streaming Latency**: <2s time to first token
+
+## Testing Infrastructure
+
+### Continuous Integration
+```yaml
+# GitHub Actions workflow
+test_matrix:
+  unit_tests:
+    - vitest --coverage --run
+    - coverage: 90%+ required
+    
+  integration_tests:
+    - docker compose up test-db
+    - vitest --config integration.config.ts
+    
+  e2e_tests:
+    - playwright test --project=chromium,firefox,webkit
+    - visual regression testing
+    
+  performance_tests:
+    - lighthouse CI
+    - load testing with k6
+```
+
+### Test Data Management
+```typescript
+// Test fixtures and factories
+export const testFixtures = {
+  users: createUserFactory(),
+  conversations: createConversationFactory(),
+  aiResponses: createResponseFactory(),
+  walletData: createWalletFactory()
+};
+
+// Database seeding for integration tests
+await seedTestDatabase({
+  users: 5,
+  conversations: 20,
+  messages: 100,
+  vectorDocuments: 50
+});
+```
+
+### Mock Services
+```typescript
+// Comprehensive mocking strategy
+const mocks = {
+  aiModels: mockAIProviders(),
+  vectorDB: mockQdrant(),
+  wallets: mockSolanaWallets(),
+  blockchain: mockSolanaConnection()
+};
+```
+
+## Quality Assurance Metrics
+
+### Test Coverage Requirements
+| Component | Unit Tests | Integration | E2E | Performance |
+|-----------|------------|-------------|-----|-------------|
+| **Frontend Components** | 90%+ | 80%+ | Critical paths | Core Web Vitals |
+| **API Routes** | 85%+ | 95%+ | Full workflows | Response times |
+| **AI Services** | 95%+ | 90%+ | User interactions | Model performance |
+| **Wallet Integration** | 90%+ | 85%+ | Connection flows | Transaction speed |
+| **Utils & Helpers** | 95%+ | N/A | N/A | N/A |
+
+### Quality Gates
+```typescript
+// Automated quality gates in CI
+const qualityGates = {
+  coverage: {
+    statements: 90,
+    branches: 85,
+    functions: 95,
+    lines: 90
+  },
+  performance: {
+    loadTime: 3000,      // 3s max load time
+    apiResponse: 5000,   // 5s max API response
+    memoryUsage: 100     // 100MB max memory
+  },
+  ai: {
+    relevance: 0.8,      // 80% relevance minimum
+    safety: 0.95,        // 95% safety score
+    accuracy: 0.7        // 70% accuracy minimum
+  }
+};
+```
+
+## Testing Best Practices
+
+### Test Organization
+1. **Naming Convention**: `ComponentName.test.tsx`, `serviceName.test.ts`
+2. **File Structure**: Mirror source code structure in test directories
+3. **Test Grouping**: Use `describe` blocks for logical organization
+4. **Shared Utilities**: Common test utilities in dedicated modules
+
+### Test Quality Standards
+1. **Independence**: Tests should not depend on each other
+2. **Determinism**: Consistent results across runs and environments
+3. **Speed**: Fast execution for quick feedback cycles
+4. **Maintainability**: Easy to understand and modify
+
+### Mock Strategy
+1. **External Dependencies**: Mock all external APIs and services
+2. **Database Operations**: Use in-memory databases for unit tests
+3. **Time-Dependent Code**: Mock dates and timers for consistency
+4. **Random Data**: Use seeded random generators for reproducibility
+
+### Error Testing
+1. **Happy Path**: Test successful scenarios first
+2. **Error Conditions**: Comprehensive error scenario coverage
+3. **Edge Cases**: Boundary conditions and unusual inputs
+4. **Recovery Testing**: Error recovery and graceful degradation
+
+## Development Workflow
+
+### Test-Driven Development (TDD)
+```typescript
+// 1. Write failing test
+test('should validate user input', () => {
+  expect(validateInput('')).toBe(false);
+});
+
+// 2. Implement minimal code to pass
+function validateInput(input: string): boolean {
+  return input.length > 0;
+}
+
+// 3. Refactor and improve
+function validateInput(input: string): boolean {
+  return input.trim().length > 0 && input.length < 1000;
+}
+```
+
+### Testing Commands
+```bash
+# Development testing
+bun test                    # Run all tests
+bun test:watch             # Watch mode for development
+bun test:coverage          # Generate coverage reports
+bun test:unit              # Unit tests only
+bun test:integration       # Integration tests only
+bun test:e2e              # E2E tests only
+bun test:performance       # Performance tests only
+
+# CI/CD testing
+bun test:ci                # Full test suite for CI
+bun test:visual            # Visual regression tests
+bun test:accessibility     # Accessibility compliance tests
+bun test:security         # Security and vulnerability tests
+```
+
+### Pre-commit Hooks
+```bash
+# Husky pre-commit configuration
+#!/bin/sh
+bun run lint-staged
+bun test:unit --run
+bun test:typecheck
+```
+
+## Advanced Testing Patterns
+
+### Parameterized Testing
+```typescript
+// Test multiple scenarios with same logic
+const testCases = [
+  { input: 'simple query', expectedType: 'simple' },
+  { input: 'complex blockchain question', expectedType: 'technical' },
+  { input: 'how to guide request', expectedType: 'instructional' }
+];
+
+testCases.forEach(({ input, expectedType }) => {
+  test(`should classify "${input}" as ${expectedType}`, () => {
+    expect(classifyQuery(input)).toBe(expectedType);
+  });
+});
+```
+
+### Property-Based Testing
+```typescript
+// Generate random inputs to test invariants
+import { fc } from 'fast-check';
+
+test('token estimation should be consistent', () => {
+  fc.assert(fc.property(fc.string(), (text) => {
+    const estimate1 = estimateTokens(text);
+    const estimate2 = estimateTokens(text);
+    expect(estimate1).toBe(estimate2); // Should be deterministic
+  }));
+});
+```
+
+### Snapshot Testing
+```typescript
+// Component rendering consistency
+test('chat message renders correctly', () => {
+  const message = { role: 'assistant', content: 'Hello world' };
+  const tree = renderer.create(<ChatMessage message={message} />);
+  expect(tree.toJSON()).toMatchSnapshot();
+});
+```
+
+## Monitoring and Reporting
+
+### Test Analytics
+- **Test Execution Time**: Track test performance trends
+- **Flaky Test Detection**: Identify and fix unstable tests
+- **Coverage Trends**: Monitor coverage changes over time
+- **Failure Analysis**: Root cause analysis of test failures
+
+### Reporting Dashboard
+- **Coverage Reports**: Visual coverage analysis
+- **Performance Metrics**: Core Web Vitals tracking
+- **Quality Trends**: Test reliability and performance over time
+- **CI/CD Integration**: Automated reporting in pull requests
+
+## Next Steps
+
+1. **Review Component Documentation**: Study individual testing patterns
+2. **Set Up Testing Environment**: Configure tools and frameworks
+3. **Implement Core Tests**: Start with critical user paths
+4. **Establish CI/CD Pipeline**: Automate testing in development workflow
+5. **Monitor and Optimize**: Continuously improve test suite performance
+
+For detailed implementation guidance, refer to the individual testing component documentation linked above.

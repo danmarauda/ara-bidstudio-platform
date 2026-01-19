@@ -1,0 +1,924 @@
+---
+category: backend
+subcategory: queues
+tags: [background-jobs, convex-scheduler, async-processing, task-queues]
+cursor:
+  context_window: 8192
+  temperature: 0.5
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./convex-patterns.mdc", "./database-schema.mdc"]
+  exports: ["job-patterns", "scheduler-strategies", "retry-mechanisms"]
+  references: ["./caching.mdc", "./vector-search.mdc"]
+---
+
+# Background Jobs & Queue Patterns - Convex Scheduler
+
+## Core Queue Architecture
+
+**Native Integration**: Leverage Convex's built-in scheduler for type-safe background processing
+**Wallet Isolation**: All jobs include wallet address for security and resource allocation
+**Retry Strategies**: Exponential backoff with dead letter handling for failed jobs
+**Priority Queues**: Support for urgent, normal, and low priority job processing
+
+## Convex Scheduler Patterns
+
+### Job Definition & Management
+```typescript
+// convex/jobs.ts - Centralized job management
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { internalMutation, internalQuery } from "./_generated/server";
+
+// Job types and priority levels
+export const JobType = v.union(
+  v.literal("embedding_generation"),
+  v.literal("document_processing"),
+  v.literal("ai_response_generation"),
+  v.literal("analytics_aggregation"),
+  v.literal("cache_warming"),
+  v.literal("cleanup_tasks"),
+  v.literal("notification_delivery"),
+  v.literal("subscription_renewal")
+);
+
+export const JobPriority = v.union(
+  v.literal("urgent"),    // <1 minute
+  v.literal("high"),      // <5 minutes
+  v.literal("normal"),    // <30 minutes
+  v.literal("low"),       // <2 hours
+  v.literal("batch")      // overnight processing
+);
+
+// Create and schedule jobs
+export const createJob = internalMutation({
+  args: {
+    walletAddress: v.optional(v.string()),
+    type: JobType,
+    priority: JobPriority,
+    data: v.any(),
+    scheduledFor: v.optional(v.number()),
+    maxRetries: v.optional(v.number()),
+    timeoutMs: v.optional(v.number()),
+    dependencies: v.optional(v.array(v.id("jobs"))),
+  },
+  handler: async (ctx, args) => {
+    const jobId = await ctx.db.insert("jobs", {
+      walletAddress: args.walletAddress,
+      type: args.type,
+      status: "pending",
+      priority: args.priority,
+      data: args.data,
+      progress: 0,
+      retryCount: 0,
+      maxRetries: args.maxRetries || getDefaultRetries(args.type),
+      timeoutMs: args.timeoutMs || getDefaultTimeout(args.type),
+      dependencies: args.dependencies || [],
+      createdAt: Date.now(),
+      scheduledFor: args.scheduledFor || Date.now(),
+    });
+    
+    // Schedule job execution based on priority
+    const delay = calculateJobDelay(args.priority, args.scheduledFor);
+    
+    await ctx.scheduler.runAfter(delay, internal.jobs.processJob, {
+      jobId,
+    });
+    
+    return jobId;
+  },
+});
+
+// Process individual jobs with error handling
+export const processJob = internalMutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, { jobId }) => {
+    const job = await ctx.db.get(jobId);
+    if (!job) {
+      console.error(`Job ${jobId} not found`);
+      return;
+    }
+    
+    // Check if job is already being processed
+    if (job.status === "running") {
+      return;
+    }
+    
+    // Check dependencies
+    if (job.dependencies.length > 0) {
+      const dependencies = await Promise.all(
+        job.dependencies.map(depId => ctx.db.get(depId))
+      );
+      
+      const pendingDeps = dependencies.filter(dep => 
+        dep && dep.status !== "completed"
+      );
+      
+      if (pendingDeps.length > 0) {
+        // Reschedule for later
+        await ctx.scheduler.runAfter(30000, internal.jobs.processJob, { jobId });
+        return;
+      }
+    }
+    
+    try {
+      // Mark job as running
+      await ctx.db.patch(jobId, {
+        status: "running",
+        startedAt: Date.now(),
+      });
+      
+      // Execute job based on type
+      const result = await executeJob(ctx, job);
+      
+      // Mark as completed
+      await ctx.db.patch(jobId, {
+        status: "completed",
+        progress: 100,
+        result,
+        completedAt: Date.now(),
+      });
+      
+    } catch (error) {
+      console.error(`Job ${jobId} failed:`, error);
+      
+      // Handle retry logic
+      if (job.retryCount < job.maxRetries) {
+        const retryDelay = calculateRetryDelay(job.retryCount);
+        
+        await ctx.db.patch(jobId, {
+          status: "pending",
+          retryCount: job.retryCount + 1,
+          error: error.message,
+        });
+        
+        await ctx.scheduler.runAfter(retryDelay, internal.jobs.processJob, {
+          jobId,
+        });
+      } else {
+        // Mark as failed
+        await ctx.db.patch(jobId, {
+          status: "failed",
+          error: error.message,
+          completedAt: Date.now(),
+        });
+        
+        // Move to dead letter queue
+        await ctx.scheduler.runAfter(0, internal.jobs.handleFailedJob, {
+          jobId,
+        });
+      }
+    }
+  },
+});
+
+// Execute job based on type
+async function executeJob(ctx: any, job: any) {
+  switch (job.type) {
+    case "embedding_generation":
+      return await ctx.scheduler.runAfter(0, internal.embeddings.generateJobEmbeddings, {
+        jobData: job.data,
+        walletAddress: job.walletAddress,
+      });
+      
+    case "document_processing":
+      return await ctx.scheduler.runAfter(0, internal.documents.processDocumentJob, {
+        documentId: job.data.documentId,
+        walletAddress: job.walletAddress,
+      });
+      
+    case "ai_response_generation":
+      return await ctx.scheduler.runAfter(0, internal.ai.generateResponseJob, {
+        messageId: job.data.messageId,
+        walletAddress: job.walletAddress,
+      });
+      
+    case "analytics_aggregation":
+      return await ctx.scheduler.runAfter(0, internal.analytics.aggregateUserData, {
+        walletAddress: job.walletAddress,
+        dateRange: job.data.dateRange,
+      });
+      
+    case "cache_warming":
+      return await ctx.scheduler.runAfter(0, internal.cache.warmUserCache, {
+        walletAddress: job.walletAddress,
+      });
+      
+    case "cleanup_tasks":
+      return await ctx.scheduler.runAfter(0, internal.cleanup.performCleanup, {
+        type: job.data.cleanupType,
+        walletAddress: job.walletAddress,
+      });
+      
+    default:
+      throw new Error(`Unknown job type: ${job.type}`);
+  }
+}
+
+// Helper functions
+function getDefaultRetries(jobType: string): number {
+  const retryConfig = {
+    embedding_generation: 3,
+    document_processing: 2,
+    ai_response_generation: 3,
+    analytics_aggregation: 1,
+    cache_warming: 1,
+    cleanup_tasks: 2,
+    notification_delivery: 5,
+    subscription_renewal: 3,
+  };
+  
+  return retryConfig[jobType as keyof typeof retryConfig] || 3;
+}
+
+function getDefaultTimeout(jobType: string): number {
+  const timeoutConfig = {
+    embedding_generation: 60000,    // 1 minute
+    document_processing: 300000,    // 5 minutes
+    ai_response_generation: 120000, // 2 minutes
+    analytics_aggregation: 600000,  // 10 minutes
+    cache_warming: 30000,          // 30 seconds
+    cleanup_tasks: 180000,         // 3 minutes
+    notification_delivery: 30000,   // 30 seconds
+    subscription_renewal: 120000,   // 2 minutes
+  };
+  
+  return timeoutConfig[jobType as keyof typeof timeoutConfig] || 120000;
+}
+
+function calculateJobDelay(priority: string, scheduledFor?: number): number {
+  if (scheduledFor && scheduledFor > Date.now()) {
+    return scheduledFor - Date.now();
+  }
+  
+  const priorityDelays = {
+    urgent: 0,        // Immediate
+    high: 1000,       // 1 second
+    normal: 5000,     // 5 seconds
+    low: 30000,       // 30 seconds
+    batch: 3600000,   // 1 hour
+  };
+  
+  return priorityDelays[priority as keyof typeof priorityDelays] || 5000;
+}
+
+function calculateRetryDelay(retryCount: number): number {
+  // Exponential backoff: 2^retryCount * 1000ms + jitter
+  const baseDelay = Math.pow(2, retryCount) * 1000;
+  const jitter = Math.random() * 1000;
+  return baseDelay + jitter;
+}
+```
+
+## Specific Job Implementations
+
+### AI Response Generation Queue
+```typescript
+// convex/ai-jobs.ts
+export const generateResponseJob = internalAction({
+  args: {
+    messageId: v.id("messages"),
+    walletAddress: v.string(),
+    retryCount: v.optional(v.number()),
+  },
+  handler: async (ctx, { messageId, walletAddress, retryCount = 0 }) => {
+    try {
+      // Get message with conversation context
+      const message = await ctx.runQuery(internal.messages.getMessageWithContext, {
+        messageId,
+        walletAddress,
+      });
+      
+      if (!message) {
+        throw new Error("Message not found or access denied");
+      }
+      
+      // Check user limits and subscription
+      const canGenerate = await ctx.runQuery(internal.limits.checkAIGenerationLimits, {
+        walletAddress,
+      });
+      
+      if (!canGenerate.allowed) {
+        throw new Error(`AI generation blocked: ${canGenerate.reason}`);
+      }
+      
+      // Generate AI response
+      const response = await generateAIResponse({
+        messages: message.conversationContext,
+        model: message.chat.model,
+        temperature: message.chat.temperature || 0.7,
+        maxTokens: message.chat.maxTokens || 2000,
+      });
+      
+      // Save response and update usage
+      const responseId = await ctx.runMutation(internal.messages.createAIResponse, {
+        chatId: message.chatId,
+        walletAddress,
+        parentMessageId: messageId,
+        content: response.content,
+        metadata: {
+          model: response.model,
+          usage: response.usage,
+          finishReason: response.finishReason,
+        },
+      });
+      
+      // Update usage statistics
+      await ctx.runMutation(internal.usage.trackUsage, {
+        walletAddress,
+        action: "ai_response_generated",
+        resourceId: responseId,
+        tokens: response.usage.totalTokens,
+        cost: calculateTokenCost(response.usage.totalTokens, response.model),
+      });
+      
+      return { responseId, tokensUsed: response.usage.totalTokens };
+      
+    } catch (error) {
+      console.error(`AI response generation failed for message ${messageId}:`, error);
+      
+      // Update message status
+      await ctx.runMutation(internal.messages.updateMessageStatus, {
+        messageId,
+        status: "ai_failed",
+        error: error.message,
+      });
+      
+      throw error; // Re-throw for retry handling
+    }
+  },
+});
+
+// Queue AI response generation
+export const queueAIResponse = internalMutation({
+  args: {
+    messageId: v.id("messages"),
+    walletAddress: v.string(),
+    priority: v.optional(v.literal("urgent")),
+  },
+  handler: async (ctx, { messageId, walletAddress, priority = "high" }) => {
+    return await ctx.runMutation(internal.jobs.createJob, {
+      walletAddress,
+      type: "ai_response_generation",
+      priority,
+      data: { messageId },
+      maxRetries: 3,
+      timeoutMs: 120000, // 2 minutes
+    });
+  },
+});
+```
+
+### Document Processing Pipeline
+```typescript
+// convex/document-jobs.ts
+export const processDocumentJob = internalAction({
+  args: {
+    documentId: v.id("documents"),
+    walletAddress: v.string(),
+  },
+  handler: async (ctx, { documentId, walletAddress }) => {
+    try {
+      const document = await ctx.runQuery(internal.documents.getDocument, {
+        documentId,
+        walletAddress,
+      });
+      
+      if (!document) {
+        throw new Error("Document not found or access denied");
+      }
+      
+      // Update document status
+      await ctx.runMutation(internal.documents.updateProcessingStatus, {
+        documentId,
+        status: "processing",
+        progress: 10,
+      });
+      
+      // Step 1: Extract and clean text
+      const cleanedText = await extractAndCleanText(document);
+      
+      await ctx.runMutation(internal.documents.updateProcessingStatus, {
+        documentId,
+        status: "processing", 
+        progress: 30,
+      });
+      
+      // Step 2: Chunk the document
+      const chunks = await chunkDocument(cleanedText, {
+        chunkSize: 1000,
+        overlap: 200,
+        preserveStructure: true,
+      });
+      
+      await ctx.runMutation(internal.documents.updateProcessingStatus, {
+        documentId,
+        status: "processing",
+        progress: 50,
+      });
+      
+      // Step 3: Generate embeddings for chunks
+      const embeddingJobs = chunks.map((chunk, index) => 
+        ctx.runMutation(internal.jobs.createJob, {
+          walletAddress,
+          type: "embedding_generation",
+          priority: "normal",
+          data: {
+            documentId,
+            chunkIndex: index,
+            content: chunk.content,
+            metadata: chunk.metadata,
+          },
+          dependencies: [], // These can run in parallel
+        })
+      );
+      
+      const embeddingJobIds = await Promise.all(embeddingJobs);
+      
+      await ctx.runMutation(internal.documents.updateProcessingStatus, {
+        documentId,
+        status: "processing",
+        progress: 80,
+      });
+      
+      // Step 4: Store chunks in Convex
+      const chunkIds = await Promise.all(
+        chunks.map(chunk => 
+          ctx.runMutation(internal.chunks.createChunk, {
+            documentId,
+            walletAddress,
+            content: chunk.content,
+            chunkIndex: chunk.index,
+            startOffset: chunk.startOffset,
+            endOffset: chunk.endOffset,
+            metadata: chunk.metadata,
+          })
+        )
+      );
+      
+      // Step 5: Wait for all embedding jobs to complete
+      await waitForJobCompletion(ctx, embeddingJobIds);
+      
+      // Step 6: Mark document as processed
+      await ctx.runMutation(internal.documents.updateProcessingStatus, {
+        documentId,
+        status: "completed",
+        progress: 100,
+        processedAt: Date.now(),
+      });
+      
+      return {
+        documentId,
+        chunksCreated: chunkIds.length,
+        embeddingJobsCreated: embeddingJobIds.length,
+      };
+      
+    } catch (error) {
+      console.error(`Document processing failed for ${documentId}:`, error);
+      
+      await ctx.runMutation(internal.documents.updateProcessingStatus, {
+        documentId,
+        status: "failed",
+        error: error.message,
+      });
+      
+      throw error;
+    }
+  },
+});
+
+async function waitForJobCompletion(ctx: any, jobIds: string[], timeoutMs: number = 300000) {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeoutMs) {
+    const jobs = await Promise.all(
+      jobIds.map(id => ctx.runQuery(internal.jobs.getJob, { jobId: id }))
+    );
+    
+    const completed = jobs.filter(job => 
+      job && (job.status === "completed" || job.status === "failed")
+    );
+    
+    if (completed.length === jobs.length) {
+      const failed = completed.filter(job => job.status === "failed");
+      if (failed.length > 0) {
+        throw new Error(`${failed.length} embedding jobs failed`);
+      }
+      return;
+    }
+    
+    // Wait 5 seconds before checking again
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+  
+  throw new Error("Timeout waiting for embedding jobs to complete");
+}
+```
+
+### Embedding Generation Jobs
+```typescript
+// convex/embedding-jobs.ts
+export const generateJobEmbeddings = internalAction({
+  args: {
+    jobData: v.any(),
+    walletAddress: v.string(),
+  },
+  handler: async (ctx, { jobData, walletAddress }) => {
+    try {
+      const { documentId, chunkIndex, content, metadata } = jobData;
+      
+      // Generate dense embedding
+      const denseEmbedding = await generateDenseEmbedding(content);
+      
+      // Generate sparse embedding for hybrid search
+      const sparseEmbedding = await generateSparseEmbedding(content);
+      
+      // Store in Qdrant
+      const qdrantId = `${documentId}_chunk_${chunkIndex}`;
+      
+      await storeEmbeddingInQdrant({
+        id: qdrantId,
+        denseVector: denseEmbedding,
+        sparseVector: sparseEmbedding,
+        payload: {
+          wallet_address: walletAddress,
+          document_id: documentId,
+          chunk_index: chunkIndex,
+          content: content.substring(0, 1000), // Truncated for indexing
+          metadata: metadata || {},
+          created_at: Date.now(),
+          is_active: true,
+        },
+      });
+      
+      // Update chunk record in Convex
+      await ctx.runMutation(internal.chunks.updateChunkEmbedding, {
+        documentId,
+        chunkIndex,
+        embedding: denseEmbedding,
+      });
+      
+      return {
+        qdrantId,
+        embeddingGenerated: true,
+        dimensions: denseEmbedding.length,
+      };
+      
+    } catch (error) {
+      console.error("Embedding generation failed:", error);
+      throw error;
+    }
+  },
+});
+```
+
+## Batch Processing Patterns
+
+### Daily Analytics Aggregation
+```typescript
+// convex/analytics-jobs.ts
+export const scheduleAnalyticsAggregation = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().split('T')[0];
+    
+    // Get all active users
+    const activeUsers = await ctx.db
+      .query("users")
+      .filter(q => q.eq("isActive", true))
+      .collect();
+    
+    // Create aggregation jobs for each user
+    const jobs = activeUsers.map(user =>
+      ctx.runMutation(internal.jobs.createJob, {
+        walletAddress: user.walletAddress,
+        type: "analytics_aggregation",
+        priority: "batch",
+        data: { date: dateStr },
+        scheduledFor: Date.now() + (2 * 60 * 60 * 1000), // 2 hours from now
+      })
+    );
+    
+    const jobIds = await Promise.all(jobs);
+    
+    return {
+      date: dateStr,
+      jobsCreated: jobIds.length,
+      scheduledFor: new Date(Date.now() + (2 * 60 * 60 * 1000)).toISOString(),
+    };
+  },
+});
+
+export const aggregateUserAnalytics = internalAction({
+  args: {
+    walletAddress: v.string(),
+    date: v.string(),
+  },
+  handler: async (ctx, { walletAddress, date }) => {
+    try {
+      // Get all usage records for the date
+      const usage = await ctx.runQuery(internal.usage.getDailyUsage, {
+        walletAddress,
+        date,
+      });
+      
+      // Aggregate metrics
+      const aggregatedData = {
+        date,
+        messagesCount: usage.filter(u => u.action === "message_sent").length,
+        chatsCreated: usage.filter(u => u.action === "chat_created").length,
+        documentsUploaded: usage.filter(u => u.action === "document_uploaded").length,
+        searchesPerformed: usage.filter(u => u.action === "search_performed").length,
+        totalTokens: usage.reduce((sum, u) => sum + (u.tokens || 0), 0),
+        totalCost: usage.reduce((sum, u) => sum + (u.cost || 0), 0),
+        peakHour: calculatePeakUsageHour(usage),
+        avgResponseTime: calculateAverageResponseTime(usage),
+      };
+      
+      // Store aggregated data
+      await ctx.runMutation(internal.analytics.storeDailyAggregation, {
+        walletAddress,
+        ...aggregatedData,
+      });
+      
+      // Clean up old raw usage data (optional)
+      await ctx.runMutation(internal.usage.archiveOldUsageData, {
+        walletAddress,
+        olderThanDays: 30,
+      });
+      
+      return aggregatedData;
+      
+    } catch (error) {
+      console.error(`Analytics aggregation failed for ${walletAddress}:`, error);
+      throw error;
+    }
+  },
+});
+```
+
+## Queue Monitoring & Management
+
+### Job Status Monitoring
+```typescript
+// convex/job-monitoring.ts
+export const getJobStatus = query({
+  args: {
+    walletAddress: v.string(),
+    types: v.optional(v.array(JobType)),
+    status: v.optional(v.array(v.string())),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { walletAddress, types, status, limit = 50 }) => {
+    let query = ctx.db
+      .query("jobs")
+      .withIndex("by_wallet", q => q.eq("walletAddress", walletAddress));
+    
+    if (types && types.length > 0) {
+      query = query.filter(q => types.some(type => q.eq("type", type)));
+    }
+    
+    if (status && status.length > 0) {
+      query = query.filter(q => status.some(s => q.eq("status", s)));
+    }
+    
+    const jobs = await query
+      .order("desc")
+      .take(limit);
+    
+    // Calculate summary statistics
+    const summary = {
+      total: jobs.length,
+      pending: jobs.filter(j => j.status === "pending").length,
+      running: jobs.filter(j => j.status === "running").length,
+      completed: jobs.filter(j => j.status === "completed").length,
+      failed: jobs.filter(j => j.status === "failed").length,
+      avgProgress: jobs.reduce((sum, j) => sum + j.progress, 0) / jobs.length,
+    };
+    
+    return {
+      jobs: jobs.map(job => ({
+        id: job._id,
+        type: job.type,
+        status: job.status,
+        progress: job.progress,
+        priority: job.priority,
+        createdAt: job.createdAt,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        retryCount: job.retryCount,
+        error: job.error,
+      })),
+      summary,
+    };
+  },
+});
+
+// Cancel pending jobs
+export const cancelJob = mutation({
+  args: {
+    jobId: v.id("jobs"),
+    walletAddress: v.string(),
+  },
+  handler: async (ctx, { jobId, walletAddress }) => {
+    const job = await ctx.db.get(jobId);
+    
+    if (!job || job.walletAddress !== walletAddress) {
+      throw new ConvexError("Job not found or access denied");
+    }
+    
+    if (job.status === "running") {
+      throw new ConvexError("Cannot cancel running job");
+    }
+    
+    if (job.status === "completed" || job.status === "failed") {
+      throw new ConvexError("Job already completed");
+    }
+    
+    await ctx.db.patch(jobId, {
+      status: "cancelled",
+      completedAt: Date.now(),
+      error: "Cancelled by user",
+    });
+    
+    return { cancelled: true };
+  },
+});
+```
+
+### Dead Letter Queue Management
+```typescript
+// convex/dead-letter.ts
+export const handleFailedJob = internalMutation({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, { jobId }) => {
+    const job = await ctx.db.get(jobId);
+    if (!job) return;
+    
+    // Log failed job details
+    console.error("Job moved to dead letter queue:", {
+      jobId,
+      type: job.type,
+      walletAddress: job.walletAddress,
+      error: job.error,
+      retryCount: job.retryCount,
+    });
+    
+    // Create dead letter record
+    await ctx.db.insert("deadLetterJobs", {
+      originalJobId: jobId,
+      walletAddress: job.walletAddress,
+      type: job.type,
+      data: job.data,
+      error: job.error,
+      failedAt: Date.now(),
+      retryCount: job.retryCount,
+      canRequeue: isRequeueableJobType(job.type),
+    });
+    
+    // Notify if critical job type
+    if (isCriticalJobType(job.type)) {
+      await ctx.scheduler.runAfter(0, internal.notifications.sendJobFailureNotification, {
+        walletAddress: job.walletAddress,
+        jobType: job.type,
+        error: job.error,
+      });
+    }
+  },
+});
+
+function isRequeueableJobType(jobType: string): boolean {
+  const requeueableTypes = [
+    "embedding_generation",
+    "document_processing", 
+    "ai_response_generation",
+  ];
+  return requeueableTypes.includes(jobType);
+}
+
+function isCriticalJobType(jobType: string): boolean {
+  const criticalTypes = [
+    "subscription_renewal",
+    "notification_delivery",
+  ];
+  return criticalTypes.includes(jobType);
+}
+```
+
+## Performance Optimization
+
+### Queue Health Monitoring
+```typescript
+// convex/queue-health.ts
+export const getQueueHealthMetrics = query({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const oneHourAgo = now - (60 * 60 * 1000);
+    
+    // Get recent job statistics
+    const recentJobs = await ctx.db
+      .query("jobs")
+      .filter(q => q.gt("createdAt", oneHourAgo))
+      .collect();
+    
+    const metrics = {
+      totalJobs: recentJobs.length,
+      pendingJobs: recentJobs.filter(j => j.status === "pending").length,
+      runningJobs: recentJobs.filter(j => j.status === "running").length,
+      completedJobs: recentJobs.filter(j => j.status === "completed").length,
+      failedJobs: recentJobs.filter(j => j.status === "failed").length,
+      
+      // Performance metrics
+      avgProcessingTime: calculateAvgProcessingTime(recentJobs),
+      successRate: calculateSuccessRate(recentJobs),
+      throughput: recentJobs.length / 60, // jobs per minute
+      
+      // Queue depth by priority
+      queueDepth: {
+        urgent: recentJobs.filter(j => j.priority === "urgent" && j.status === "pending").length,
+        high: recentJobs.filter(j => j.priority === "high" && j.status === "pending").length,
+        normal: recentJobs.filter(j => j.priority === "normal" && j.status === "pending").length,
+        low: recentJobs.filter(j => j.priority === "low" && j.status === "pending").length,
+        batch: recentJobs.filter(j => j.priority === "batch" && j.status === "pending").length,
+      },
+      
+      // Resource usage
+      topJobTypes: getTopJobTypes(recentJobs),
+      heaviestUsers: getHeaviestUsers(recentJobs),
+    };
+    
+    return metrics;
+  },
+});
+
+function calculateAvgProcessingTime(jobs: any[]): number {
+  const completedJobs = jobs.filter(j => 
+    j.status === "completed" && j.startedAt && j.completedAt
+  );
+  
+  if (completedJobs.length === 0) return 0;
+  
+  const totalTime = completedJobs.reduce((sum, job) => 
+    sum + (job.completedAt - job.startedAt), 0
+  );
+  
+  return totalTime / completedJobs.length;
+}
+
+function calculateSuccessRate(jobs: any[]): number {
+  const finishedJobs = jobs.filter(j => 
+    j.status === "completed" || j.status === "failed"
+  );
+  
+  if (finishedJobs.length === 0) return 100;
+  
+  const successfulJobs = finishedJobs.filter(j => j.status === "completed");
+  return (successfulJobs.length / finishedJobs.length) * 100;
+}
+
+function getTopJobTypes(jobs: any[]): Array<{ type: string; count: number }> {
+  const typeCounts = jobs.reduce((acc, job) => {
+    acc[job.type] = (acc[job.type] || 0) + 1;
+    return acc;
+  }, {});
+  
+  return Object.entries(typeCounts)
+    .map(([type, count]) => ({ type, count: count as number }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+}
+
+function getHeaviestUsers(jobs: any[]): Array<{ wallet: string; count: number }> {
+  const userCounts = jobs.reduce((acc, job) => {
+    if (job.walletAddress) {
+      acc[job.walletAddress] = (acc[job.walletAddress] || 0) + 1;
+    }
+    return acc;
+  }, {});
+  
+  return Object.entries(userCounts)
+    .map(([wallet, count]) => ({ wallet, count: count as number }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+}
+```
+
+::alert{type="info"}
+**Queue Performance Targets**:
+- Job processing latency: <30s for normal priority
+- Success rate: >95% for all job types
+- Queue throughput: >100 jobs/minute
+- Dead letter rate: <2% of total jobs
+::
+
+::alert{type="warning"}
+**Resource Management**: 
+- Set appropriate timeouts for each job type
+- Implement circuit breakers for external API calls
+- Monitor queue depth to prevent resource exhaustion
+- Use batch processing for analytics and cleanup tasks
+::

@@ -1,0 +1,15 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "ANUBIS AI Chat",
+  "name_for_model": "anubis_ai_chat",
+  "description_for_human": "Web3-native multi-model AI chat with Solana wallet auth and agent workflows.",
+  "description_for_model": "ANUBIS AI Chat provides multi-model chat (GPT-5, GPT-5 Mini, Gemini 2.5 Pro, Claude 3.7, o4-mini, plus free OSS models), Solana wallet authentication, agent creation, and workflows. Use the OpenAPI spec to post messages and manage agents.",
+  "auth": { "type": "none" },
+  "api": {
+    "type": "openapi",
+    "url": "https://anubis.chat/.well-known/openapi.yaml"
+  },
+  "logo_url": "https://anubis.chat/favicon.png",
+  "contact_email": "support@anubis.chat",
+  "legal_info_url": "https://anubis.chat/roadmap"
+}

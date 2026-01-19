@@ -1,0 +1,187 @@
+---
+category: ai-rag
+subcategory: models
+tags: [ai, models, claude, gpt-4o, deepseek, vercel-ai-sdk]
+cursor:
+  context_window: 16384
+  temperature: 0.4
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["../backend/api-routes.mdc"]
+  exports: ["model-patterns", "provider-abstraction"]
+  references: ["./streaming.mdc", "./prompt-engineering.mdc"]
+---
+
+# AI Models Configuration & Best Practices
+
+## Model Selection Strategy (2025)
+
+### Primary Models for abubis.chat
+- **Claude 3.5 Sonnet**: Primary reasoning, code generation, complex analysis
+- **GPT-4o**: Multimodal capabilities, image analysis, vision tasks
+- **DeepSeek**: Cost-effective inference for high-volume operations
+
+### Model Characteristics
+```typescript
+export const MODEL_CONFIGS = {
+  'claude-3.5-sonnet': {
+    contextWindow: 200000,
+    strengths: ['reasoning', 'code', 'analysis'],
+    optimalTemp: 0.4,
+    maxTokens: 8192,
+    costTier: 'premium'
+  },
+  'gpt-4o': {
+    contextWindow: 128000,
+    strengths: ['multimodal', 'vision', 'general'],
+    optimalTemp: 0.6,
+    maxTokens: 4096,
+    costTier: 'premium'
+  },
+  'deepseek-chat': {
+    contextWindow: 32768,
+    strengths: ['coding', 'math', 'reasoning'],
+    optimalTemp: 0.3,
+    maxTokens: 8192,
+    costTier: 'budget'
+  }
+} as const;
+```
+
+## Provider Abstraction Pattern
+
+### Unified Interface
+```typescript
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+
+export const providers = {
+  anthropic: createAnthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  }),
+  openai: createOpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  }),
+  deepseek: createOpenAI({
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    baseURL: 'https://api.deepseek.com/v1'
+  })
+};
+
+export const models = {
+  claude: providers.anthropic('claude-3-5-sonnet-20241022'),
+  gpt4o: providers.openai('gpt-4o'),
+  deepseek: providers.deepseek('deepseek-chat')
+};
+```
+
+## Model Selection Logic
+
+### Dynamic Model Selection
+```typescript
+export function selectModel(
+  task: 'chat' | 'reasoning' | 'coding' | 'vision' | 'bulk',
+  context: { complexity: number; budget: 'low' | 'medium' | 'high' }
+) {
+  if (context.budget === 'low') return models.deepseek;
+  
+  switch (task) {
+    case 'reasoning':
+    case 'coding':
+      return context.complexity > 0.7 ? models.claude : models.deepseek;
+    case 'vision':
+      return models.gpt4o;
+    case 'bulk':
+      return models.deepseek;
+    default:
+      return models.claude;
+  }
+}
+```
+
+## Configuration Best Practices
+
+### Environment Variables
+```bash
+# Required for abubis.chat
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...
+
+# Model routing
+DEFAULT_MODEL=claude-3.5-sonnet
+FALLBACK_MODEL=deepseek-chat
+VISION_MODEL=gpt-4o
+```
+
+### Rate Limiting & Fallbacks
+```typescript
+export const rateLimits = {
+  'claude-3.5-sonnet': { rpm: 1000, tpm: 40000 },
+  'gpt-4o': { rpm: 500, tpm: 30000 },
+  'deepseek-chat': { rpm: 2000, tpm: 60000 }
+};
+
+export async function callWithFallback(
+  primaryModel: string,
+  fallbackModel: string,
+  prompt: string
+) {
+  try {
+    return await models[primaryModel].generateText({ prompt });
+  } catch (error) {
+    if (error.code === 'rate_limit_exceeded') {
+      return await models[fallbackModel].generateText({ prompt });
+    }
+    throw error;
+  }
+}
+```
+
+## Performance Optimization
+
+### Model Caching Strategy
+- Cache embeddings for 24h
+- Cache model responses for identical prompts (1h)
+- Use edge caching for static model configs
+
+### Token Optimization
+- Compress system prompts
+- Use structured outputs to reduce token usage
+- Implement conversation memory limits
+
+## Error Handling
+
+### Graceful Degradation
+```typescript
+export const modelFallbackChain = [
+  'claude-3.5-sonnet',
+  'gpt-4o', 
+  'deepseek-chat'
+];
+
+export async function robustGenerate(prompt: string) {
+  for (const modelName of modelFallbackChain) {
+    try {
+      return await models[modelName].generateText({ prompt });
+    } catch (error) {
+      console.warn(`Model ${modelName} failed:`, error.message);
+      continue;
+    }
+  }
+  throw new Error('All models failed');
+}
+```
+
+## Testing Model Configurations
+
+### Unit Tests
+```typescript
+describe('Model Selection', () => {
+  it('should select appropriate model for task', () => {
+    expect(selectModel('reasoning', { complexity: 0.8, budget: 'high' }))
+      .toBe(models.claude);
+  });
+});
+```

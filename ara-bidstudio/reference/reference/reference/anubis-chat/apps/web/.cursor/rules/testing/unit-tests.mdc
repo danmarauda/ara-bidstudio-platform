@@ -1,0 +1,603 @@
+---
+category: testing
+subcategory: unit-tests
+tags: [testing, jest, vitest, unit-tests, tdd]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../ai-rag/ai-models.mdc"]
+  exports: ["unit-test-patterns", "mocking-strategies"]
+  references: ["./integration-tests.mdc", "./ai-testing.mdc"]
+---
+
+# Unit Testing Patterns & Best Practices (2025)
+
+## Testing Framework Setup
+
+### Vitest Configuration (Recommended)
+```typescript
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+import { resolve } from 'path';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'jsdom', // For React components
+    setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.d.ts',
+        '**/*.config.*'
+      ]
+    },
+    testTimeout: 10000,
+    hookTimeout: 10000
+  },
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, './src'),
+      '@/test': resolve(__dirname, './src/test')
+    }
+  }
+});
+```
+
+### Test Setup and Configuration
+```typescript
+// src/test/setup.ts
+import { beforeAll, afterEach, afterAll, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
+
+// React Testing Library cleanup
+afterEach(() => {
+  cleanup();
+});
+
+// Mock environment variables
+beforeAll(() => {
+  vi.stubEnv('ANTHROPIC_API_KEY', 'test-anthropic-key');
+  vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+  vi.stubEnv('QDRANT_URL', 'http://localhost:6333');
+});
+
+// Global test utilities
+global.mockWallet = {
+  publicKey: new PublicKey('11111111111111111111111111111112'),
+  signTransaction: vi.fn(),
+  signAllTransactions: vi.fn()
+};
+
+// Mock crypto for deterministic tests
+Object.defineProperty(global, 'crypto', {
+  value: {
+    randomUUID: () => 'test-uuid-1234',
+    getRandomValues: (arr: any) => arr.fill(42)
+  }
+});
+```
+
+## Component Testing Patterns
+
+### React Component Testing
+```typescript
+// src/components/ChatMessage.test.tsx
+import { render, screen } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
+import { describe, it, expect, vi } from 'vitest';
+import { ChatMessage } from './ChatMessage';
+
+describe('ChatMessage', () => {
+  const mockMessage = {
+    id: '1',
+    content: 'Hello world',
+    role: 'user' as const,
+    timestamp: new Date('2025-01-01')
+  };
+
+  it('should render message content', () => {
+    render(<ChatMessage message={mockMessage} />);
+    
+    expect(screen.getByText('Hello world')).toBeInTheDocument();
+    expect(screen.getByText('user')).toBeInTheDocument();
+  });
+
+  it('should handle markdown content', () => {
+    const markdownMessage = {
+      ...mockMessage,
+      content: '# Title\n\n```typescript\nconst x = 1;\n```'
+    };
+    
+    render(<ChatMessage message={markdownMessage} />);
+    
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Title');
+    expect(screen.getByText('const x = 1;')).toBeInTheDocument();
+  });
+
+  it('should handle copy functionality', async () => {
+    const user = userEvent.setup();
+    const copyToClipboard = vi.fn();
+    global.navigator.clipboard = { writeText: copyToClipboard };
+    
+    render(<ChatMessage message={mockMessage} />);
+    
+    const copyButton = screen.getByLabelText('Copy message');
+    await user.click(copyButton);
+    
+    expect(copyToClipboard).toHaveBeenCalledWith('Hello world');
+  });
+
+  it('should show loading state for streaming messages', () => {
+    const streamingMessage = { ...mockMessage, streaming: true };
+    
+    render(<ChatMessage message={streamingMessage} />);
+    
+    expect(screen.getByTestId('typing-indicator')).toBeInTheDocument();
+  });
+});
+```
+
+### Hooks Testing
+```typescript
+// src/hooks/useChat.test.ts
+import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useChat } from './useChat';
+
+// Mock fetch for API calls
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+describe('useChat', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it('should initialize with empty messages', () => {
+    const { result } = renderHook(() => useChat());
+    
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('should handle sending messages', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('Hello response'));
+          controller.close();
+        }
+      })
+    });
+
+    const { result } = renderHook(() => useChat());
+    
+    await act(async () => {
+      await result.current.sendMessage('Hello');
+    });
+    
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[0].content).toBe('Hello');
+    expect(result.current.messages[1].content).toBe('Hello response');
+  });
+
+  it('should handle API errors gracefully', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('API Error'));
+
+    const { result } = renderHook(() => useChat());
+    
+    await act(async () => {
+      await result.current.sendMessage('Hello');
+    });
+    
+    expect(result.current.error).toBe('API Error');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('should handle streaming responses', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('chunk1'));
+        setTimeout(() => {
+          controller.enqueue(new TextEncoder().encode('chunk2'));
+          controller.close();
+        }, 50);
+      }
+    });
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      body: stream
+    });
+
+    const { result } = renderHook(() => useChat());
+    
+    await act(async () => {
+      await result.current.sendMessage('Hello');
+    });
+    
+    // Should eventually contain both chunks
+    expect(result.current.messages[1].content).toBe('chunk1chunk2');
+  });
+});
+```
+
+## Service Layer Testing
+
+### AI Model Service Testing
+```typescript
+// src/services/aiService.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AIService } from './aiService';
+import { createAnthropic } from '@ai-sdk/anthropic';
+
+// Mock the AI SDK
+vi.mock('@ai-sdk/anthropic', () => ({
+  createAnthropic: vi.fn(() => ({
+    generateText: vi.fn()
+  }))
+}));
+
+describe('AIService', () => {
+  let aiService: AIService;
+  let mockAnthropic: any;
+
+  beforeEach(() => {
+    mockAnthropic = {
+      generateText: vi.fn()
+    };
+    (createAnthropic as any).mockReturnValue(mockAnthropic);
+    aiService = new AIService();
+  });
+
+  it('should generate text response', async () => {
+    mockAnthropic.generateText.mockResolvedValue({
+      text: 'Generated response'
+    });
+
+    const response = await aiService.generateResponse('Hello');
+    
+    expect(response).toBe('Generated response');
+    expect(mockAnthropic.generateText).toHaveBeenCalledWith({
+      prompt: 'Hello',
+      model: 'claude-3.5-sonnet',
+      temperature: 0.4
+    });
+  });
+
+  it('should handle API errors with fallback', async () => {
+    mockAnthropic.generateText
+      .mockRejectedValueOnce(new Error('Rate limit'))
+      .mockResolvedValueOnce({ text: 'Fallback response' });
+
+    const response = await aiService.generateResponse('Hello');
+    
+    expect(response).toBe('Fallback response');
+    expect(mockAnthropic.generateText).toHaveBeenCalledTimes(2);
+  });
+
+  it('should select appropriate model based on task', () => {
+    const codingTask = aiService.selectModel('coding', { complexity: 0.8 });
+    const chatTask = aiService.selectModel('chat', { complexity: 0.3 });
+    
+    expect(codingTask).toBe('claude-3.5-sonnet');
+    expect(chatTask).toBe('deepseek-chat');
+  });
+});
+```
+
+### Vector Search Testing
+```typescript
+// src/services/vectorSearch.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { VectorSearchService } from './vectorSearch';
+import { QdrantClient } from '@qdrant/js-client-rest';
+
+// Mock Qdrant client
+vi.mock('@qdrant/js-client-rest', () => ({
+  QdrantClient: vi.fn(() => ({
+    search: vi.fn(),
+    upsert: vi.fn()
+  }))
+}));
+
+describe('VectorSearchService', () => {
+  let vectorSearch: VectorSearchService;
+  let mockQdrant: any;
+
+  beforeEach(() => {
+    mockQdrant = {
+      search: vi.fn(),
+      upsert: vi.fn()
+    };
+    (QdrantClient as any).mockReturnValue(mockQdrant);
+    vectorSearch = new VectorSearchService();
+  });
+
+  it('should search for similar vectors', async () => {
+    mockQdrant.search.mockResolvedValue([
+      {
+        id: '1',
+        score: 0.95,
+        payload: { content: 'Test document' }
+      }
+    ]);
+
+    const results = await vectorSearch.search('test query');
+    
+    expect(results).toHaveLength(1);
+    expect(results[0].score).toBe(0.95);
+    expect(results[0].content).toBe('Test document');
+  });
+
+  it('should filter results by threshold', async () => {
+    mockQdrant.search.mockResolvedValue([
+      { id: '1', score: 0.95, payload: { content: 'High relevance' } },
+      { id: '2', score: 0.65, payload: { content: 'Low relevance' } }
+    ]);
+
+    const results = await vectorSearch.search('test query', { threshold: 0.8 });
+    
+    expect(results).toHaveLength(1);
+    expect(results[0].content).toBe('High relevance');
+  });
+
+  it('should handle empty search results', async () => {
+    mockQdrant.search.mockResolvedValue([]);
+
+    const results = await vectorSearch.search('no results');
+    
+    expect(results).toHaveLength(0);
+  });
+});
+```
+
+## Utility Function Testing
+
+### Text Processing Utilities
+```typescript
+// src/utils/textProcessing.test.ts
+import { describe, it, expect } from 'vitest';
+import {
+  cleanText,
+  extractCodeBlocks,
+  estimateTokens,
+  chunkText
+} from './textProcessing';
+
+describe('Text Processing Utilities', () => {
+  describe('cleanText', () => {
+    it('should normalize whitespace', () => {
+      const input = 'Hello    world\n\n\n  test';
+      const result = cleanText(input);
+      
+      expect(result).toBe('Hello world test');
+    });
+
+    it('should remove control characters', () => {
+      const input = 'Hello\x00world\x1Ftest';
+      const result = cleanText(input);
+      
+      expect(result).toBe('Helloworld test');
+    });
+
+    it('should preserve code blocks', () => {
+      const input = 'Text ```code block``` more text';
+      const result = cleanText(input, { preserveCodeBlocks: true });
+      
+      expect(result).toBe('Text ```code block``` more text');
+    });
+  });
+
+  describe('extractCodeBlocks', () => {
+    it('should extract typescript code blocks', () => {
+      const input = '```typescript\nconst x = 1;\n```\nText\n```javascript\nlet y = 2;\n```';
+      const blocks = extractCodeBlocks(input);
+      
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0]).toEqual({
+        language: 'typescript',
+        code: 'const x = 1;'
+      });
+      expect(blocks[1]).toEqual({
+        language: 'javascript',
+        code: 'let y = 2;'
+      });
+    });
+
+    it('should handle code blocks without language', () => {
+      const input = '```\ncode without language\n```';
+      const blocks = extractCodeBlocks(input);
+      
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].language).toBe('');
+      expect(blocks[0].code).toBe('code without language');
+    });
+  });
+
+  describe('estimateTokens', () => {
+    it('should estimate tokens correctly', () => {
+      const text = 'Hello world, this is a test sentence.';
+      const tokens = estimateTokens(text);
+      
+      expect(tokens).toBeGreaterThan(0);
+      expect(tokens).toBeLessThan(text.length); // Should be less than character count
+    });
+
+    it('should handle empty strings', () => {
+      expect(estimateTokens('')).toBe(0);
+    });
+  });
+
+  describe('chunkText', () => {
+    it('should chunk text with overlap', () => {
+      const text = 'A'.repeat(1000);
+      const chunks = chunkText(text, { chunkSize: 300, overlap: 50 });
+      
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks[0].length).toBeLessThanOrEqual(300);
+      
+      // Check overlap
+      const overlapText = chunks[0].slice(-50);
+      const nextStart = chunks[1].slice(0, 50);
+      expect(overlapText).toBe(nextStart);
+    });
+  });
+});
+```
+
+## Mock Strategies
+
+### AI SDK Mocks
+```typescript
+// src/test/mocks/aiSdk.ts
+import { vi } from 'vitest';
+
+export const mockStreamText = vi.fn(() => ({
+  textStream: async function* () {
+    yield 'Hello ';
+    yield 'world!';
+  },
+  toAIStreamResponse: () => new Response('Hello world!'),
+  text: 'Hello world!'
+}));
+
+export const mockGenerateText = vi.fn(() => ({
+  text: 'Generated text response'
+}));
+
+// Mock the entire AI SDK
+vi.mock('ai', () => ({
+  streamText: mockStreamText,
+  generateText: mockGenerateText
+}));
+```
+
+### Solana Mocks
+```typescript
+// src/test/mocks/solana.ts
+import { vi } from 'vitest';
+import { PublicKey } from '@solana/web3.js';
+
+export const mockConnection = {
+  getBalance: vi.fn(() => Promise.resolve(1000000)),
+  getAccountInfo: vi.fn(() => Promise.resolve(null)),
+  sendTransaction: vi.fn(() => Promise.resolve('signature')),
+  confirmTransaction: vi.fn(() => Promise.resolve({ value: { err: null } }))
+};
+
+export const mockWallet = {
+  publicKey: new PublicKey('11111111111111111111111111111112'),
+  signTransaction: vi.fn(),
+  signAllTransactions: vi.fn(),
+  connected: true
+};
+
+export const mockProgram = {
+  methods: {
+    initialize: vi.fn(() => ({
+      accounts: vi.fn(() => ({
+        rpc: vi.fn(() => Promise.resolve('signature'))
+      }))
+    }))
+  }
+};
+```
+
+### Database Mocks
+```typescript
+// src/test/mocks/database.ts
+import { vi } from 'vitest';
+
+export const mockPrisma = {
+  user: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn()
+  },
+  conversation: {
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn()
+  },
+  message: {
+    findMany: vi.fn(),
+    create: vi.fn()
+  }
+};
+
+export const mockQdrant = {
+  search: vi.fn(() => Promise.resolve([])),
+  upsert: vi.fn(() => Promise.resolve()),
+  createCollection: vi.fn(() => Promise.resolve()),
+  deleteCollection: vi.fn(() => Promise.resolve())
+};
+```
+
+## Testing Coverage Standards
+
+### Coverage Targets (2025)
+- **Statements**: 90%+
+- **Branches**: 85%+
+- **Functions**: 95%+
+- **Lines**: 90%+
+
+### Critical Code Coverage
+```typescript
+// Coverage configuration for critical components
+export const COVERAGE_REQUIREMENTS = {
+  'src/services/': 95, // Service layer must be thoroughly tested
+  'src/hooks/': 90,    // Custom hooks need high coverage
+  'src/utils/': 95,    // Utility functions should be fully tested
+  'src/components/': 80, // UI components need good coverage
+  'src/lib/': 90       // Core library functions
+};
+```
+
+### Running Tests
+```bash
+# Run all tests
+bun test
+
+# Run with coverage
+bun test --coverage
+
+# Run specific test file
+bun test src/components/ChatMessage.test.tsx
+
+# Run tests in watch mode
+bun test --watch
+
+# Run tests with UI
+bun test --ui
+```
+
+## Best Practices
+
+### Test Organization
+1. **File Naming**: `ComponentName.test.tsx` or `functionName.test.ts`
+2. **Test Structure**: Arrange-Act-Assert pattern
+3. **Descriptive Names**: Test names should describe the exact behavior
+4. **Grouping**: Use `describe` blocks for logical grouping
+
+### Test Quality
+1. **Independence**: Tests should not depend on each other
+2. **Deterministic**: Tests should produce consistent results
+3. **Fast**: Unit tests should run quickly (<100ms each)
+4. **Focused**: Each test should verify one specific behavior
+
+### Mocking Guidelines
+1. **Mock External Dependencies**: APIs, databases, third-party services
+2. **Don't Mock Implementation Details**: Test behavior, not implementation
+3. **Use Real Objects When Possible**: Prefer real instances for simple objects
+4. **Mock Boundaries**: Mock at architectural boundaries

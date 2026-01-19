@@ -1,0 +1,92 @@
+volumes:
+  production_postgres_data: {}
+  production_postgres_data_backups: {}
+  production_traefik: {}
+
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: ./compose/production/django/Dockerfile
+    image: opencontractserver_production_django
+    depends_on:
+      - postgres
+    env_file:
+      - ./.envs/.production/.django
+      - ./.envs/.production/.postgres
+    command: python manage.py migrate --noinput
+    profiles:
+      - migrate
+
+  django: &django
+    build:
+      context: .
+      dockerfile: ./compose/production/django/Dockerfile
+    image: opencontractserver_production_django
+    depends_on:
+      - postgres
+      - redis
+      - vector-embedder
+    env_file:
+      - ./.envs/.production/.django
+      - ./.envs/.production/.postgres
+    command: /bin/bash -c "echo 'Skipping collectstatic' && daphne -b 0.0.0.0 -p 5000 --websocket_timeout $$DJANGO_WORKER_TIMEOUT config.asgi:application"
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/production/postgres/Dockerfile
+    image: opencontractserver_production_postgres
+    volumes:
+      - production_postgres_data:/var/lib/postgresql/data:Z
+      - production_postgres_data_backups:/backups:z
+    env_file:
+      - ./.envs/.production/.postgres
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ./Dockerfile
+    image: opencontractserver_production_frontend
+    container_name: frontend
+    depends_on:
+      - django
+    env_file:
+      - ./.envs/.production/.frontend
+
+  traefik:
+    build:
+      context: .
+      dockerfile: ./compose/production/traefik/Dockerfile
+    image: opencontractserver_production_traefik
+    depends_on:
+      - django
+    volumes:
+      - production_traefik:/etc/traefik/acme:z
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:5555:5555"
+
+  redis:
+    image: redis:6
+
+  vector-embedder:
+    image: jscrudato/vector-embedder-microservice
+    container_name: vector-embedder
+    environment:
+      PORT: 8000
+
+  docling-parser:
+    image: jscrudato/docsling-local
+    container_name: docling-parser
+
+  celeryworker:
+    <<: *django
+    image: opencontractserver_production_celeryworker
+    command: /start-celeryworker
+
+  celerybeat:
+    <<: *django
+    image: opencontractserver_production_celerybeat
+    command: /start-celerybeat

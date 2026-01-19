@@ -1,0 +1,71 @@
+# Core Django Security Settings
+# ------------------------------------------------------------------------------
+DJANGO_SETTINGS_MODULE=config.settings.production
+DJANGO_SECRET_KEY=<SET SECRET KEY>
+DJANGO_ADMIN_URL=<SET ADMIN URL>
+DJANGO_SECURE_SSL_REDIRECT=false
+
+# Django Username and Password for Initial Admin Login
+# ------------------------------------------------------------------------------
+DJANGO_SUPERUSER_PASSWORD=Openc0ntracts_def@ult
+DJANGO_SUPERUSER_EMAIL=support@opensource.legal
+DJANGO_SUPERUSER_USERNAME=admin
+
+# General
+# ------------------------------------------------------------------------------
+USE_DOCKER=yes
+WEB_CONCURRENCY=4
+IPYTHONDIR=/app/.ipython
+DJANGO_ALLOWED_HOSTS=django,127.0.0.1,localhost,0.0.0.0,opencontracts.opensource.legal
+DJANGO_WORKER_TIMEOUT=3600
+
+# Application Configuration
+# ------------------------------------------------------------------------------
+USE_ANALYZER=True
+CALLBACK_ROOT_URL_FOR_ANALYZER=http://django:8000
+
+# AWS
+# ------------------------------------------------------------------------------
+# You can use local storage in the docker container, but this is not recommended for production
+USE_AWS=True
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_STORAGE_BUCKET_NAME=gremlin123
+AWS_S3_REGION_NAME=us-east-1
+
+# Redis
+# ------------------------------------------------------------------------------
+REDIS_URL=redis://redis:6379/0
+
+# Celery
+# ------------------------------------------------------------------------------
+
+
+# Flower
+CELERY_FLOWER_USER=
+CELERY_FLOWER_PASSWORD=
+
+# NLM Parser
+# ------------------------------------------------------------------------------
+NLM_INGESTOR_ACTIVE=True
+
+# LLM SETTINGS
+# ------------------------------------------------------------------------------
+OPENAI_API_KEY=<YourKeyHere>
+OPENAI_MODEL=gpt-4o
+
+# AUTH0
+# ------------------------------------------------------------------------------
+USE_AUTH0=True
+
+AUTH0_CLIENT_ID=
+AUTH0_API_AUDIENCE=https://opensource.legal/contracts
+AUTH0_DOMAIN=dev-7ranai11.auth0.com
+AUTH0_M2M_MANAGEMENT_API_SECRET=
+AUTH0_M2M_MANAGEMENT_API_ID=
+AUTH0_M2M_MANAGEMENT_GRANT_TYPE=client_credentials
+
+# Docling
+# ------------------------------------------------------------------------------
+DOCLING_MODELS_PATH=/models/docling
+SENTENCE_TRANSFORMER_MODELS_PATH=/models/sentence-transformers

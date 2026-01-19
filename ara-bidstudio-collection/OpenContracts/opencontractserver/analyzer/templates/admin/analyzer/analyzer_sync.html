@@ -1,0 +1,146 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        .analyzer-sync-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .analyzer-sync-table th,
+        .analyzer-sync-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .analyzer-sync-table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+        .status-exists {
+            color: #4a9eff;
+            font-weight: bold;
+        }
+        .status-new {
+            color: #2e7d32;
+            font-weight: bold;
+        }
+        .sync-info {
+            background: #f0f8ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .sync-actions {
+            margin-top: 20px;
+            padding: 20px 0;
+        }
+        .button-sync {
+            background-color: #417690;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .button-sync:hover {
+            background-color: #205067;
+        }
+        .schema-badge {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+    </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <div class="breadcrumbs">
+        <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+        &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+        &rsaquo; <a href="{% url 'admin:analyzer_analyzer_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+        &rsaquo; {% trans 'Sync Doc Analyzer Tasks' %}
+    </div>
+{% endblock %}
+
+{% block content %}
+    <div class="sync-info">
+        <p>
+            <strong>{% trans 'About Doc Analyzer Tasks:' %}</strong><br>
+            {% trans 'Functions decorated with @doc_analyzer_task are automatically discoverable and can be synchronized to create Analyzer records in the database.' %}
+        </p>
+        <p>
+            {% trans 'This page shows all available doc analyzer tasks and their current sync status.' %}
+        </p>
+    </div>
+
+    <h2>{% trans 'Available Analyzer Tasks' %}</h2>
+
+    {% if analyzers %}
+        <table class="analyzer-sync-table">
+            <thead>
+                <tr>
+                    <th>{% trans 'Task Name' %}</th>
+                    <th>{% trans 'Status' %}</th>
+                    <th>{% trans 'Description' %}</th>
+                    <th>{% trans 'Features' %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for analyzer in analyzers %}
+                    <tr>
+                        <td><code>{{ analyzer.task_name }}</code></td>
+                        <td>
+                            {% if analyzer.exists %}
+                                <span class="status-exists">✓ {% trans 'In Database' %}</span>
+                            {% else %}
+                                <span class="status-new">+ {% trans 'Will be created' %}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if analyzer.description %}
+                                {{ analyzer.description|truncatewords:20 }}
+                            {% else %}
+                                <em>{% trans 'No description available' %}</em>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if analyzer.has_schema %}
+                                <span class="schema-badge">{% trans 'Has Schema' %}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if has_add_permission %}
+            <div class="sync-actions">
+                <form method="post" action="">
+                    {% csrf_token %}
+                    <button type="submit" class="button-sync">
+                        {% trans 'Synchronize All Analyzers' %}
+                    </button>
+                    <a href="{% url 'admin:analyzer_analyzer_changelist' %}" class="button" style="margin-left: 10px;">
+                        {% trans 'Back to Analyzer List' %}
+                    </a>
+                </form>
+            </div>
+        {% else %}
+            <div class="sync-actions">
+                <p><em>{% trans 'You do not have permission to create analyzers.' %}</em></p>
+                <a href="{% url 'admin:analyzer_analyzer_changelist' %}" class="button">
+                    {% trans 'Back to Analyzer List' %}
+                </a>
+            </div>
+        {% endif %}
+    {% else %}
+        <p>{% trans 'No doc analyzer tasks found.' %}</p>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,815 @@
+---
+category: architecture
+subcategory: performance
+tags: [performance, optimization, caching, edge, monitoring]
+cursor:
+  context_window: 8192
+  temperature: 0.7
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["../frontend/optimization.mdc", "../backend/caching.mdc"]
+  exports: ["performance-budgets", "optimization-strategies", "monitoring-metrics"]
+  references: ["system-design.mdc", "scalability.mdc"]
+---
+
+# Performance Architecture for abubis.chat
+
+## Performance Philosophy
+
+::alert{type="success"}
+**Core Principle**: Sub-100ms response times for 95% of operations through edge-first architecture, intelligent caching, and performance budgets.
+::
+
+### Performance Budgets (2025)
+
+::card{title="Response Time Targets"}
+- **Page Load (First Contentful Paint)**: < 800ms (3G), < 300ms (WiFi)
+- **Time to Interactive**: < 2.5s (3G), < 1.2s (WiFi)  
+- **API Response Time**: < 100ms (95th percentile)
+- **AI Response Latency**: < 2s first token, < 50ms/token streaming
+- **Real-time Message Delivery**: < 50ms end-to-end
+- **Database Query Time**: < 20ms (Convex reactive queries)
+- **Vector Search**: < 30ms (Qdrant semantic search)
+::
+
+::card{title="Resource Budgets"}
+- **JavaScript Bundle**: < 300KB initial, < 1.5MB total
+- **CSS Bundle**: < 100KB total
+- **Image Payload**: < 2MB per page, WebP preferred
+- **Memory Usage**: < 50MB mobile, < 200MB desktop
+- **CPU Usage**: < 30% average, < 60% peak (60fps)
+::
+
+## Edge Computing Performance Strategy
+
+### 1. Edge-First Architecture
+
+::tabs
+::div{label="Vercel Edge Functions"}
+```typescript
+// Edge function for real-time operations
+export const config = {
+  runtime: 'edge',
+  regions: ['iad1', 'fra1', 'syd1', 'pdx1'], // Global edge regions
+}
+
+export default async function handler(request: Request) {
+  const startTime = performance.now()
+  
+  try {
+    // Edge-optimized processing
+    const result = await processAtEdge(request)
+    
+    // Performance monitoring
+    const duration = performance.now() - startTime
+    console.log(`Edge function executed in ${duration}ms`)
+    
+    return new Response(JSON.stringify(result), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+        'X-Response-Time': `${duration}ms`
+      }
+    })
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+```
+::
+
+::div{label="Geographic Distribution"}
+```typescript
+// Intelligent region selection based on user location
+export function getOptimalRegion(userIP: string): string {
+  const regions = {
+    'us-east': ['Virginia', 'New York', 'Boston'],
+    'us-west': ['San Francisco', 'Los Angeles', 'Seattle'],
+    'europe': ['Frankfurt', 'London', 'Amsterdam'],
+    'asia': ['Tokyo', 'Singapore', 'Hong Kong'],
+    'oceania': ['Sydney', 'Melbourne']
+  }
+  
+  // Use GeoIP or CloudFlare headers to determine closest region
+  const location = getLocationFromIP(userIP)
+  return selectClosestRegion(location, regions)
+}
+
+// Edge middleware for automatic region routing
+export async function middleware(request: NextRequest) {
+  const geo = request.geo
+  const region = getOptimalRegion(geo?.city || 'default')
+  
+  // Add region header for backend optimization
+  request.headers.set('X-User-Region', region)
+  
+  return NextResponse.next()
+}
+```
+::
+::
+
+### 2. CDN and Caching Strategy
+
+::code-group
+```typescript [Multi-Layer Caching]
+// Caching hierarchy: Browser → CDN → Edge → Database
+interface CacheStrategy {
+  browser: {
+    ttl: number
+    strategy: 'cache-first' | 'network-first' | 'stale-while-revalidate'
+  }
+  cdn: {
+    ttl: number
+    purgeKeys: string[]
+  }
+  edge: {
+    ttl: number
+    tags: string[]
+  }
+  database: {
+    strategy: 'reactive' | 'polling' | 'manual'
+  }
+}
+
+const chatCacheStrategy: CacheStrategy = {
+  browser: { ttl: 60, strategy: 'stale-while-revalidate' },
+  cdn: { ttl: 300, purgeKeys: ['chat', 'messages'] },
+  edge: { ttl: 30, tags: ['real-time'] },
+  database: { strategy: 'reactive' } // Convex handles automatically
+}
+```
+
+```typescript [Intelligent Cache Invalidation]
+// Smart cache invalidation with dependency tracking
+export class SmartCache {
+  private dependencies = new Map<string, Set<string>>()
+  
+  async set(key: string, value: any, deps: string[] = []) {
+    // Store value
+    await this.store.set(key, value)
+    
+    // Track dependencies
+    deps.forEach(dep => {
+      if (!this.dependencies.has(dep)) {
+        this.dependencies.set(dep, new Set())
+      }
+      this.dependencies.get(dep)?.add(key)
+    })
+  }
+  
+  async invalidate(dependency: string) {
+    const affectedKeys = this.dependencies.get(dependency)
+    if (!affectedKeys) return
+    
+    // Parallel cache invalidation
+    await Promise.all(
+      Array.from(affectedKeys).map(key => this.store.delete(key))
+    )
+    
+    this.dependencies.delete(dependency)
+  }
+}
+
+// Usage in chat system
+const cache = new SmartCache()
+
+// Cache message with room dependency
+await cache.set(`message:${messageId}`, message, [`room:${roomId}`])
+
+// Invalidate all room-related cache when room updates
+await cache.invalidate(`room:${roomId}`)
+```
+::
+
+## Frontend Performance Optimization
+
+### 1. React Server Components (Next.js 15)
+
+::code-group
+```typescript [Server Component Optimization]
+// Server components for initial page load optimization
+export default async function ChatPage({ 
+  params 
+}: { 
+  params: { roomId: string } 
+}) {
+  // Server-side data fetching (no client-side loading states)
+  const initialMessages = await getInitialMessages(params.roomId)
+  const roomMetadata = await getRoomMetadata(params.roomId)
+  
+  return (
+    <div>
+      {/* Server-rendered content */}
+      <RoomHeader metadata={roomMetadata} />
+      
+      {/* Hydrate with initial data */}
+      <ChatMessages 
+        initialMessages={initialMessages}
+        roomId={params.roomId} 
+      />
+      
+      {/* Client component only where needed */}
+      <MessageInput roomId={params.roomId} />
+    </div>
+  )
+}
+
+// Client component with selective hydration
+'use client'
+export function MessageInput({ roomId }: { roomId: string }) {
+  const [message, setMessage] = useState('')
+  const sendMessage = useMutation(api.chat.sendMessage)
+  
+  return (
+    <form onSubmit={handleSubmit}>
+      <input 
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder="Type a message..."
+      />
+    </form>
+  )
+}
+```
+
+```typescript [Bundle Splitting Strategy]
+// Intelligent code splitting with route groups
+const dynamicImports = {
+  // Lazy load heavy components
+  MessageEditor: lazy(() => import('../components/MessageEditor')),
+  FileUploader: lazy(() => import('../components/FileUploader')),
+  EmojiPicker: lazy(() => import('../components/EmojiPicker')),
+  
+  // Preload critical path components
+  ChatInput: lazy(() => import('../components/ChatInput')),
+}
+
+// Route-based splitting
+export default function ChatLayout() {
+  return (
+    <Suspense fallback={<ChatSkeleton />}>
+      <div className="chat-layout">
+        <Suspense fallback={<div>Loading chat...</div>}>
+          <ChatMessages />
+        </Suspense>
+        
+        <Suspense fallback={<div>Loading input...</div>}>
+          <MessageInput />
+        </Suspense>
+      </div>
+    </Suspense>
+  )
+}
+```
+::
+
+### 2. Virtual Scrolling for Large Lists
+
+::code-group
+```typescript [Virtual Message List]
+import { FixedSizeList as List } from 'react-window'
+
+export function VirtualizedMessageList({ 
+  messages, 
+  height = 600 
+}: {
+  messages: Message[]
+  height?: number
+}) {
+  const renderMessage = ({ index, style }: any) => (
+    <div style={style}>
+      <MessageComponent message={messages[index]} />
+    </div>
+  )
+  
+  return (
+    <List
+      height={height}
+      itemCount={messages.length}
+      itemSize={80} // Average message height
+      overscanCount={10} // Render 10 items outside viewport
+    >
+      {renderMessage}
+    </List>
+  )
+}
+```
+
+```typescript [Infinite Scroll with Intersection Observer]
+// Efficient infinite scrolling
+export function useInfiniteScroll(
+  loadMore: () => Promise<void>,
+  hasMore: boolean
+) {
+  const [loading, setLoading] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel || !hasMore) return
+    
+    const observer = new IntersectionObserver(
+      async (entries) => {
+        if (entries[0].isIntersecting && !loading) {
+          setLoading(true)
+          await loadMore()
+          setLoading(false)
+        }
+      },
+      { threshold: 1.0 }
+    )
+    
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMore, hasMore, loading])
+  
+  return { sentinelRef, loading }
+}
+```
+::
+
+### 3. Memory Management
+
+::code-group
+```typescript [Component Cleanup]
+// Automatic cleanup for subscriptions and timers
+export function useCleanup() {
+  const cleanupFns = useRef<(() => void)[]>([])
+  
+  const addCleanup = useCallback((fn: () => void) => {
+    cleanupFns.current.push(fn)
+  }, [])
+  
+  useEffect(() => {
+    return () => {
+      cleanupFns.current.forEach(fn => fn())
+      cleanupFns.current = []
+    }
+  }, [])
+  
+  return addCleanup
+}
+
+// Usage in components
+export function ChatRoom({ roomId }: { roomId: string }) {
+  const addCleanup = useCleanup()
+  
+  useEffect(() => {
+    const subscription = subscribeToMessages(roomId)
+    addCleanup(() => subscription.unsubscribe())
+    
+    const interval = setInterval(updatePresence, 30000)
+    addCleanup(() => clearInterval(interval))
+  }, [roomId, addCleanup])
+}
+```
+
+```typescript [Memory Pool for Objects]
+// Object pooling for frequent allocations
+class MessagePool {
+  private pool: Message[] = []
+  
+  acquire(): Message {
+    return this.pool.pop() || this.create()
+  }
+  
+  release(message: Message) {
+    this.reset(message)
+    this.pool.push(message)
+  }
+  
+  private create(): Message {
+    return {
+      id: '',
+      content: '',
+      author: '',
+      timestamp: 0,
+      edited: false
+    }
+  }
+  
+  private reset(message: Message) {
+    message.id = ''
+    message.content = ''
+    message.author = ''
+    message.timestamp = 0
+    message.edited = false
+  }
+}
+
+export const messagePool = new MessagePool()
+```
+::
+
+## Backend Performance Optimization
+
+### 1. Database Query Optimization (Convex)
+
+::code-group
+```typescript [Index Strategy]
+// Optimized database indexes for common queries
+defineSchema({
+  messages: defineTable({
+    content: v.string(),
+    roomId: v.id("chatRooms"),
+    authorId: v.id("users"),
+    timestamp: v.number(),
+    edited: v.optional(v.boolean()),
+    threadId: v.optional(v.id("messages")),
+    mentions: v.optional(v.array(v.id("users"))),
+  })
+  // Critical indexes for performance
+  .index("by_room_time", ["roomId", "timestamp"]) // Most common query
+  .index("by_author", ["authorId"]) // User message history
+  .index("by_thread", ["threadId"]) // Thread replies
+  .index("by_mentions", ["mentions"]) // Mention notifications
+  .searchIndex("search_content", {
+    searchField: "content",
+    filterFields: ["roomId", "authorId"]
+  })
+})
+```
+
+```typescript [Query Batching]
+// Batch related queries for efficiency
+export const getChatData = query({
+  args: { roomId: v.id("chatRooms") },
+  handler: async (ctx, { roomId }) => {
+    // Parallel query execution
+    const [messages, participants, room, typing] = await Promise.all([
+      ctx.db
+        .query("messages")
+        .withIndex("by_room_time", q => q.eq("roomId", roomId))
+        .order("desc")
+        .take(50),
+      
+      ctx.db
+        .query("participants")
+        .withIndex("by_room", q => q.eq("roomId", roomId))
+        .collect(),
+        
+      ctx.db.get(roomId),
+      
+      ctx.db
+        .query("typing_indicators")
+        .withIndex("by_room", q => q.eq("roomId", roomId))
+        .filter(q => q.gt(q.field("expiresAt"), Date.now()))
+        .collect()
+    ])
+    
+    return { messages, participants, room, typing }
+  }
+})
+```
+::
+
+### 2. AI Model Optimization
+
+::code-group
+```typescript [Model Caching]
+// Intelligent AI response caching based on semantic similarity
+import { cosineDistance } from 'ml-distance'
+
+class SemanticCache {
+  private cache = new Map<string, { embedding: number[], response: string }>()
+  
+  async getCachedResponse(
+    prompt: string, 
+    embedding: number[],
+    threshold = 0.85
+  ): Promise<string | null> {
+    for (const [cachedPrompt, cached] of this.cache) {
+      const similarity = 1 - cosineDistance(embedding, cached.embedding)
+      
+      if (similarity > threshold) {
+        console.log(`Cache hit for prompt similarity: ${similarity}`)
+        return cached.response
+      }
+    }
+    
+    return null
+  }
+  
+  async setCachedResponse(
+    prompt: string, 
+    embedding: number[], 
+    response: string
+  ) {
+    // LRU eviction when cache gets too large
+    if (this.cache.size > 1000) {
+      const firstKey = this.cache.keys().next().value
+      this.cache.delete(firstKey)
+    }
+    
+    this.cache.set(prompt, { embedding, response })
+  }
+}
+```
+
+```typescript [Streaming Optimization]
+// Optimized streaming with backpressure handling
+export async function streamAIResponse(
+  prompt: string,
+  onChunk: (chunk: string) => Promise<void>
+) {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4-turbo",
+    messages: [{ role: "user", content: prompt }],
+    stream: true,
+    max_tokens: 2000,
+  })
+  
+  let buffer = ""
+  const BATCH_SIZE = 10 // Batch small chunks
+  let chunkCount = 0
+  
+  for await (const chunk of response) {
+    const content = chunk.choices[0]?.delta?.content || ""
+    buffer += content
+    chunkCount++
+    
+    // Send in batches to reduce overhead
+    if (chunkCount >= BATCH_SIZE || content.includes('\n')) {
+      await onChunk(buffer)
+      buffer = ""
+      chunkCount = 0
+      
+      // Backpressure: small delay if client is slow
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+  }
+  
+  // Send remaining content
+  if (buffer) {
+    await onChunk(buffer)
+  }
+}
+```
+::
+
+## Performance Monitoring & Observability
+
+### 1. Real-Time Performance Metrics
+
+::code-group
+```typescript [Performance Monitoring]
+// Client-side performance tracking
+export class PerformanceMonitor {
+  private metrics = new Map<string, number[]>()
+  
+  startMeasurement(label: string): () => void {
+    const startTime = performance.now()
+    
+    return () => {
+      const duration = performance.now() - startTime
+      this.recordMetric(label, duration)
+      
+      // Log slow operations
+      if (duration > 100) {
+        console.warn(`Slow operation: ${label} took ${duration}ms`)
+      }
+    }
+  }
+  
+  recordMetric(label: string, value: number) {
+    if (!this.metrics.has(label)) {
+      this.metrics.set(label, [])
+    }
+    
+    const values = this.metrics.get(label)!
+    values.push(value)
+    
+    // Keep only last 100 measurements
+    if (values.length > 100) {
+      values.shift()
+    }
+    
+    // Calculate percentiles
+    this.updatePercentiles(label, values)
+  }
+  
+  private updatePercentiles(label: string, values: number[]) {
+    const sorted = [...values].sort((a, b) => a - b)
+    const p95 = sorted[Math.floor(sorted.length * 0.95)]
+    const p99 = sorted[Math.floor(sorted.length * 0.99)]
+    
+    // Send to analytics
+    this.reportMetrics(label, { p95, p99, count: values.length })
+  }
+}
+
+export const performanceMonitor = new PerformanceMonitor()
+```
+
+```typescript [Usage in Components]
+// Performance-aware React hooks
+export function usePerformanceTracking(componentName: string) {
+  const mountTime = useRef(performance.now())
+  
+  useEffect(() => {
+    const renderTime = performance.now() - mountTime.current
+    performanceMonitor.recordMetric(`${componentName}.mount`, renderTime)
+    
+    return () => {
+      const totalTime = performance.now() - mountTime.current
+      performanceMonitor.recordMetric(`${componentName}.total`, totalTime)
+    }
+  }, [componentName])
+  
+  const trackOperation = useCallback((operationName: string) => {
+    return performanceMonitor.startMeasurement(
+      `${componentName}.${operationName}`
+    )
+  }, [componentName])
+  
+  return { trackOperation }
+}
+```
+::
+
+### 2. Core Web Vitals Monitoring
+
+::code-group
+```typescript [Web Vitals Tracking]
+import { getCLS, getFID, getFCP, getLCP, getTTFB } from 'web-vitals'
+
+// Automatic Core Web Vitals monitoring
+export function initWebVitals() {
+  getCLS(sendToAnalytics)
+  getFID(sendToAnalytics)
+  getFCP(sendToAnalytics)  
+  getLCP(sendToAnalytics)
+  getTTFB(sendToAnalytics)
+}
+
+function sendToAnalytics(metric: any) {
+  // Send to multiple analytics services
+  Promise.all([
+    sendToVercelAnalytics(metric),
+    sendToDatadog(metric),
+    sendToCustomDashboard(metric)
+  ]).catch(console.error)
+  
+  // Alert on poor performance
+  if (isPerformancePoor(metric)) {
+    alertPerformanceTeam(metric)
+  }
+}
+
+function isPerformancePoor(metric: any): boolean {
+  const thresholds = {
+    CLS: 0.1,
+    FID: 100,
+    FCP: 1800,
+    LCP: 2500,
+    TTFB: 800
+  }
+  
+  return metric.value > (thresholds[metric.name as keyof typeof thresholds] || 0)
+}
+```
+
+```typescript [Real-Time Alerts]
+// Performance alerting system
+export class PerformanceAlerter {
+  private readonly thresholds = {
+    responseTime: 500,
+    errorRate: 0.05,
+    cpuUsage: 0.8,
+    memoryUsage: 0.9
+  }
+  
+  async checkMetrics(metrics: SystemMetrics) {
+    const alerts = []
+    
+    if (metrics.averageResponseTime > this.thresholds.responseTime) {
+      alerts.push({
+        type: 'HIGH_RESPONSE_TIME',
+        value: metrics.averageResponseTime,
+        threshold: this.thresholds.responseTime
+      })
+    }
+    
+    if (metrics.errorRate > this.thresholds.errorRate) {
+      alerts.push({
+        type: 'HIGH_ERROR_RATE',
+        value: metrics.errorRate,
+        threshold: this.thresholds.errorRate
+      })
+    }
+    
+    // Send alerts to Slack/PagerDuty
+    if (alerts.length > 0) {
+      await this.sendAlerts(alerts)
+    }
+  }
+  
+  private async sendAlerts(alerts: Alert[]) {
+    await Promise.all([
+      this.notifySlack(alerts),
+      this.createPagerDutyIncident(alerts),
+      this.updateStatusPage(alerts)
+    ])
+  }
+}
+```
+::
+
+## Resource Optimization
+
+### 1. Image and Asset Optimization
+
+::alert{type="info"}
+**Asset Strategy**: Automatic WebP/AVIF conversion, lazy loading, and responsive images with Next.js Image component optimization.
+::
+
+```typescript
+// Optimized image loading with Next.js Image
+import Image from 'next/image'
+
+export function OptimizedAvatar({ 
+  src, 
+  alt, 
+  size = 40 
+}: {
+  src: string
+  alt: string  
+  size?: number
+}) {
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      className="rounded-full"
+      // Performance optimizations
+      priority={size > 100} // Prioritize large images
+      placeholder="blur"
+      blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaHjb6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R/VlOsEAwgNcHQs6luIyhlKCX5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT"
+      // Responsive sizing
+      sizes="(max-width: 768px) 32px, 40px"
+      // Performance hints
+      loading={size > 100 ? "eager" : "lazy"}
+    />
+  )
+}
+```
+
+### 2. Bundle Analysis and Optimization
+
+```typescript
+// Webpack bundle analyzer integration
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+})
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Performance optimizations
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
+  
+  // Bundle optimization
+  webpack: (config, { dev, isServer }) => {
+    if (!dev && !isServer) {
+      // Optimize bundle splitting
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        cacheGroups: {
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            chunks: 'all',
+          },
+          ui: {
+            name: 'ui',
+            test: /[\\/]components[\\/]ui[\\/]/,
+            chunks: 'all',
+            enforce: true,
+          },
+        },
+      }
+    }
+    
+    return config
+  },
+  
+  // Experimental features for performance
+  experimental: {
+    optimizeCss: true,
+    esmExternals: true,
+    serverComponentsExternalPackages: ['@prisma/client'],
+  },
+}
+
+module.exports = withBundleAnalyzer(nextConfig)
+```
+
+This performance architecture ensures abubis.chat delivers consistent sub-100ms response times while maintaining scalability and user experience quality.

@@ -1,0 +1,321 @@
+---
+title: 'Custom Message Rendering'
+description: 'Create custom message components and renderers for the chat interface'
+---
+
+Cedar allows you to completely customize how messages are displayed in your chat interface. This is used for use cases like Generative UI, or any custom logic you want for the way that messages are rendered to the user.
+
+This system mirrors the architecture of [Custom Response Processing](/agent-backend-connection/custom-response-processing).
+
+## Base Message Type
+
+All messages in Cedar extend the `BaseMessage` interface from `@messages/types`:
+
+```tsx
+interface BaseMessage {
+	id: string; // Unique identifier (auto-generated if not provided)
+	role: MessageRole; // 'bot' | 'user' | 'assistant'
+	content: string; // The text content of the message
+	createdAt?: string; // ISO timestamp (auto-generated)
+	metadata?: Record<string, unknown>; // Optional key-value pairs
+	type: string; // String identifier for renderer matching
+}
+```
+
+## Requirements for Custom Messages
+
+To use the custom message rendering system, your message objects must have a `type` field. This field determines which renderer will be used to display the message.
+
+```tsx
+// Valid message - has required 'type' field
+{
+  type: 'alert',
+  role: 'assistant',
+  content: 'This is an alert message',
+  level: 'warning'
+}
+
+// Invalid - missing 'type' field
+{
+  role: 'assistant',
+  content: 'This message will use default rendering'
+}
+```
+
+## Message Renderer Interface
+
+Cedar uses a strongly typed `MessageRenderer` interface that ensures type safety throughout the rendering pipeline:
+
+```tsx
+export type MessageRenderer<T extends Message = Message> = {
+	type: T['type']; // Must match the message type
+	render: (message: T) => ReactNode; // Receives narrowly typed message
+	namespace?: string; // Optional organization namespace
+	validateMessage?: (message: Message) => message is T; // Receives broadly typed Message for validation
+};
+```
+
+**Key typing features:**
+
+- The `render` function receives your **narrowly typed custom message** (e.g., `AlertMessage`)
+- The `validateMessage` function receives the **broadly typed `Message`** for runtime validation
+
+## Custom Message Type Definition
+
+Cedar exports a `CustomMessage<T, P>` type that allows you to create type-safe custom messages:
+
+```tsx
+import { CustomMessage } from 'cedar-os';
+
+// T = type string, P = additional properties
+export type CustomMessage<
+	T extends string,
+	P extends object = Record<string, never>
+> = BaseMessage & { type: T } & P;
+
+// Example usage
+type AlertMessage = CustomMessage<
+	'alert',
+	{
+		level: 'info' | 'warning' | 'error';
+	}
+>;
+
+type TodoListMessage = CustomMessage<
+	'todo-list',
+	{
+		items: Array<{ id: string; text: string; completed: boolean }>;
+		onToggle?: (id: string) => void;
+	}
+>;
+```
+
+## Message Renderer Factory Function
+
+Cedar exports a `createMessageRenderer` factory function to create type-safe renderers:
+
+```tsx
+import { createMessageRenderer } from 'cedar-os';
+
+// Create a renderer with full type safety
+const AlertRenderer = createMessageRenderer<AlertMessage>({
+	type: 'alert',
+	namespace: 'my-app',
+	render: (message) => {
+		// message is narrowly typed as AlertMessage
+		return <div className={`alert-${message.level}`}>{message.content}</div>;
+	},
+	validateMessage: (msg): msg is AlertMessage => {
+		// msg is broadly typed as Message for validation
+		return msg.type === 'alert' && 'level' in msg;
+	},
+});
+```
+
+## How Message Rendering Works Internally
+
+The chat system uses the following process to render messages:
+
+1. **Message Reception**: When a message is added to the chat, the system examines its `type` field
+2. **Renderer Lookup**: The system searches for a registered renderer that matches the message type
+3. **Validation**: If a renderer is found and has a validation function, it checks if the message structure is valid
+4. **Rendering**: If validation passes (or no validation exists), the renderer's `render` function is called
+5. **Fallback**: If no matching renderer is found or validation fails, the default text renderer is used
+
+## Full Implementation Examples
+
+Here's an example of creating a custom message renderer for an AlertMessage.
+
+```tsx
+import { createMessageRenderer, CustomMessage } from 'cedar-os';
+
+// Define custom message type
+type AlertMessage = CustomMessage<'alert', { level: string }>;
+
+// Create the renderer
+const AlertMessageRenderer = createMessageRenderer<AlertMessage>({
+	type: 'alert',
+	namespace: 'product-roadmap',
+	render: (message) => {
+		const levelColors = {
+			info: 'bg-blue-100 text-blue-800',
+			warning: 'bg-yellow-100 text-yellow-800',
+			error: 'bg-red-100 text-red-800',
+		};
+
+		return (
+			<div
+				className={`p-3 rounded-lg ${
+					levelColors[message.level] || levelColors.info
+				}`}>
+				<div className='font-semibold'>Alert</div>
+				<div>{message.content}</div>
+			</div>
+		);
+	},
+	validateMessage: (msg): msg is AlertMessage => {
+		return (
+			msg.type === 'alert' && 'level' in msg && typeof msg.level === 'string'
+		);
+	},
+});
+
+// Register with CedarCopilot
+<CedarCopilot
+	messageRenderers={[AlertMessageRenderer]}
+	// ... other props
+>
+	{children}
+</CedarCopilot>;
+```
+
+## Default Message Types and Renderers
+
+Cedar automatically handles these message types with default behavior. Each type has a corresponding default renderer:
+
+### `"message"` Type
+
+- **Behavior**: Standard text messages with role-based styling
+- **Properties**: `content: string`, `role: 'user' | 'assistant' | 'bot'`
+- **Renderer**: Built-in text message renderer with role-based styling
+- **Warning**: Overriding this type will disable default text message rendering
+
+### `"setState"` Type
+
+- **Behavior**: Executes state actions and displays completion status
+- **Properties**: `stateKey: string`, `setterKey: string`, `args?: unknown`
+- **Default Renderer**: `SetStateRenderer` shows setState completion with shimmer effects
+
+**SetState Factory Functions**: Cedar provides special factory functions for setState messages:
+
+```tsx
+import { createSetStateMessageRenderer, SetStateMessageFor } from 'cedar-os';
+
+// Specific setState message type using helper
+type UpdateCounterSetState = SetStateMessageFor<
+	'counter', // StateKey
+	'increment', // SetterKey
+	{ amount: number } // Args
+>;
+
+// Create custom setState renderer with filtering
+const CounterSetStateRenderer =
+	createSetStateMessageRenderer<UpdateCounterSetState>({
+		namespace: 'counter',
+		setterKey: 'increment', // Only handle increment actions
+		render: (message) => (
+			<div className='setState-message'>
+				✅ Incremented counter by {message.args?.amount || 1}
+			</div>
+		),
+	});
+```
+
+### `"frontendTool"` Type
+
+- **Behavior**: Displays frontend tool execution results with status indicators
+- **Properties**: `toolName: string`, `args?: unknown`, `result?: unknown`, `error?: string`, `status: 'success' | 'error'`
+- **Default Renderer**: `FrontendToolRenderer` shows tool execution status with result display
+
+```tsx
+import {
+	createFrontendToolMessageRenderer,
+	FrontendToolMessageFor,
+} from 'cedar-os';
+
+// Specific frontend tool message type
+type SendEmailToolMessage = FrontendToolMessageFor<
+	'sendEmail',
+	{ to: string; subject: string; body: string },
+	{ messageId: string; success: boolean }
+>;
+
+// Create custom frontend tool renderer
+const SendEmailToolRenderer =
+	createFrontendToolMessageRenderer<SendEmailToolMessage>({
+		namespace: 'email',
+		toolName: 'sendEmail',
+		render: (message) => {
+			if (message.status === 'success') {
+				return (
+					<div className='tool-success'>
+						📧 Email sent successfully to {message.args?.to}
+						{message.result?.messageId && (
+							<span className='text-gray-500'>
+								{' '}
+								(ID: {message.result.messageId})
+							</span>
+						)}
+					</div>
+				);
+			} else {
+				return (
+					<div className='tool-error'>
+						❌ Failed to send email: {message.error}
+					</div>
+				);
+			}
+		},
+	});
+```
+
+### `"progress_update"` Type
+
+- **Behavior**: Shows progress indicators with shimmer effects
+- **Properties**: `content: string`, `metadata.state?: 'in_progress' | 'complete' | 'error'`
+- **Default Renderer**: `ProgressUpdateRenderer` with animated shimmer text
+
+### Additional Built-in Renderers
+
+Cedar also includes renderers for streaming events:
+
+#### Mastra Event Renderer
+
+Cedar automatically receives and renders all Mastra streamed events. Any of these can be customized or overridden with your own renderers:
+
+**Supported Mastra Event Types:**
+
+- `'start'` - Agent run started
+- `'step-start'` - Agent step started
+- `'tool-call'` - Tool being called
+- `'tool-result'` - Tool call result
+- `'step-finish'` - Agent step completed
+- `'tool-output'` - Tool output received
+- `'step-result'` - Step result available
+- `'step-output'` - Step output received
+- `'finish'` - Agent run completed
+
+**Customization**: You can override any specific Mastra event type by creating a custom renderer with the same `type`. For example, to customize just the `'tool-call'` event:
+
+```tsx
+const CustomToolCallRenderer = createMessageRenderer<
+	CustomMastraMessage<'tool-call'>
+>({
+	type: 'tool-call',
+	render: (
+		message // typed
+	) => (
+		<div className='custom-tool-call'>
+			🔧 Calling tool: {message.payload.toolName}
+		</div>
+	),
+});
+```
+
+**⚠️ Important**: If you override any of these default types, you lose the built-in behavior. Ensure your custom implementation covers all cases you want to support.
+
+## Recommended File Structure
+
+Cedar encourages organizing custom renderers in dedicated files for easier maintenance and debugging:
+
+```
+src/
+  cedar-os/
+    renderers/
+      messageRenderers.tsx    // All custom message renderers
+      index.ts               // Export registration function
+  components/
+    Layout.tsx              // Register renderers with CedarCopilot
+```
+
+This structure keeps all Cedar-related logic organized under a `cedar-os` directory, making it easier to maintain, debug, and ensure consistency across your application.

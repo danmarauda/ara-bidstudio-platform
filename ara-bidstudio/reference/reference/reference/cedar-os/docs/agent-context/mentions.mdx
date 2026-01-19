@@ -1,0 +1,439 @@
+---
+title: 'Mentions'
+description: 'Enable @ mentions for contextual references in chat'
+---
+
+Cedar's mention system allows users to reference specific data, people, or objects in their messages using @ symbols. This provides a natural way to give agents precise context about what the user is referring to.
+
+### State-Based Mentions using `useStateBasedMentionProvider`
+
+> **Prerequisite** – the state referenced by `stateKey` must already be registered in Cedar with [`useCedarState`](/state-access/agentic-state-access#useCedarState) or [`useRegisterState`](/state-access/agentic-state-access#useRegisterState-Hook).
+
+Automatically allows the user to @ mention any registered state items. The state must first be a cedarState. See the [Agentic State](/state-access/agentic-state-access) documentation.
+
+```tsx
+import { useState } from 'react';
+import { useRegisterState, useStateBasedMentionProvider } from 'cedar-os';
+
+function TodoApp() {
+	const [todos, setTodos] = useState([
+		{ id: 1, text: 'Buy groceries', category: 'shopping' },
+		{ id: 2, text: 'Call dentist', category: 'health' },
+	]);
+
+	// Register the state
+	useRegisterState({
+		key: 'todos',
+		value: todos,
+		setValue: setTodos,
+		description: 'Todo items',
+	});
+
+	// Enable mentions for todos
+	useStateBasedMentionProvider({
+		stateKey: 'todos',
+		trigger: '@',
+		labelField: 'text',
+		searchFields: ['text', 'category'],
+		description: 'Todo items',
+		icon: '📝',
+		color: '#3b82f6',
+		order: 10, // Control display order of mentioned todos
+	});
+
+	return <ChatInput />;
+}
+```
+
+This keeps all mentionable data in the unified Cedar store and makes it automatically available to the agent.
+
+State-based mention providers take in the following configuration options:
+
+```ts
+export interface StateBasedMentionProviderConfig {
+	stateKey: string; // What state to allow users to mention
+	trigger?: string;
+	labelField?: string | ((item: any) => string); // How it should be labelled when mentioned in the chat
+	searchFields?: string[]; // What fields the user should be able to type to search for the element
+	description?: string;
+	icon?: ReactNode;
+	color?: string; // Hex color
+	order?: number; // Order for display (lower numbers appear first)
+	renderMenuItem?: (item: MentionItem) => ReactNode;
+	renderEditorItem?: (
+		item: MentionItem,
+		attrs: Record<string, any>
+	) => ReactNode;
+	renderContextBadge?: (entry: ContextEntry) => ReactNode;
+}
+```
+
+## Custom Rendering
+
+Customize how mentions appear in different contexts:
+
+```tsx
+import { useStateBasedMentionProvider } from 'cedar-os';
+
+function CustomRendering() {
+	useStateBasedMentionProvider({
+		stateKey: 'users',
+		trigger: '@',
+		label: 'Users',
+		icon: '👤',
+		getItems: (query) => {
+			// ... get items logic
+		},
+		toContextEntry: (item) => ({
+			id: item.id,
+			source: 'mention',
+			data: item.data,
+			metadata: { label: item.label, icon: '👤' },
+		}),
+
+		// Custom rendering in the mention menu
+		renderMenuItem: (item) => (
+			<div className='flex items-center gap-2 p-2'>
+				<span className='text-lg'>👤</span>
+				<div>
+					<div className='font-medium'>{item.label}</div>
+					<div className='text-sm text-gray-500'>{item.data.role}</div>
+				</div>
+			</div>
+		),
+
+		// Custom rendering in the editor
+		renderEditorItem: (item, attrs) => (
+			<span className='bg-blue-100 text-blue-800 px-1 rounded'>
+				👤 {item.label}
+			</span>
+		),
+
+		// Custom rendering in context badges
+		renderContextBadge: (entry) => (
+			<div className='bg-gray-100 px-2 py-1 rounded text-sm'>
+				👤 {entry.metadata?.label}
+			</div>
+		),
+	});
+
+	return <ChatInput />;
+}
+```
+
+## Multiple Mention Types
+
+Support different mention triggers:
+
+```tsx
+import { useStateBasedMentionProvider } from 'cedar-os';
+
+function MultiMentionChat() {
+	const users = [
+		{ id: '1', name: 'Alice', role: 'Designer' },
+		{ id: '2', name: 'Bob', role: 'Developer' },
+	];
+
+	const channels = [
+		{ id: '1', name: 'general', topic: 'General discussion' },
+		{ id: '2', name: 'dev', topic: 'Development updates' },
+	];
+
+	const commands = [
+		{ id: '1', name: 'help', description: 'Show help' },
+		{ id: '2', name: 'reset', description: 'Reset chat' },
+	];
+
+	// @ for users
+	useStateBasedMentionProvider({
+		stateKey: 'users',
+		trigger: '@',
+		label: 'Users',
+		icon: '👤',
+		getItems: (query) => {
+			const filtered = query
+				? users.filter((u) =>
+						u.name.toLowerCase().includes(query.toLowerCase())
+				  )
+				: users;
+			return filtered.map((user) => ({
+				id: user.id,
+				label: user.name,
+				data: user,
+				metadata: { icon: '👤' },
+			}));
+		},
+		toContextEntry: (item) => ({
+			id: item.id,
+			source: 'mention',
+			data: item.data,
+			metadata: { label: item.label, icon: '👤' },
+		}),
+	});
+
+	// # for channels/topics
+	useStateBasedMentionProvider({
+		stateKey: 'channels',
+		trigger: '#',
+		label: 'Channels',
+		icon: '📢',
+		getItems: (query) => {
+			const filtered = query
+				? channels.filter((c) =>
+						c.name.toLowerCase().includes(query.toLowerCase())
+				  )
+				: channels;
+			return filtered.map((channel) => ({
+				id: channel.id,
+				label: channel.name,
+				data: channel,
+				metadata: { icon: '📢' },
+			}));
+		},
+		toContextEntry: (item) => ({
+			id: item.id,
+			source: 'mention',
+			data: item.data,
+			metadata: { label: item.label, icon: '📢' },
+		}),
+	});
+
+	// / for commands
+	useStateBasedMentionProvider({
+		stateKey: 'commands',
+		trigger: '/',
+		label: 'Commands',
+		icon: '⚡',
+		getItems: (query) => {
+			const filtered = query
+				? commands.filter((c) =>
+						c.name.toLowerCase().includes(query.toLowerCase())
+				  )
+				: commands;
+			return filtered.map((command) => ({
+				id: command.id,
+				label: command.name,
+				data: command,
+				metadata: { icon: '⚡' },
+			}));
+		},
+		toContextEntry: (item) => ({
+			id: item.id,
+			source: 'mention',
+			data: item.data,
+			metadata: { label: item.label, icon: '⚡' },
+		}),
+	});
+
+	return <ChatInput />;
+}
+```
+
+## Contextual Mentions
+
+Show different mentions based on context:
+
+```tsx
+import { useEffect } from 'react';
+import { useStateBasedMentionProvider } from 'cedar-os';
+
+function ContextualMentions() {
+	const currentPage = useCurrentPage();
+
+	// Conditional mention providers
+	useEffect(() => {
+		if (currentPage === 'projects') {
+			const projects = getProjects();
+			useStateBasedMentionProvider({
+				stateKey: 'projects',
+				trigger: '@',
+				label: 'Projects',
+				icon: '📁',
+				getItems: (query) => {
+					const filtered = query
+						? projects.filter((p) =>
+								p.name.toLowerCase().includes(query.toLowerCase())
+						  )
+						: projects;
+					return filtered.map((project) => ({
+						id: project.id,
+						label: project.name,
+						data: project,
+						metadata: { icon: '📁' },
+					}));
+				},
+				toContextEntry: (item) => ({
+					id: item.id,
+					source: 'mention',
+					data: item.data,
+					metadata: { label: item.label, icon: '📁' },
+				}),
+			});
+		} else if (currentPage === 'tasks') {
+			const tasks = getTasks();
+			useStateBasedMentionProvider({
+				stateKey: 'tasks',
+				trigger: '@',
+				label: 'Tasks',
+				icon: '✅',
+				getItems: (query) => {
+					const filtered = query
+						? tasks.filter((t) =>
+								t.title.toLowerCase().includes(query.toLowerCase())
+						  )
+						: tasks;
+					return filtered.map((task) => ({
+						id: task.id,
+						label: task.title,
+						data: task,
+						metadata: { icon: '✅' },
+					}));
+				},
+				toContextEntry: (item) => ({
+					id: item.id,
+					source: 'mention',
+					data: item.data,
+					metadata: { label: item.label, icon: '✅' },
+				}),
+			});
+		}
+	}, [currentPage]);
+
+	return <ChatInput />;
+}
+
+// Mock functions for demonstration
+function useCurrentPage() {
+	return 'projects'; // or 'tasks'
+}
+
+function getProjects() {
+	return [
+		{ id: '1', name: 'Website Redesign' },
+		{ id: '2', name: 'Mobile App' },
+	];
+}
+
+function getTasks() {
+	return [
+		{ id: '1', title: 'Review PR #123' },
+		{ id: '2', title: 'Update documentation' },
+	];
+}
+```
+
+## Ordering Mentions
+
+When you have multiple mention providers or context subscriptions, you can control their display order using the `order` property. This ensures the most important context appears first in the UI.
+
+### Order Property
+
+The `order` property (optional) determines the display order of context badges:
+
+- **Lower numbers appear first**: `order: 1` appears before `order: 10`
+- **Default behavior**: Items without an order appear last
+- **Applies to both**: Mention providers and `useSubscribeInputContext`
+
+### Example: Prioritized Mentions
+
+```tsx
+import {
+	useStateBasedMentionProvider,
+	useSubscribeInputContext,
+} from 'cedar-os';
+import { User, FileText, Tag, Archive } from 'lucide-react';
+
+function PrioritizedMentions() {
+	// Current user context - highest priority (order: 1)
+	useSubscribeInputContext(currentUser, (user) => ({ currentUser: user }), {
+		icon: <User />,
+		color: '#8B5CF6',
+		order: 1, // Always visible first
+	});
+
+	// Active documents - high priority (order: 5)
+	useStateBasedMentionProvider({
+		stateKey: 'activeDocuments',
+		trigger: '@',
+		labelField: 'title',
+		description: 'Active Documents',
+		icon: <FileText />,
+		color: '#3B82F6',
+		order: 5, // After user, before tags
+	});
+
+	// Tags - medium priority (order: 10)
+	useStateBasedMentionProvider({
+		stateKey: 'tags',
+		trigger: '#',
+		labelField: 'name',
+		description: 'Tags',
+		icon: <Tag />,
+		color: '#10B981',
+		order: 10, // After documents
+	});
+
+	// Archived items - low priority (order: 100)
+	useStateBasedMentionProvider({
+		stateKey: 'archivedItems',
+		trigger: '@',
+		labelField: 'title',
+		description: 'Archived',
+		icon: <Archive />,
+		color: '#6B7280',
+		order: 100, // Appears last
+	});
+
+	return <ChatInput />;
+}
+```
+
+### Custom Provider with Order
+
+When using `useStateBasedMentionProvider`, include order:
+
+```tsx
+useStateBasedMentionProvider({
+	stateKey: 'priority-users',
+	trigger: '@',
+	order: 10,
+});
+```
+
+### Best Practices for Ordering
+
+1. **Reserve low numbers (1-9)** for critical context like user info
+2. **Use 10-49** for active/selected items
+3. **Use 50-99** for general mentions
+4. **Use 100+** for archived or low-priority items
+5. **Leave gaps** between orders for future additions
+
+## Mention Data in Context
+
+Access mentioned items in your agent context:
+
+```tsx
+// When user types: "Update the status of @task-123 to completed"
+// The agent receives:
+{
+  message: "Update the status of @task-123 to completed",
+  mentions: [
+    {
+      id: "task-123",
+      type: "tasks",
+      data: {
+        id: "task-123",
+        title: "Implement user authentication",
+        status: "in-progress",
+        assignee: "Alice"
+      },
+      position: { start: 23, end: 32 }
+    }
+  ]
+}
+```
+
+## Next Steps
+
+- Explore [state access patterns](/state-access/agentic-state-access)
+- Learn about [spells and shortcuts](/spells/spells)

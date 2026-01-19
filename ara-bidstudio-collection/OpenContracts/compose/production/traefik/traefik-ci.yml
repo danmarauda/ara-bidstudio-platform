@@ -1,0 +1,130 @@
+log:
+  level: INFO
+
+entryPoints:
+  web:
+    # http only for CI testing
+    address: ":80"
+
+  flower:
+    address: ":5555"
+
+http:
+  routers:
+    flower-router:
+      rule: "Host(`localhost`) && PathPrefix(`/flower`)"
+      entryPoints:
+        - flower
+      middlewares:
+        - "flower-ratelimit"
+      service: flower
+      priority: 0
+
+    frontend-router:
+      rule: "Host(`localhost`) && !PathPrefix(`/graphql`) && !PathPrefix(`/admin`) && !PathPrefix(`/flower`)"
+      entryPoints:
+        - "web"
+      middlewares:
+        - "frontend-ratelimit"
+        - "csrf"
+      service: frontend
+      priority: 1
+
+    web-router:
+      rule: "Host(`localhost`) && (PathPrefix(`/graphql`) || PathPrefix(`/admin`))"
+      entryPoints:
+        - "web"
+      middlewares:
+        - "api-ratelimit"
+        - "csrf"
+      service: django
+      priority: 2
+
+  middlewares:
+    csrf:
+      headers:
+        hostsProxyHeaders: [ "X-CSRFToken" ]
+
+    # Rate limiting for frontend (static content) - higher limits
+    frontend-ratelimit:
+      rateLimit:
+        average: 10   # 10 requests per second on average
+        burst: 20     # Allow bursts up to 20 requests
+        period: 1s    # Per second rate limiting
+        sourceCriterion:
+          ipStrategy:
+            depth: 1  # Look at X-Forwarded-For header, 1 hop back
+            ipv6Subnet: 64  # Group IPv6 addresses by /64 subnet
+        redis:
+          endpoints:
+            - "redis:6379"
+          db: 1  # Use database 1 for rate limiting
+          poolSize: 10
+          minIdleConns: 2
+          maxActiveConns: 20
+          readTimeout: 3s
+          writeTimeout: 3s
+          dialTimeout: 5s
+
+    # Rate limiting for API/GraphQL/Admin - medium limits
+    api-ratelimit:
+      rateLimit:
+        average: 5    # 5 requests per second on average
+        burst: 10     # Allow bursts up to 10 requests
+        period: 1s    # Per second rate limiting
+        sourceCriterion:
+          ipStrategy:
+            depth: 1  # Look at X-Forwarded-For header, 1 hop back
+            ipv6Subnet: 64  # Group IPv6 addresses by /64 subnet
+        redis:
+          endpoints:
+            - "redis:6379"
+          db: 1  # Use database 1 for rate limiting
+          poolSize: 10
+          minIdleConns: 2
+          maxActiveConns: 20
+          readTimeout: 3s
+          writeTimeout: 3s
+          dialTimeout: 5s
+
+    # Rate limiting for Flower (monitoring) - lower limits
+    flower-ratelimit:
+      rateLimit:
+        average: 10   # 10 requests per second on average
+        burst: 20     # Allow bursts up to 20 requests
+        period: 1s    # Per second rate limiting
+        sourceCriterion:
+          ipStrategy:
+            depth: 1  # Look at X-Forwarded-For header, 1 hop back
+            ipv6Subnet: 64  # Group IPv6 addresses by /64 subnet
+        redis:
+          endpoints:
+            - "redis:6379"
+          db: 1  # Use database 1 for rate limiting
+          poolSize: 5
+          minIdleConns: 1
+          maxActiveConns: 10
+          readTimeout: 3s
+          writeTimeout: 3s
+          dialTimeout: 5s
+
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: http://frontend:3000
+
+    django:
+      loadBalancer:
+        servers:
+          - url: http://django:5000
+
+    flower:
+      loadBalancer:
+        servers:
+          - url: http://flower:5555
+
+providers:
+  file:
+    filename: /etc/traefik/traefik.yml
+    watch: true

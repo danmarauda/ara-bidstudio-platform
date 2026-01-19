@@ -1,0 +1,29 @@
+@tailwind components;
+
+/* your custom layer goes AFTER Tailwind imports */
+@layer components {
+  .time-input::-webkit-calendar-picker-indicator {
+    @apply cursor-pointer;
+    background: url('/icons/clock.svg') no-repeat center;
+    background-size: 1em 1em;
+    filter: invert(50%);
+  }
+}
+
+.thread-viewport > [data-radix-scroll-area-content] {
+  @apply flex flex-col items-center self-stretch bg-inherit;
+}
+
+[hidden]:where(:not([hidden='until-found'])) {
+  display: none !important;
+}
+
+.unset-position {
+  position: unset;
+}
+
+.react-flow__controls-button {
+  color: #e6e6e6 !important;
+  background-color: #121212 !important;
+  border: none !important;
+}

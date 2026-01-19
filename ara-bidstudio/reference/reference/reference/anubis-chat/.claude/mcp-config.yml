@@ -1,0 +1,45 @@
+# MCP Server Configuration for abubis.chat
+servers:
+  default:
+    - sequential-thinking # Complex reasoning and analysis
+    - context7 # Library documentation and best practices
+    - fetch # Web content retrieval
+    - filesystem # Efficient file operations
+    - puppeteer # Browser automation for testing
+    - kluster # Code verification and quality
+    - mem-0 # Memory and context retention
+    - grep # Code search across GitHub
+    - ide # VS Code integration
+
+  project_specific:
+    - websearch # Latest Next.js and Convex updates
+
+auto_cache:
+  enabled: true
+  libraries:
+    - /vercel/next.js
+    - /facebook/react
+    - /shadcn-ui/ui
+    - /tailwindlabs/tailwindcss
+    - /get-convex/convex
+
+settings:
+  sequential_thinking:
+    always_active: true
+    deep_analysis: true
+
+  kluster:
+    continuous_verification: true
+    security_checks: true
+    type_safety: strict
+
+  context7:
+    cache_offline: true
+    priority_libs:
+      - nextjs
+      - react
+      - convex
+
+  puppeteer:
+    headless: true
+    testing_enabled: true

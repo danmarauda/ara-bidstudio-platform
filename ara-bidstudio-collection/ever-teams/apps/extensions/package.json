@@ -1,0 +1,65 @@
+{
+	"name": "@ever-teams/extensions",
+	"displayName": "Ever Teams",
+	"version": "0.1.0",
+	"description": "Ever Teams Browser Extensions",
+	"license": "GPL-3.0",
+	"author": "Ever Co. LTD",
+	"scripts": {
+		"dev": "yarn plasmo dev",
+		"start": "yarn dev",
+		"build": "yarn plasmo build"
+	},
+	"dependencies": {
+		"@tailwindcss/forms": "^0.5.3",
+		"@tailwindcss/typography": "^0.5.8",
+		"classnames": "^2.5.1",
+		"plasmo": "^0.85.2",
+		"react": "18.2.0",
+		"react-dom": "18.2.0",
+		"react-timer-hook": "^3.0.5",
+		"tailwindcss": "^3.2.4"
+	},
+	"devDependencies": {
+		"@plasmohq/prettier-plugin-sort-imports": "^4.0.1",
+		"@types/chrome": "^0.0.203",
+		"@types/node": "^20.12.2",
+		"@types/react": "19.1.2",
+		"@types/react-dom": "19.1.2",
+		"postcss": "^8.4.19",
+		"prettier": "^3.2.5",
+		"typescript": "^4.9.4"
+	},
+	"prettier": {
+		"printWidth": 120,
+		"singleQuote": true,
+		"semi": true,
+		"useTabs": true,
+		"tabWidth": 4,
+		"arrowParens": "always",
+		"trailingComma": "none",
+		"quoteProps": "as-needed",
+		"trimTrailingWhitespace": true,
+		"overrides": [
+			{
+				"files": "*.scss",
+				"options": {
+					"useTabs": false,
+					"tabWidth": 2
+				}
+			},
+			{
+				"files": "*.yml",
+				"options": {
+					"useTabs": false,
+					"tabWidth": 2
+				}
+			}
+		]
+	},
+	"manifest": {
+		"host_permissions": [
+			"https://*/*"
+		]
+	}
+}

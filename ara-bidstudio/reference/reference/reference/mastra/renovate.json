@@ -1,0 +1,164 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "rangeStrategy": "bump",
+  "extends": [
+    ":dependencyDashboard",
+    ":maintainLockFilesWeekly",
+    ":semanticCommits",
+    ":automergeDisabled",
+    ":disablePeerDependencies",
+    ":ignoreModulesAndTests",
+    "replacements:all",
+    "workarounds:typesNodeVersioning",
+    "group:recommended",
+    ":prConcurrentLimit20"
+  ],
+  "postUpdateOptions": ["pnpmDedupe"],
+  "rebaseWhen": "conflicted",
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "ignorePaths": ["docs/**", "explorations/**", ".github/scripts"],
+  "packageRules": [
+    {
+      "matchDepTypes": ["engines"],
+      "enabled": false
+    },
+    {
+      "matchDatasources": ["npm"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "groupName": "examples",
+      "commitMessageTopic": "examples",
+      "groupSlug": "examples-minor",
+      "matchFileNames": ["examples/**"],
+      "schedule": "before 7am on Monday",
+      "matchUpdateTypes": ["patch", "minor"]
+    },
+    {
+      "matchPackageNames": ["@types/node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "matchPackageNames": ["@types/node"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
+    {
+      "groupName": "Hono",
+      "matchSourceUrls": ["https://github.com/honojs/hono"]
+    },
+    {
+      "groupName": "AI SDK",
+      "matchSourceUrls": ["https://github.com/vercel/ai"]
+    },
+    {
+      "groupName": "Assistant UI",
+      "matchSourceUrls": ["https://github.com/assistant-ui/assistant-ui"]
+    },
+    {
+      "groupName": "Radix UI",
+      "matchSourceUrls": ["https://github.com/radix-ui/primitives"]
+    },
+    {
+      "groupName": "Opentelemetry",
+      "matchSourceUrls": [
+        "https://github.com/open-telemetry/opentelemetry-js-contrib",
+        "https://github.com/open-telemetry/opentelemetry-js"
+      ]
+    },
+    {
+      "groupName": "React",
+      "matchPackageNames": ["@types/react", "@types/react-dom", "react", "react-dom"],
+      "automerge": true
+    },
+    {
+      "groupName": "CopilotKit",
+      "matchSourceUrls": ["https://github.com/CopilotKit/CopilotKit"],
+      "matchPackageNames": ["@ag-ui/client"]
+    },
+    {
+      "groupName": "Mastra",
+      "matchSourceUrls": ["https://github.com/mastra-ai/mastra"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "minimumReleaseAge": "0",
+      "automerge": true
+    },
+    {
+      "groupName": "E2E tests",
+      "commitMessageTopic": "e2e-tests",
+      "matchFileNames": ["e2e-tests/**/package.json"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "typescript",
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchPackageNames": ["typescript", "/^@typescript-eslint//", "typescript-eslint"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "formatting & linting",
+      "commitMessageTopic": "Formatting & linting",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["eslint", "prettier", "/^eslint-/", "@vitest/eslint-plugin", "!@typescript-eslint/"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Build tools",
+      "commitMessageTopic": "Build tools",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["devDependencies"],
+      "matchPackageNames": [
+        "@microsoft/api-extractor",
+        "tsup",
+        "rollup",
+        "@types/node",
+        "dotenv",
+        "vitest",
+        "@vitest/*",
+        "tsx"
+      ],
+      "automerge": true
+    },
+    {
+      "groupName": "Schema",
+      "commitMessageTopic": "Schema",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["zod", "json-schema", "zod-to-json-schema"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "Cloudflare",
+      "commitMessageTopic": "Cloudflare",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["cloudflare", "miniflare", "@cloudflare/workers-types"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "AWS SDK",
+      "commitMessageTopic": "AWS SDK",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchSourceUrls": ["https://github.com/aws/aws-sdk-js-v3"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    }
+  ]
+}

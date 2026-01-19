@@ -1,0 +1,84 @@
+version: '3.8'
+
+# WARNING: This configuration contains default passwords that MUST be changed for production use.
+# Update all password fields below with strong, unique passwords before deploying.
+
+services:
+  # PostgreSQL - Multi-tenant database
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: omn1_ace
+      POSTGRES_USER: omn1
+      # IMPORTANT: Change this password before deploying to production!
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omn1_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omn1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant - Production vector database
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis - 3-tier cache (L1 + L2 + L3)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Omn1-ACE API
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # IMPORTANT: Update DATABASE_URL with the same password set in POSTGRES_PASSWORD above
+      DATABASE_URL: postgresql://omn1:${POSTGRES_PASSWORD:-omn1_dev_password}@postgres:5432/omn1_ace
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ../api:/app/api
+      - ../core:/app/core
+      - ../engine:/app/engine
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  redis_data:

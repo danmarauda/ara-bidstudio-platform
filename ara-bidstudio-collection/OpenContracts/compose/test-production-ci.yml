@@ -1,0 +1,34 @@
+services:
+  traefik:
+    # Override the production traefik config for CI testing with HTTP-only
+    command:
+      - --log.level=DEBUG
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.file.filename=/etc/traefik/traefik.yml
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.flower.address=:5555
+    volumes:
+      - ./compose/production/traefik/traefik-ci.yml:/etc/traefik/traefik.yml:ro
+    ports:
+      - "80:80"
+      - "5555:5555"
+      - "8080:8080"  # Traefik dashboard for debugging
+
+  # Override environment variables for testing
+  django:
+    environment:
+      - DJANGO_DEBUG=False
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - USE_TLS=False
+      - DJANGO_SECURE_SSL_REDIRECT=False
+
+  frontend:
+    environment:
+      - NODE_ENV=production
+
+  redis:
+    # Ensure Redis is available for rate limiting
+    ports:
+      - "6379:6379"  # Expose Redis for debugging if needed

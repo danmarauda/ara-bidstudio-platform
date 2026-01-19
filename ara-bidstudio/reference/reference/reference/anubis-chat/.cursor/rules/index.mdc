@@ -1,0 +1,397 @@
+---
+category: overview
+subcategory: navigation
+tags: [overview, navigation, rules, cursor, ai-rag, testing]
+cursor:
+  context_window: 32768
+  temperature: 0.2
+  max_tokens: 16384
+  model_preference: ["auto"]
+relations:
+  imports: []
+  exports: ["master-navigation"]
+  references: ["./ai-rag/index.mdc", "./testing/index.mdc"]
+---
+
+# ANUBIS Chat - Cursor Rules Master Index
+
+## 🚀 Project Overview
+
+ANUBIS Chat is a Solana-native AI chat SaaS platform that combines advanced AI/RAG capabilities with Web3 blockchain integration. This comprehensive rule system provides development guidelines, patterns, and best practices optimized for Cursor IDE.
+
+### Technology Stack
+- **AI Models**: Claude 3.5 Sonnet, GPT-4o, DeepSeek
+- **AI Framework**: Vercel AI SDK v5.2 with streaming support
+- **Vector Database**: Qdrant with OpenAI embeddings
+- **Frontend**: Next.js 15+ with TypeScript, React Server Components
+- **Backend**: Hono.js API with edge runtime support  
+- **Blockchain**: Solana Web3.js, Anchor framework
+- **Database**: PostgreSQL with Prisma ORM
+- **Testing**: Vitest, Playwright, React Testing Library
+
+## 📋 Rule Categories
+
+### 🤖 [AI & RAG System](./ai-rag/index.mdc)
+**Comprehensive AI and Retrieval-Augmented Generation implementation**
+
+**Components Overview**:
+```
+AI/RAG Architecture
+├── 🎯 [AI Models](./ai-rag/ai-models.mdc)
+│   ├── Model selection & routing (Claude, GPT-4o, DeepSeek)
+│   ├── Provider abstraction & fallback chains
+│   ├── Cost optimization & rate limiting
+│   └── Dynamic model selection based on task complexity
+│
+├── 🌊 [Streaming](./ai-rag/streaming.mdc)
+│   ├── Vercel AI SDK v5.2 streaming patterns
+│   ├── Real-time response delivery & backpressure
+│   ├── WebSocket transport & custom transports
+│   └── Tool calling with streaming support
+│
+├── 🔍 [Embeddings](./ai-rag/embeddings.mdc)
+│   ├── Text chunking strategies (semantic, recursive)
+│   ├── OpenAI embeddings with model selection
+│   ├── Content-type specific processing
+│   └── Preprocessing pipelines
+│
+├── 🎯 [Vector Search](./ai-rag/vector-search.mdc)
+│   ├── Qdrant optimization (HNSW, quantization)
+│   ├── Hybrid search (semantic + keyword)
+│   ├── Contextual retrieval with expansion
+│   └── Performance monitoring & analytics
+│
+├── 🛡️ [Prompt Engineering](./ai-rag/prompt-engineering.mdc)
+│   ├── Safety-first prompt construction
+│   ├── Injection prevention & input sanitization
+│   ├── Dynamic context management
+│   └── Chain-of-thought patterns
+│
+└── 🧠 [Memory Management](./ai-rag/memory-management.mdc)
+    ├── Context window optimization
+    ├── Hierarchical memory (working/short/long-term)
+    ├── Conversation state management
+    └── Smart context compression
+```
+
+**Key Features**:
+- **Multi-Model Support**: Intelligent routing across Claude, GPT-4o, and DeepSeek
+- **Real-time Streaming**: Sub-2s time-to-first-token with backpressure management
+- **Advanced RAG**: Hybrid search with 95%+ recall, contextual retrieval
+- **Safety-First**: Comprehensive prompt injection prevention
+- **Performance Optimized**: Sub-100ms vector search, intelligent caching
+
+### 🧪 [Testing Strategy](./testing/index.mdc)
+**Comprehensive testing approach for AI-powered Web3 applications**
+
+**Testing Pyramid Overview**:
+```
+Testing Architecture (2025)
+├── 🧪 [Unit Tests](./testing/unit-tests.mdc) - 70-80%
+│   ├── React components (Testing Library + Vitest)
+│   ├── AI service testing with quality validation
+│   ├── Custom hooks (useChat, useWallet, streaming)
+│   ├── Utility functions & business logic
+│   └── Mock strategies for AI models & blockchain
+│
+├── 🔗 [Integration Tests](./testing/integration-tests.mdc) - 15-20%
+│   ├── API route testing (Hono test client)
+│   ├── Database integration (PostgreSQL + Prisma)
+│   ├── Vector database operations (Qdrant)
+│   ├── External service integration
+│   └── Authentication & session management
+│
+├── 🌐 [E2E Tests](./testing/e2e-tests.mdc) - 5-10%
+│   ├── Full user workflows (Playwright)
+│   ├── Cross-browser compatibility
+│   ├── Mobile & responsive testing
+│   ├── Visual regression testing
+│   └── Accessibility compliance (WCAG 2.1)
+│
+├── 🤖 [AI Testing](./testing/ai-testing.mdc)
+│   ├── Response quality validation (relevance, accuracy, safety)
+│   ├── Model behavior & consistency testing
+│   ├── Prompt injection & security testing
+│   ├── RAG integration & context handling
+│   └── Streaming response quality
+│
+├── 🔒 [Wallet Testing](./testing/wallet-testing.mdc)
+│   ├── Solana wallet integration (Phantom, Solflare)
+│   ├── Transaction signing & validation
+│   ├── Anchor program interaction
+│   ├── Error scenarios & edge cases
+│   └── Multi-wallet support testing
+│
+└── ⚡ [Performance Tests](./testing/performance-tests.mdc)
+    ├── Core Web Vitals (LCP <2.5s, FID <100ms, CLS <0.1)
+    ├── API performance (<200ms avg, <500ms P95)
+    ├── Memory management & leak detection
+    ├── Streaming performance & interruption handling
+    └── Load testing & concurrency
+```
+
+**Quality Targets**:
+- **Unit Test Coverage**: 90%+ statements, 85%+ branches
+- **Performance**: Core Web Vitals compliance, <3s load times
+- **AI Quality**: 80%+ relevance, 95%+ safety scores
+- **Reliability**: 99.9%+ test consistency across runs
+
+## 🎯 Development Guidelines
+
+### Cursor IDE Integration
+```yaml
+# Optimized for Cursor IDE workflow
+cursor_config:
+  context_window: 16384-32768 tokens
+  temperature: 0.2-0.4 (precise, consistent code)
+  model_preference: ["auto"]
+  
+  # Auto-imports and intelligent suggestions
+  imports:
+    ai-rag: ["./ai-rag/**/*.mdc"]
+    testing: ["./testing/**/*.mdc"]
+    
+  # Cross-reference relationships
+  references:
+    bidirectional: true
+    context_aware: true
+```
+
+### Code Quality Standards
+- **TypeScript Strict Mode**: No `any` types, comprehensive type coverage
+- **ESLint + Prettier**: Consistent code formatting and best practices
+- **Biome**: Fast linting and formatting with modern JavaScript features
+- **Pre-commit Hooks**: Automated quality checks before commits
+
+### Architecture Patterns
+- **Component-Driven**: Reusable, testable React components
+- **Service Layer**: Clean separation of business logic
+- **Functional Programming**: Immutable data, pure functions where possible
+- **Error Handling**: Result patterns, graceful degradation
+
+### Performance Requirements
+- **Frontend**: <3s load time, <100ms interaction delay
+- **API**: <200ms average response, <500ms P95
+- **AI**: <2s time-to-first-token, <10s total response
+- **Vector Search**: <100ms query time, 95%+ recall
+
+## 🛠️ Quick Start Guide
+
+### 1. Environment Setup
+```bash
+# Install dependencies
+bun install
+
+# Set up environment variables
+cp .env.example .env
+# Add API keys: ANTHROPIC_API_KEY, OPENAI_API_KEY, QDRANT_URL
+
+# Initialize database
+bunx prisma migrate dev
+bunx prisma db seed
+```
+
+### 2. Development Workflow
+```bash
+# Start development server
+bun dev
+
+# Run tests
+bun test              # All tests
+bun test:unit         # Unit tests only
+bun test:e2e          # E2E tests
+bun test:coverage     # Coverage report
+
+# Code quality
+bun lint              # Linting
+bun type-check        # TypeScript validation
+bun format            # Code formatting
+```
+
+### 3. AI/RAG Integration
+```typescript
+// Initialize AI service with multiple models
+const aiService = new AIService({
+  models: ['claude-3.5-sonnet', 'gpt-4o', 'deepseek-chat'],
+  fallbackChain: true,
+  rateLimiting: true
+});
+
+// Set up vector search with Qdrant
+const vectorSearch = new VectorSearchService(qdrantClient, {
+  collection: 'anubis_knowledge_base',
+  searchType: 'hybrid',
+  retrievalStrategy: 'contextual'
+});
+
+// Configure streaming responses
+const streamingService = new StreamingService({
+  chunkSize: 256,
+  backpressureThreshold: 1024,
+  timeoutMs: 30000
+});
+```
+
+### 4. Testing Setup
+```typescript
+// Configure test environment
+import { setupTests } from './src/test/setup';
+
+// Unit test example
+test('AI service generates relevant responses', async () => {
+  const response = await aiService.generateResponse('What is Solana?');
+  const metrics = await validateResponse(query, response);
+  
+  expect(metrics.relevance).toBeGreaterThan(0.8);
+  expect(metrics.safety).toBeGreaterThan(0.95);
+});
+
+// E2E test example
+test('complete chat workflow', async ({ page, mockWallet }) => {
+  const chatPage = new ChatPage(page);
+  await chatPage.connectWallet();
+  await chatPage.sendMessage('Help me build on Solana');
+  await chatPage.waitForStreamingResponse();
+  
+  expect(await chatPage.getResponse()).toContain('Solana');
+});
+```
+
+## 🔧 Configuration Files
+
+### Core Configuration
+- **TypeScript**: `tsconfig.json` - Strict mode with path mapping
+- **Vite**: `vite.config.ts` - Build optimization and dev server
+- **Tailwind**: `tailwind.config.js` - Design system and utilities
+- **Prisma**: `prisma/schema.prisma` - Database schema and migrations
+
+### Testing Configuration
+- **Vitest**: `vitest.config.ts` - Unit and integration test runner
+- **Playwright**: `playwright.config.ts` - E2E and browser testing
+- **Coverage**: `coverage.config.js` - Code coverage thresholds
+
+### AI/RAG Configuration
+- **Model Routing**: Dynamic selection based on task complexity
+- **Vector Database**: Qdrant optimization for sub-100ms queries
+- **Prompt Templates**: Context-aware prompt engineering
+- **Safety Filters**: Multi-layer content filtering
+
+## 📚 Learning Resources
+
+### Understanding the Codebase
+1. **Start with Overview**: Review this index and component overviews
+2. **AI/RAG Deep Dive**: Study the AI system architecture first
+3. **Testing Strategy**: Understand the testing approach and quality gates
+4. **Component Implementation**: Dive into specific components as needed
+
+### Best Practices Application
+1. **Follow the Rule Structure**: Use .mdc files as implementation guides
+2. **Leverage Cursor Integration**: Utilize context-aware suggestions
+3. **Test-Driven Development**: Write tests first, especially for AI components
+4. **Performance Monitoring**: Track metrics continuously during development
+
+### Advanced Patterns
+1. **Multi-Model AI**: Intelligent routing and fallback strategies
+2. **Real-time Streaming**: Backpressure management and error recovery
+3. **Vector Search Optimization**: Hybrid search and contextual retrieval
+4. **Web3 Integration**: Wallet management and transaction handling
+
+## 🔍 Rule File Format
+
+### .mdc File Structure
+```yaml
+---
+category: primary-category
+subcategory: specific-area
+tags: [tag1, tag2, tag3]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["../other/rule.mdc"]
+  exports: ["pattern-name", "utility-functions"]  
+  references: ["./related-rule.mdc"]
+---
+
+# Rule Title
+
+## Implementation guidance with:
+- Code examples
+- Best practices  
+- Performance considerations
+- Testing patterns
+- Error handling
+```
+
+### Cursor Integration Features
+- **Context-Aware**: Rules automatically loaded based on file context
+- **Cross-Reference**: Related rules suggested intelligently
+- **Template Generation**: Boilerplate code from rule patterns
+- **Quality Validation**: Real-time feedback on implementation quality
+
+## 🚦 Quality Gates
+
+### Automated Checks
+```yaml
+pre_commit:
+  - lint: ESLint + Biome formatting
+  - type_check: TypeScript strict validation
+  - test: Unit tests must pass
+  - security: Basic security scanning
+
+ci_pipeline:
+  - coverage: 90%+ unit test coverage required
+  - performance: Core Web Vitals compliance
+  - ai_quality: Response quality validation
+  - security: Comprehensive security scanning
+  - accessibility: WCAG 2.1 AA compliance
+```
+
+### Code Review Guidelines
+1. **Architecture Alignment**: Follow established patterns
+2. **Performance Impact**: Consider performance implications
+3. **Testing Coverage**: Ensure adequate test coverage
+4. **Security Review**: Check for vulnerabilities
+5. **Documentation**: Update relevant rule files
+
+## 🔗 Integration Points
+
+### External Services
+- **AI Providers**: Anthropic (Claude), OpenAI (GPT-4o), DeepSeek
+- **Vector Database**: Qdrant with HNSW indexing
+- **Blockchain**: Solana mainnet/devnet with RPC endpoints
+- **Monitoring**: Performance tracking and error monitoring
+
+### Development Tools
+- **IDE**: Cursor with AI-assisted development
+- **Package Manager**: Bun for fast installs and runtime
+- **Testing**: Comprehensive multi-layer testing strategy
+- **CI/CD**: GitHub Actions with quality gates
+
+## 📈 Success Metrics
+
+### Performance Targets
+- **Load Time**: <3s on 3G networks
+- **AI Response**: <2s time-to-first-token  
+- **Search Accuracy**: 95%+ relevant results
+- **Uptime**: 99.9% availability target
+
+### Quality Metrics
+- **Test Coverage**: 90%+ across all layers
+- **Code Quality**: A+ maintainability score
+- **Security**: Zero critical vulnerabilities
+- **Accessibility**: WCAG 2.1 AA compliance
+
+---
+
+## 🚀 Next Steps
+
+1. **Explore AI/RAG System**: Start with [AI/RAG Overview](./ai-rag/index.mdc)
+2. **Review Testing Strategy**: Check [Testing Overview](./testing/index.mdc)  
+3. **Set Up Development Environment**: Follow quick start guide
+4. **Implement Core Features**: Use rule files as implementation guides
+5. **Monitor and Optimize**: Track performance and quality metrics
+
+**Happy coding with ANUBIS Chat! 🎉**

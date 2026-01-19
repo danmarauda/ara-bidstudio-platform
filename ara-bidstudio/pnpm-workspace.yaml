@@ -1,0 +1,8 @@
+onlyBuiltDependencies:
+  - '@clerk/shared'
+  - '@scarf/scarf'
+  - '@tailwindcss/oxide'
+  - esbuild
+  - protobufjs
+  - sharp
+  - unrs-resolver

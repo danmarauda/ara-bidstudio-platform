@@ -1,0 +1,1321 @@
+---
+category: frontend
+subcategory: animations
+tags: [framer-motion, transitions, streaming-ui, motion-design, performance]
+cursor:
+  context_window: 8192
+  temperature: 0.6
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["./index.mdc", "./components.mdc", "./accessibility.mdc"]
+  exports: ["animation-patterns", "motion-variants", "streaming-effects"]
+  references: ["./styling.mdc", "./state-management.mdc"]
+---
+
+# Animation & Motion Design System
+
+## Motion Design Principles
+
+### Animation Philosophy for ANUBIS Chat
+
+```typescript
+// Core animation principles
+const motionPrinciples = {
+  // Disney's 12 Principles adapted for UI
+  purposeful: 'Every animation serves a functional purpose',
+  subtle: 'Animations should enhance, not distract from content',
+  performant: 'Maintain 60fps with hardware acceleration',
+  accessible: 'Respect user preferences for reduced motion',
+  contextual: 'Animation style matches content and brand',
+  
+  // Timing and Easing
+  timing: {
+    micro: '150ms',    // Small UI changes (hover, focus)
+    macro: '300ms',    // Layout changes, transitions
+    complex: '500ms',  // Multi-step animations
+    streaming: '2s+',  // Ongoing states (typing, loading)
+  },
+  
+  easing: {
+    standard: 'cubic-bezier(0.4, 0.0, 0.2, 1)', // Material Design standard
+    decelerate: 'cubic-bezier(0.0, 0.0, 0.2, 1)', // Elements entering screen
+    accelerate: 'cubic-bezier(0.4, 0.0, 1, 1)',   // Elements leaving screen
+    sharp: 'cubic-bezier(0.4, 0.0, 0.6, 1)',      // Temporary elements
+  },
+} as const;
+```
+
+### Reduced Motion Support
+
+```css
+/* Respect user preferences for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  /* Keep essential animations for functionality */
+  .keep-animation {
+    animation-duration: revert !important;
+    transition-duration: revert !important;
+  }
+}
+
+/* Custom properties for motion preferences */
+:root {
+  --motion-duration-short: 150ms;
+  --motion-duration-medium: 300ms;
+  --motion-duration-long: 500ms;
+  --motion-easing-standard: cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-short: 0.01ms;
+    --motion-duration-medium: 0.01ms;
+    --motion-duration-long: 0.01ms;
+  }
+}
+```
+
+## Framer Motion Integration
+
+### Motion Provider Setup
+
+```typescript
+// Motion configuration and provider
+'use client';
+
+import { LazyMotion, domAnimation, m } from 'framer-motion';
+import { ReactNode, createContext, useContext } from 'react';
+
+interface MotionContextType {
+  reducedMotion: boolean;
+  prefersReducedMotion: () => boolean;
+}
+
+const MotionContext = createContext<MotionContextType>({
+  reducedMotion: false,
+  prefersReducedMotion: () => false,
+});
+
+export function MotionProvider({ children }: { children: ReactNode }) {
+  const [reducedMotion, setReducedMotion] = useState(false);
+  
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(mediaQuery.matches);
+    
+    const handleChange = (e: MediaQueryListEvent) => {
+      setReducedMotion(e.matches);
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+  
+  const prefersReducedMotion = () => reducedMotion;
+  
+  return (
+    <MotionContext.Provider value={{ reducedMotion, prefersReducedMotion }}>
+      <LazyMotion features={domAnimation}>
+        {children}
+      </LazyMotion>
+    </MotionContext.Provider>
+  );
+}
+
+export const useMotion = () => useContext(MotionContext);
+
+// Optimized motion component (m instead of motion for smaller bundle)
+export { m as motion };
+```
+
+### Animation Variants System
+
+```typescript
+// Reusable animation variants
+export const animationVariants = {
+  // Fade animations
+  fade: {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { duration: 0.15, ease: 'easeOut' }
+    },
+    exit: { 
+      opacity: 0,
+      transition: { duration: 0.1, ease: 'easeIn' }
+    }
+  },
+  
+  // Slide animations
+  slideUp: {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { duration: 0.3, ease: 'easeOut' }
+    },
+    exit: { 
+      opacity: 0, 
+      y: -10,
+      transition: { duration: 0.2, ease: 'easeIn' }
+    }
+  },
+  
+  slideDown: {
+    hidden: { opacity: 0, y: -20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { duration: 0.3, ease: 'easeOut' }
+    }
+  },
+  
+  slideLeft: {
+    hidden: { opacity: 0, x: 20 },
+    visible: { 
+      opacity: 1, 
+      x: 0,
+      transition: { duration: 0.3, ease: 'easeOut' }
+    }
+  },
+  
+  slideRight: {
+    hidden: { opacity: 0, x: -20 },
+    visible: { 
+      opacity: 1, 
+      x: 0,
+      transition: { duration: 0.3, ease: 'easeOut' }
+    }
+  },
+  
+  // Scale animations
+  scale: {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: { 
+      opacity: 1, 
+      scale: 1,
+      transition: { duration: 0.2, ease: 'easeOut' }
+    },
+    exit: { 
+      opacity: 0, 
+      scale: 0.9,
+      transition: { duration: 0.15, ease: 'easeIn' }
+    }
+  },
+  
+  // Stagger animations for lists
+  staggerContainer: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+        delayChildren: 0.1,
+      }
+    }
+  },
+  
+  staggerChild: {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { duration: 0.3, ease: 'easeOut' }
+    }
+  },
+  
+  // Modal animations
+  modal: {
+    hidden: { 
+      opacity: 0, 
+      scale: 0.75,
+      transition: { duration: 0.15 }
+    },
+    visible: { 
+      opacity: 1, 
+      scale: 1,
+      transition: { 
+        duration: 0.2, 
+        ease: 'easeOut',
+        type: 'spring',
+        bounce: 0.25
+      }
+    },
+    exit: { 
+      opacity: 0, 
+      scale: 0.75,
+      transition: { duration: 0.15, ease: 'easeIn' }
+    }
+  },
+  
+  modalOverlay: {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { duration: 0.15 }
+    },
+    exit: { 
+      opacity: 0,
+      transition: { duration: 0.15 }
+    }
+  },
+  
+  // Loading animations
+  pulse: {
+    animate: {
+      scale: [1, 1.05, 1],
+      transition: {
+        duration: 1.5,
+        repeat: Infinity,
+        ease: 'easeInOut'
+      }
+    }
+  },
+  
+  bounce: {
+    animate: {
+      y: [0, -10, 0],
+      transition: {
+        duration: 0.8,
+        repeat: Infinity,
+        ease: 'easeInOut'
+      }
+    }
+  },
+  
+  // Chat-specific animations
+  messageSlide: {
+    hidden: { opacity: 0, x: -30, scale: 0.95 },
+    visible: { 
+      opacity: 1, 
+      x: 0, 
+      scale: 1,
+      transition: { 
+        duration: 0.4,
+        ease: 'easeOut',
+        type: 'spring',
+        bounce: 0.3
+      }
+    }
+  },
+  
+  messageSlideOwn: {
+    hidden: { opacity: 0, x: 30, scale: 0.95 },
+    visible: { 
+      opacity: 1, 
+      x: 0, 
+      scale: 1,
+      transition: { 
+        duration: 0.4,
+        ease: 'easeOut',
+        type: 'spring',
+        bounce: 0.3
+      }
+    }
+  },
+} as const;
+```
+
+## Chat-Specific Animations
+
+### Message Streaming Effects
+
+```typescript
+// Streaming text animation component
+interface StreamingTextProps {
+  content: string;
+  isComplete: boolean;
+  typingSpeed?: number;
+}
+
+function StreamingText({ content, isComplete, typingSpeed = 30 }: StreamingTextProps) {
+  const [displayedContent, setDisplayedContent] = useState('');
+  const [showCursor, setShowCursor] = useState(true);
+  
+  useEffect(() => {
+    if (isComplete) {
+      setDisplayedContent(content);
+      setShowCursor(false);
+      return;
+    }
+    
+    let currentIndex = 0;
+    const timer = setInterval(() => {
+      if (currentIndex <= content.length) {
+        setDisplayedContent(content.slice(0, currentIndex));
+        currentIndex++;
+      } else {
+        clearInterval(timer);
+        setShowCursor(false);
+      }
+    }, typingSpeed);
+    
+    return () => clearInterval(timer);
+  }, [content, isComplete, typingSpeed]);
+  
+  // Cursor blinking animation
+  useEffect(() => {
+    if (!showCursor) return;
+    
+    const blinkTimer = setInterval(() => {
+      setShowCursor(prev => !prev);
+    }, 500);
+    
+    return () => clearInterval(blinkTimer);
+  }, [showCursor, isComplete]);
+  
+  return (
+    <span className="streaming-text">
+      {displayedContent}
+      {!isComplete && (
+        <motion.span
+          className="cursor"
+          animate={{ opacity: showCursor ? 1 : 0 }}
+          transition={{ duration: 0.1 }}
+        >
+          |
+        </motion.span>
+      )}
+    </span>
+  );
+}
+
+// Animated message bubble
+interface AnimatedMessageProps {
+  message: Message;
+  isOwn: boolean;
+  delay?: number;
+}
+
+function AnimatedMessage({ message, isOwn, delay = 0 }: AnimatedMessageProps) {
+  const { prefersReducedMotion } = useMotion();
+  
+  const variants = prefersReducedMotion() 
+    ? animationVariants.fade 
+    : (isOwn ? animationVariants.messageSlideOwn : animationVariants.messageSlide);
+  
+  return (
+    <motion.div
+      variants={variants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      transition={{ delay }}
+      className={cn(
+        'message-bubble',
+        isOwn ? 'message-own' : 'message-other'
+      )}
+    >
+      <div className="message-content">
+        {message.isStreaming ? (
+          <StreamingText 
+            content={message.content} 
+            isComplete={message.isComplete}
+          />
+        ) : (
+          <MessageContent content={message.content} />
+        )}
+      </div>
+      
+      <div className="message-meta">
+        <time>{formatTime(message.timestamp)}</time>
+        <MessageStatus status={message.status} />
+      </div>
+    </motion.div>
+  );
+}
+```
+
+### Typing Indicators
+
+```typescript
+// Animated typing indicator
+function TypingIndicator({ isVisible = true }: { isVisible?: boolean }) {
+  const { prefersReducedMotion } = useMotion();
+  
+  if (prefersReducedMotion()) {
+    return isVisible ? (
+      <div className="typing-indicator-static">
+        <span>AI is typing...</span>
+      </div>
+    ) : null;
+  }
+  
+  return (
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div
+          className="typing-indicator"
+          variants={animationVariants.slideUp}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+        >
+          <div className="typing-dots">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                className="typing-dot"
+                animate={{
+                  scale: [1, 1.2, 1],
+                  opacity: [0.5, 1, 0.5],
+                }}
+                transition={{
+                  duration: 1.4,
+                  repeat: Infinity,
+                  delay: i * 0.2,
+                  ease: 'easeInOut',
+                }}
+              />
+            ))}
+          </div>
+          <span className="sr-only">AI is typing</span>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Pulse animation for active states
+function PulseIndicator({ 
+  isActive, 
+  children, 
+  pulseColor = 'rgb(59 130 246)' 
+}: {
+  isActive: boolean;
+  children: ReactNode;
+  pulseColor?: string;
+}) {
+  return (
+    <motion.div
+      className="relative"
+      animate={isActive ? {
+        boxShadow: [
+          `0 0 0 0 ${pulseColor}40`,
+          `0 0 0 10px ${pulseColor}00`,
+        ]
+      } : {}}
+      transition={{
+        duration: 1.5,
+        repeat: isActive ? Infinity : 0,
+        ease: 'easeOut'
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+```
+
+### File Upload Animations
+
+```typescript
+// Animated file upload area
+interface AnimatedDropZoneProps {
+  onDrop: (files: File[]) => void;
+  isDragActive: boolean;
+  children: ReactNode;
+}
+
+function AnimatedDropZone({ onDrop, isDragActive, children }: AnimatedDropZoneProps) {
+  return (
+    <motion.div
+      className="drop-zone"
+      animate={{
+        borderColor: isDragActive ? 'rgb(59 130 246)' : 'rgb(229 231 235)',
+        backgroundColor: isDragActive ? 'rgb(59 130 246 / 0.05)' : 'transparent',
+        scale: isDragActive ? 1.02 : 1,
+      }}
+      whileHover={{ scale: 1.01 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        const files = Array.from(e.dataTransfer.files);
+        onDrop(files);
+      }}
+    >
+      {children}
+      
+      <AnimatePresence>
+        {isDragActive && (
+          <motion.div
+            className="drop-overlay"
+            variants={animationVariants.fade}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <div className="drop-content">
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+              >
+                📎
+              </motion.div>
+              <p>Drop files here to upload</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// File preview with removal animation
+function AnimatedFilePreview({ 
+  file, 
+  onRemove 
+}: { 
+  file: File; 
+  onRemove: () => void 
+}) {
+  return (
+    <motion.div
+      className="file-preview"
+      variants={animationVariants.slideUp}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      layout
+    >
+      <div className="file-info">
+        <div className="file-icon">📄</div>
+        <div className="file-details">
+          <div className="file-name">{file.name}</div>
+          <div className="file-size">{formatFileSize(file.size)}</div>
+        </div>
+      </div>
+      
+      <motion.button
+        className="remove-button"
+        onClick={onRemove}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        ✕
+      </motion.button>
+    </motion.div>
+  );
+}
+```
+
+## Loading States and Skeletons
+
+### Skeleton Animations
+
+```typescript
+// Shimmer effect for loading skeletons
+const shimmerKeyframes = keyframes`
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+`;
+
+// Skeleton component with shimmer effect
+interface SkeletonProps {
+  width?: string | number;
+  height?: string | number;
+  className?: string;
+  variant?: 'text' | 'rectangular' | 'circular';
+}
+
+function Skeleton({ 
+  width, 
+  height, 
+  className,
+  variant = 'rectangular' 
+}: SkeletonProps) {
+  const { prefersReducedMotion } = useMotion();
+  
+  return (
+    <div
+      className={cn(
+        'skeleton',
+        `skeleton-${variant}`,
+        !prefersReducedMotion() && 'skeleton-animated',
+        className
+      )}
+      style={{ width, height }}
+    />
+  );
+}
+
+// Message skeleton
+function MessageSkeleton({ isOwn = false }: { isOwn?: boolean }) {
+  return (
+    <div className={cn('message-skeleton', isOwn && 'message-skeleton-own')}>
+      <Skeleton variant="circular" width={32} height={32} />
+      
+      <div className="message-skeleton-content">
+        <Skeleton width="60%" height={16} className="mb-2" />
+        <Skeleton width="40%" height={16} />
+      </div>
+    </div>
+  );
+}
+
+// Chat skeleton with staggered loading
+function ChatSkeleton() {
+  return (
+    <motion.div 
+      className="chat-skeleton"
+      variants={animationVariants.staggerContainer}
+      initial="hidden"
+      animate="visible"
+    >
+      {Array.from({ length: 5 }).map((_, index) => (
+        <motion.div key={index} variants={animationVariants.staggerChild}>
+          <MessageSkeleton isOwn={index % 3 === 0} />
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+```
+
+### Loading Spinners
+
+```typescript
+// Collection of loading spinner variants
+const spinnerVariants = {
+  spin: {
+    animate: {
+      rotate: 360,
+      transition: {
+        duration: 1,
+        repeat: Infinity,
+        ease: 'linear'
+      }
+    }
+  },
+  
+  pulse: {
+    animate: {
+      scale: [1, 1.2, 1],
+      opacity: [1, 0.5, 1],
+      transition: {
+        duration: 1.5,
+        repeat: Infinity,
+        ease: 'easeInOut'
+      }
+    }
+  },
+  
+  bounce: {
+    animate: {
+      y: [0, -20, 0],
+      transition: {
+        duration: 0.6,
+        repeat: Infinity,
+        ease: 'easeInOut'
+      }
+    }
+  }
+};
+
+// Versatile spinner component
+interface SpinnerProps {
+  size?: 'sm' | 'md' | 'lg';
+  variant?: 'spin' | 'pulse' | 'bounce' | 'dots';
+  color?: string;
+}
+
+function Spinner({ size = 'md', variant = 'spin', color = 'currentColor' }: SpinnerProps) {
+  const { prefersReducedMotion } = useMotion();
+  
+  const sizeClasses = {
+    sm: 'w-4 h-4',
+    md: 'w-6 h-6',
+    lg: 'w-8 h-8'
+  };
+  
+  if (prefersReducedMotion()) {
+    return (
+      <div 
+        className={`spinner-static ${sizeClasses[size]}`}
+        style={{ borderColor: color }}
+      />
+    );
+  }
+  
+  if (variant === 'dots') {
+    return (
+      <div className="spinner-dots">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            className="spinner-dot"
+            style={{ backgroundColor: color }}
+            animate={{
+              scale: [1, 1.5, 1],
+              opacity: [0.5, 1, 0.5]
+            }}
+            transition={{
+              duration: 1.2,
+              repeat: Infinity,
+              delay: i * 0.2,
+              ease: 'easeInOut'
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+  
+  return (
+    <motion.div
+      className={`spinner ${sizeClasses[size]}`}
+      style={{ borderColor: `${color}20`, borderTopColor: color }}
+      variants={spinnerVariants}
+      animate={variant}
+    />
+  );
+}
+```
+
+## Interactive Animations
+
+### Button Animations
+
+```typescript
+// Enhanced button with micro-interactions
+interface AnimatedButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'default' | 'primary' | 'secondary';
+  size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
+  success?: boolean;
+  children: ReactNode;
+}
+
+function AnimatedButton({
+  variant = 'default',
+  size = 'md',
+  loading = false,
+  success = false,
+  children,
+  className,
+  ...props
+}: AnimatedButtonProps) {
+  const [isPressed, setIsPressed] = useState(false);
+  
+  return (
+    <motion.button
+      className={cn('animated-button', `button-${variant}`, `button-${size}`, className)}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onMouseDown={() => setIsPressed(true)}
+      onMouseUp={() => setIsPressed(false)}
+      onMouseLeave={() => setIsPressed(false)}
+      animate={{
+        backgroundColor: success ? '#10b981' : undefined,
+      }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
+      {...props}
+    >
+      <AnimatePresence mode="wait">
+        {loading ? (
+          <motion.div
+            key="loading"
+            variants={animationVariants.fade}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="flex items-center gap-2"
+          >
+            <Spinner size="sm" />
+            <span>Loading...</span>
+          </motion.div>
+        ) : success ? (
+          <motion.div
+            key="success"
+            variants={animationVariants.scale}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="flex items-center gap-2"
+          >
+            <CheckIcon className="w-4 h-4" />
+            <span>Success!</span>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="default"
+            variants={animationVariants.fade}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  );
+}
+```
+
+### Modal and Dialog Animations
+
+```typescript
+// Animated modal with backdrop
+interface AnimatedModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+}
+
+function AnimatedModal({ isOpen, onClose, children, size = 'md' }: AnimatedModalProps) {
+  const { prefersReducedMotion } = useMotion();
+  
+  const modalVariants = prefersReducedMotion() 
+    ? animationVariants.fade 
+    : animationVariants.modal;
+  
+  const overlayVariants = animationVariants.modalOverlay;
+  
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="modal-container">
+          {/* Backdrop */}
+          <motion.div
+            className="modal-overlay"
+            variants={overlayVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={onClose}
+          />
+          
+          {/* Modal content */}
+          <div className="modal-wrapper">
+            <motion.div
+              className={`modal-content modal-${size}`}
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {children}
+            </motion.div>
+          </div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Animated drawer/sidebar
+interface AnimatedDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  position?: 'left' | 'right';
+  children: ReactNode;
+}
+
+function AnimatedDrawer({ 
+  isOpen, 
+  onClose, 
+  position = 'left', 
+  children 
+}: AnimatedDrawerProps) {
+  const slideDirection = position === 'left' ? -100 : 100;
+  
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="drawer-container">
+          <motion.div
+            className="drawer-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          
+          <motion.div
+            className={`drawer drawer-${position}`}
+            initial={{ x: `${slideDirection}%` }}
+            animate={{ x: 0 }}
+            exit={{ x: `${slideDirection}%` }}
+            transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
+          >
+            {children}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+```
+
+## Page Transitions
+
+### Route Transition Wrapper
+
+```typescript
+// Page transition wrapper for Next.js
+interface PageTransitionProps {
+  children: ReactNode;
+  className?: string;
+}
+
+function PageTransition({ children, className }: PageTransitionProps) {
+  const { prefersReducedMotion } = useMotion();
+  
+  const variants = prefersReducedMotion() 
+    ? animationVariants.fade 
+    : animationVariants.slideUp;
+  
+  return (
+    <motion.div
+      className={cn('page-transition', className)}
+      variants={variants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+// Layout transition for route changes
+function LayoutTransition({ children }: { children: ReactNode }) {
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={usePathname()} // Re-trigger animation on route change
+        variants={animationVariants.fade}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={{ duration: 0.15 }}
+      >
+        {children}
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+```
+
+## Performance Optimization
+
+### Animation Performance Guidelines
+
+```typescript
+// Performance-optimized animation utilities
+const performanceAnimations = {
+  // Use transform and opacity for hardware acceleration
+  optimized: {
+    // ✅ Good - Uses GPU acceleration
+    scale: { transform: 'scale(1.1)' },
+    translate: { transform: 'translateX(10px)' },
+    fade: { opacity: 0.5 },
+    
+    // ❌ Avoid - Triggers layout recalculation
+    width: { width: '100px' },
+    height: { height: '50px' },
+    top: { top: '10px' },
+    left: { left: '10px' },
+  },
+  
+  // Animation will-change optimization
+  willChange: (element: HTMLElement, properties: string[]) => {
+    element.style.willChange = properties.join(', ');
+    
+    // Clean up after animation
+    return () => {
+      element.style.willChange = 'auto';
+    };
+  },
+  
+  // Reduce animations on low-end devices
+  adaptivePerformance: () => {
+    const connection = (navigator as any).connection;
+    if (connection && connection.effectiveType === 'slow-2g') {
+      return { duration: 0.1 }; // Ultra-fast animations
+    }
+    
+    // Check for low-end devices
+    if (navigator.hardwareConcurrency <= 2) {
+      return { duration: 0.15 }; // Faster animations
+    }
+    
+    return { duration: 0.3 }; // Normal animations
+  },
+} as const;
+
+// Hook for performance-aware animations
+function usePerformantAnimation() {
+  const [shouldAnimate, setShouldAnimate] = useState(true);
+  
+  useEffect(() => {
+    // Disable animations on very low-end devices
+    const connection = (navigator as any).connection;
+    if (connection && connection.effectiveType === 'slow-2g') {
+      setShouldAnimate(false);
+    }
+    
+    // Listen for performance changes
+    const observer = new PerformanceObserver((list) => {
+      const entries = list.getEntries();
+      const longTasks = entries.filter(entry => entry.duration > 50);
+      
+      if (longTasks.length > 3) {
+        setShouldAnimate(false); // Disable animations if too many long tasks
+      }
+    });
+    
+    observer.observe({ entryTypes: ['longtask'] });
+    
+    return () => observer.disconnect();
+  }, []);
+  
+  return shouldAnimate;
+}
+```
+
+### Animation Cleanup
+
+```typescript
+// Animation cleanup utilities
+function useAnimationCleanup() {
+  const animationsRef = useRef<Set<() => void>>(new Set());
+  
+  const registerAnimation = useCallback((cleanup: () => void) => {
+    animationsRef.current.add(cleanup);
+    
+    return () => {
+      animationsRef.current.delete(cleanup);
+    };
+  }, []);
+  
+  useEffect(() => {
+    return () => {
+      // Clean up all animations on component unmount
+      animationsRef.current.forEach(cleanup => cleanup());
+      animationsRef.current.clear();
+    };
+  }, []);
+  
+  return registerAnimation;
+}
+
+// Memory-efficient animation component
+function MemoryEfficientAnimation({ 
+  children, 
+  animate 
+}: { 
+  children: ReactNode; 
+  animate: boolean 
+}) {
+  const registerCleanup = useAnimationCleanup();
+  
+  useEffect(() => {
+    if (!animate) return;
+    
+    // Register cleanup for this specific animation
+    const cleanup = registerCleanup(() => {
+      // Cleanup animation-specific resources
+    });
+    
+    return cleanup;
+  }, [animate, registerCleanup]);
+  
+  return (
+    <motion.div
+      animate={animate ? { opacity: 1 } : { opacity: 0.5 }}
+      transition={{ duration: 0.2 }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+```
+
+## CSS Animation Fallbacks
+
+### Pure CSS Animations
+
+```css
+/* CSS-only animations for critical performance paths */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+@keyframes typewriter {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+/* Animation classes */
+.animate-fade-in {
+  animation: fadeIn var(--motion-duration-short) var(--motion-easing-standard);
+}
+
+.animate-slide-up {
+  animation: slideUp var(--motion-duration-medium) var(--motion-easing-standard);
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s infinite linear;
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200px 100%;
+}
+
+.animate-typewriter {
+  animation: typewriter 2s steps(20) infinite;
+  border-right: 2px solid;
+  animation: typewriter 2s steps(20) infinite, blink 1s infinite;
+}
+
+/* Reduced motion fallbacks */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up {
+    animation: fadeIn 0.01ms;
+  }
+  
+  .animate-shimmer {
+    animation: none;
+    background: #f0f0f0;
+  }
+  
+  .animate-typewriter {
+    animation: none;
+    border-right: none;
+  }
+}
+```
+
+## Testing Animations
+
+### Animation Testing Utilities
+
+```typescript
+// Test utilities for animations
+export const animationTestUtils = {
+  // Mock framer-motion for tests
+  mockFramerMotion: () => {
+    jest.mock('framer-motion', () => ({
+      motion: {
+        div: 'div',
+        span: 'span',
+        button: 'button',
+      },
+      AnimatePresence: ({ children }: { children: ReactNode }) => children,
+      useAnimation: () => ({
+        start: jest.fn(),
+        stop: jest.fn(),
+      }),
+    }));
+  },
+  
+  // Wait for animation to complete
+  waitForAnimation: (duration: number = 300) => {
+    return new Promise(resolve => setTimeout(resolve, duration + 50));
+  },
+  
+  // Test reduced motion preference
+  mockReducedMotion: (prefersReduced: boolean = true) => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: jest.fn().mockImplementation(query => ({
+        matches: query === '(prefers-reduced-motion: reduce)' ? prefersReduced : false,
+        media: query,
+        onchange: null,
+        addListener: jest.fn(),
+        removeListener: jest.fn(),
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+        dispatchEvent: jest.fn(),
+      })),
+    });
+  },
+};
+
+// Example animation tests
+describe('AnimatedButton', () => {
+  beforeEach(() => {
+    animationTestUtils.mockFramerMotion();
+  });
+  
+  it('should render without animations when motion is reduced', () => {
+    animationTestUtils.mockReducedMotion(true);
+    
+    render(<AnimatedButton>Click me</AnimatedButton>);
+    
+    expect(screen.getByRole('button')).toBeInTheDocument();
+    expect(screen.getByRole('button')).not.toHaveClass('animate-scale');
+  });
+  
+  it('should show loading state with spinner', async () => {
+    render(<AnimatedButton loading>Submit</AnimatedButton>);
+    
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Submit')).not.toBeInTheDocument();
+  });
+});
+```
+
+## Related Files
+
+- [Component Architecture](./components.mdc) - Animated component patterns
+- [Styling System](./styling.mdc) - CSS animation integration
+- [Accessibility Guidelines](./accessibility.mdc) - Motion accessibility
+- [State Management](./state-management.mdc) - Animation state patterns

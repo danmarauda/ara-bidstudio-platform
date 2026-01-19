@@ -1,0 +1,12 @@
+# LSP Integration Requirements
+
+# Core LSP support
+python-lsp-server>=1.7.0     # Python language server
+
+# Optional language servers (install as needed)
+# typescript-language-server  # npm install -g typescript-language-server typescript
+# gopls                       # go install golang.org/x/tools/gopls@latest
+# rust-analyzer               # rustup component add rust-analyzer
+
+# Dependencies
+asyncio>=3.4.3

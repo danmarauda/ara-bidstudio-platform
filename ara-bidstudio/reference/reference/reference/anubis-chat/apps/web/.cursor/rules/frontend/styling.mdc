@@ -1,0 +1,875 @@
+---
+category: frontend
+subcategory: styling
+tags: [tailwindcss, design-system, themes, responsive, dark-mode]
+cursor:
+  context_window: 8192
+  temperature: 0.6
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./index.mdc", "./components.mdc"]
+  exports: ["styling-rules", "design-tokens", "theme-system"]
+  references: ["./accessibility.mdc", "./animations.mdc"]
+---
+
+# TailwindCSS Styling System & Design Tokens
+
+## TailwindCSS 3.4 Configuration
+
+### Base Configuration (`tailwind.config.js`)
+
+```javascript
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  darkMode: ["class"], // Manual dark mode toggling
+  content: [
+    './pages/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+    './app/**/*.{ts,tsx}',
+    './src/**/*.{ts,tsx}',
+  ],
+  theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: {
+        "2xl": "1400px",
+      },
+    },
+    extend: {
+      colors: {
+        // Solana brand colors
+        solana: {
+          purple: '#9945FF',
+          green: '#14F195',
+          gradient: 'linear-gradient(135deg, #9945FF 0%, #14F195 100%)',
+        },
+        
+        // Semantic color system
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+      },
+      
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      
+      fontFamily: {
+        sans: ["var(--font-sans)", ...defaultTheme.fontFamily.sans],
+        mono: ["var(--font-mono)", ...defaultTheme.fontFamily.mono],
+      },
+      
+      keyframes: {
+        "accordion-down": {
+          from: { height: 0 },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: 0 },
+        },
+        "fade-in": {
+          from: { opacity: 0 },
+          to: { opacity: 1 },
+        },
+        "slide-in-from-top": {
+          from: { transform: "translateY(-100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        "pulse-subtle": {
+          "0%, 100%": { opacity: 1 },
+          "50%": { opacity: 0.8 },
+        },
+        "typing": {
+          "0%": { width: 0 },
+          "100%": { width: "100%" },
+        },
+        "blink": {
+          "0%, 50%": { opacity: 1 },
+          "51%, 100%": { opacity: 0 },
+        },
+      },
+      
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fade-in 0.2s ease-in-out",
+        "slide-in-from-top": "slide-in-from-top 0.3s ease-out",
+        "pulse-subtle": "pulse-subtle 2s infinite",
+        "typing": "typing 2s steps(20) infinite",
+        "blink": "blink 1s infinite",
+      },
+      
+      // Custom spacing scale
+      spacing: {
+        '18': '4.5rem',
+        '88': '22rem',
+      },
+      
+      // Typography scale
+      fontSize: {
+        '2xs': ['0.625rem', { lineHeight: '0.75rem' }],
+        '3xl': ['1.875rem', { lineHeight: '2.25rem' }],
+      },
+      
+      // Z-index scale
+      zIndex: {
+        '60': '60',
+        '70': '70',
+        '80': '80',
+        '90': '90',
+        '100': '100',
+      },
+    },
+  },
+  plugins: [
+    require("tailwindcss-animate"),
+    require("@tailwindcss/typography"),
+    require("@tailwindcss/forms"),
+    require("@tailwindcss/container-queries"),
+  ],
+};
+```
+
+### CSS Variables (`globals.css`)
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 262 80% 50%; /* Solana purple */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 196 100% 47%; /* Solana cyan */
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 262 80% 50%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 262 80% 50%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 196 100% 47%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 262 80% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
+  }
+  
+  /* Selection styling */
+  ::selection {
+    @apply bg-primary/20;
+  }
+  
+  /* Focus visible for accessibility */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+```
+
+## Component-Specific Styles
+
+### Chat Interface Styles
+
+```css
+@layer components {
+  /* Chat container */
+  .chat-container {
+    @apply flex h-screen flex-col bg-background;
+  }
+  
+  /* Message bubbles */
+  .message-bubble {
+    @apply relative max-w-[80%] rounded-lg px-4 py-2 shadow-sm;
+  }
+  
+  .message-bubble--user {
+    @apply ml-auto bg-primary text-primary-foreground;
+  }
+  
+  .message-bubble--assistant {
+    @apply mr-auto bg-muted text-muted-foreground;
+  }
+  
+  .message-bubble--system {
+    @apply mx-auto bg-secondary/10 text-secondary-foreground text-sm;
+  }
+  
+  /* Streaming text effect */
+  .streaming-text {
+    @apply relative;
+  }
+  
+  .streaming-text::after {
+    content: '|';
+    @apply absolute animate-blink text-primary;
+  }
+  
+  /* Chat input */
+  .chat-input {
+    @apply min-h-[44px] max-h-[200px] resize-none border-0 bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:ring-0;
+  }
+  
+  /* File upload area */
+  .file-upload-area {
+    @apply border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center transition-colors;
+  }
+  
+  .file-upload-area--dragover {
+    @apply border-primary bg-primary/5;
+  }
+  
+  /* Wallet connection button */
+  .wallet-button {
+    @apply inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-solana-purple to-solana-green px-4 py-2 text-white font-medium transition-all hover:scale-105 hover:shadow-lg;
+  }
+  
+  /* Status indicators */
+  .status-indicator {
+    @apply inline-flex h-2 w-2 rounded-full;
+  }
+  
+  .status-indicator--online {
+    @apply bg-green-500 animate-pulse;
+  }
+  
+  .status-indicator--offline {
+    @apply bg-red-500;
+  }
+  
+  .status-indicator--pending {
+    @apply bg-yellow-500 animate-pulse;
+  }
+  
+  /* Loading states */
+  .skeleton {
+    @apply animate-pulse bg-muted rounded;
+  }
+  
+  .skeleton-text {
+    @apply skeleton h-4 mb-2;
+  }
+  
+  .skeleton-text--sm {
+    @apply h-3;
+  }
+  
+  .skeleton-text--lg {
+    @apply h-5;
+  }
+}
+```
+
+### Utility Classes
+
+```css
+@layer utilities {
+  /* Text utilities */
+  .text-gradient {
+    @apply bg-gradient-to-r from-solana-purple to-solana-green bg-clip-text text-transparent;
+  }
+  
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Layout utilities */
+  .center {
+    @apply flex items-center justify-center;
+  }
+  
+  .center-x {
+    @apply flex justify-center;
+  }
+  
+  .center-y {
+    @apply flex items-center;
+  }
+  
+  /* Spacing utilities */
+  .space-y-px > * + * {
+    @apply mt-px;
+  }
+  
+  /* Interactive utilities */
+  .interactive {
+    @apply cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .interactive-subtle {
+    @apply cursor-pointer transition-colors duration-200;
+  }
+  
+  /* Glass morphism effect */
+  .glass {
+    @apply backdrop-blur-md bg-white/10 border border-white/20;
+  }
+  
+  .glass-dark {
+    @apply backdrop-blur-md bg-black/10 border border-white/10;
+  }
+  
+  /* Truncate with custom lines */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  /* Custom shadows */
+  .shadow-glow {
+    @apply shadow-lg shadow-primary/25;
+  }
+  
+  .shadow-inner-subtle {
+    box-shadow: inset 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+}
+```
+
+## Responsive Design System
+
+### Breakpoint Strategy (Mobile-First)
+
+```typescript
+// Tailwind breakpoints
+const breakpoints = {
+  sm: '640px',   // Phones (landscape)
+  md: '768px',   // Tablets
+  lg: '1024px',  // Desktop
+  xl: '1280px',  // Large desktop
+  '2xl': '1536px' // Extra large
+} as const;
+
+// Usage examples
+<div className="
+  grid gap-4 
+  grid-cols-1 
+  sm:grid-cols-2 
+  lg:grid-cols-3 
+  xl:grid-cols-4
+">
+  {/* Content adapts to screen size */}
+</div>
+```
+
+### Container Queries
+
+```css
+/* Container-based responsive design */
+.chat-container {
+  container-type: inline-size;
+}
+
+@container (min-width: 400px) {
+  .message-bubble {
+    @apply max-w-[70%];
+  }
+}
+
+@container (min-width: 600px) {
+  .chat-input {
+    @apply rounded-full px-6;
+  }
+}
+```
+
+### Typography Scale
+
+```typescript
+// Responsive typography system
+const typography = {
+  display: 'text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight',
+  heading: 'text-2xl sm:text-3xl lg:text-4xl font-semibold',
+  title: 'text-lg sm:text-xl lg:text-2xl font-medium',
+  body: 'text-sm sm:text-base leading-relaxed',
+  caption: 'text-xs sm:text-sm text-muted-foreground',
+} as const;
+```
+
+## Dark Mode Implementation
+
+### Manual Toggle Strategy
+
+```typescript
+// Theme provider component
+'use client';
+
+import { createContext, useContext, useEffect, useState } from 'react';
+
+type Theme = 'dark' | 'light' | 'system';
+
+interface ThemeProviderContext {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+}
+
+const ThemeProviderContext = createContext<ThemeProviderContext | undefined>(undefined);
+
+export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+  const [theme, setTheme] = useState<Theme>('system');
+  
+  useEffect(() => {
+    const root = window.document.documentElement;
+    
+    root.classList.remove('light', 'dark');
+    
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+      
+      root.classList.add(systemTheme);
+      return;
+    }
+    
+    root.classList.add(theme);
+  }, [theme]);
+  
+  return (
+    <ThemeProviderContext.Provider value={{ theme, setTheme }}>
+      {children}
+    </ThemeProviderContext.Provider>
+  );
+}
+
+export const useTheme = () => {
+  const context = useContext(ThemeProviderContext);
+  
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  
+  return context;
+};
+```
+
+### Theme Toggle Component
+
+```typescript
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <SunIcon className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <MoonIcon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => setTheme('light')}>
+          Light
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('dark')}>
+          Dark
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('system')}>
+          System
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+```
+
+## Performance Optimization
+
+### CSS Purging & JIT
+
+```javascript
+// Automatic purging with JIT mode (default in 3.4)
+module.exports = {
+  mode: 'jit', // Just-in-Time compilation
+  purge: {
+    enabled: process.env.NODE_ENV === 'production',
+    content: ['./app/**/*.{js,ts,jsx,tsx}'],
+    options: {
+      safelist: [
+        // Dynamic classes that might be purged incorrectly
+        'bg-green-500',
+        'bg-red-500',
+        'bg-yellow-500',
+        /^message-bubble--/,
+        /^status-indicator--/,
+      ],
+    },
+  },
+};
+```
+
+### CSS-in-JS Integration with `clsx`
+
+```typescript
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+// Usage in components
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "underline-offset-4 hover:underline text-primary",
+      },
+      size: {
+        default: "h-10 py-2 px-4",
+        sm: "h-9 px-3 rounded-md",
+        lg: "h-11 px-8 rounded-md",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+);
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, ...props }, ref) => {
+    return (
+      <button
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    );
+  }
+);
+```
+
+## Custom Design Tokens
+
+### Spacing System
+
+```javascript
+// Custom spacing scale
+const spacing = {
+  px: '1px',
+  0: '0px',
+  0.5: '0.125rem',  // 2px
+  1: '0.25rem',     // 4px
+  1.5: '0.375rem',  // 6px
+  2: '0.5rem',      // 8px
+  2.5: '0.625rem',  // 10px
+  3: '0.75rem',     // 12px
+  3.5: '0.875rem',  // 14px
+  4: '1rem',        // 16px
+  5: '1.25rem',     // 20px
+  6: '1.5rem',      // 24px
+  7: '1.75rem',     // 28px
+  8: '2rem',        // 32px
+  9: '2.25rem',     // 36px
+  10: '2.5rem',     // 40px
+  11: '2.75rem',    // 44px
+  12: '3rem',       // 48px
+  14: '3.5rem',     // 56px
+  16: '4rem',       // 64px
+  20: '5rem',       // 80px
+  24: '6rem',       // 96px
+  28: '7rem',       // 112px
+  32: '8rem',       // 128px
+  36: '9rem',       // 144px
+  40: '10rem',      // 160px
+  44: '11rem',      // 176px
+  48: '12rem',      // 192px
+  52: '13rem',      // 208px
+  56: '14rem',      // 224px
+  60: '15rem',      // 240px
+  64: '16rem',      // 256px
+  72: '18rem',      // 288px
+  80: '20rem',      // 320px
+  96: '24rem',      // 384px
+};
+```
+
+### Shadow System
+
+```javascript
+const boxShadow = {
+  sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+  DEFAULT: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
+  md: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+  lg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+  xl: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+  '2xl': '0 25px 50px -12px rgb(0 0 0 / 0.25)',
+  inner: 'inset 0 2px 4px 0 rgb(0 0 0 / 0.05)',
+  none: 'none',
+  // Custom shadows
+  glow: '0 0 20px rgb(153 69 255 / 0.3)',
+  'glow-sm': '0 0 10px rgb(153 69 255 / 0.2)',
+  'glow-lg': '0 0 30px rgb(153 69 255 / 0.4)',
+};
+```
+
+## Design Patterns
+
+### Card Components
+
+```typescript
+// Consistent card styling
+const cardVariants = cva(
+  "rounded-lg border bg-card text-card-foreground shadow-sm",
+  {
+    variants: {
+      variant: {
+        default: "",
+        elevated: "shadow-md",
+        interactive: "transition-all hover:shadow-md cursor-pointer",
+        outline: "border-2",
+      },
+      padding: {
+        none: "",
+        sm: "p-4",
+        md: "p-6",
+        lg: "p-8",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      padding: "md",
+    },
+  }
+);
+```
+
+### Layout Patterns
+
+```typescript
+// Common layout patterns
+const layouts = {
+  // Sidebar layout
+  sidebar: "grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6",
+  
+  // Chat layout
+  chat: "flex h-screen flex-col",
+  chatHeader: "border-b p-4 flex items-center justify-between",
+  chatBody: "flex-1 overflow-y-auto p-4 space-y-4",
+  chatFooter: "border-t p-4",
+  
+  // Modal layout
+  modal: "fixed inset-0 z-50 flex items-center justify-center p-4",
+  modalOverlay: "fixed inset-0 bg-black/50",
+  modalContent: "relative bg-background rounded-lg shadow-lg max-w-md w-full max-h-[90vh] overflow-y-auto",
+  
+  // Grid layouts
+  grid1: "grid grid-cols-1 gap-4",
+  grid2: "grid grid-cols-1 sm:grid-cols-2 gap-4",
+  grid3: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4",
+  grid4: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
+} as const;
+```
+
+### State-Based Styling
+
+```typescript
+// Loading states
+const loadingStates = {
+  skeleton: "animate-pulse bg-muted rounded",
+  spinner: "animate-spin rounded-full border-2 border-primary border-t-transparent",
+  dots: "flex space-x-1",
+  shimmer: "animate-pulse bg-gradient-to-r from-muted via-muted-foreground/20 to-muted bg-[length:200%_100%] animate-[shimmer_1.5s_infinite]",
+} as const;
+
+// Interactive states
+const interactiveStates = {
+  default: "transition-colors duration-200",
+  hover: "hover:bg-accent hover:text-accent-foreground",
+  active: "active:scale-95",
+  focus: "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  disabled: "disabled:opacity-50 disabled:pointer-events-none",
+} as const;
+```
+
+## CSS Architecture Best Practices
+
+### Layer Organization
+
+```css
+/* Layer ordering for proper cascade */
+@layer base, components, utilities;
+
+/* Base layer: Reset styles and design tokens */
+@layer base {
+  /* Global styles */
+}
+
+/* Components layer: Reusable component styles */
+@layer components {
+  /* Component-specific styles */
+}
+
+/* Utilities layer: Single-purpose utility classes */
+@layer utilities {
+  /* Custom utilities */
+}
+```
+
+### BEM-style Component Organization
+
+```typescript
+// Component-scoped styling patterns
+const messageStyles = {
+  // Block
+  message: "flex gap-3 p-4",
+  
+  // Elements  
+  messageAvatar: "h-8 w-8 rounded-full",
+  messageContent: "flex-1 space-y-1",
+  messageText: "text-sm leading-relaxed",
+  messageTime: "text-xs text-muted-foreground",
+  
+  // Modifiers
+  messageUser: "flex-row-reverse",
+  messageAssistant: "",
+  messageSystem: "justify-center",
+} as const;
+```
+
+### Performance Considerations
+
+```javascript
+// Optimize for production builds
+module.exports = {
+  // Enable CSS minification
+  experimental: {
+    optimizeCss: true,
+  },
+  
+  // Purge unused styles
+  purge: {
+    enabled: process.env.NODE_ENV === 'production',
+    layers: ['components', 'utilities'],
+    mode: 'all',
+    preserveHtmlElements: false,
+    options: {
+      keyframes: true,
+      fontFace: true,
+    },
+  },
+};
+```
+
+## Related Files
+
+- [Component Architecture](./components.mdc) - Component styling patterns
+- [Accessibility Guidelines](./accessibility.mdc) - Accessible styling practices
+- [Animations](./animations.mdc) - Motion and transition styling
+- [State Management](./state-management.mdc) - Dynamic styling patterns

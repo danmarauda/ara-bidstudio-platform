@@ -1,0 +1,26 @@
+active_modes:
+  - nextjs-14
+  - monorepo-bun
+  - continuous-verification
+  
+mode_settings:
+  nextjs-14:
+    version: "14.x"
+    app_router: true
+    server_actions: true
+    strict_mode: true
+  
+  monorepo-bun:
+    workspaces:
+      - "apps/*"
+      - "packages/*"
+    turbo_config: true
+    shared_configs: true
+  
+  continuous-verification:
+    kluster_ai: true
+    auto_verify_on_save: true
+    security_first: true
+    
+auto_activate: true
+context_aware: true

@@ -1,0 +1,716 @@
+---
+category: frontend
+subcategory: components
+tags: [react, components, typescript, composition, patterns]
+cursor:
+  context_window: 8192
+  temperature: 0.6
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./index.mdc", "./styling.mdc"]
+  exports: ["component-patterns", "composition-rules"]
+  references: ["./state-management.mdc", "./accessibility.mdc"]
+---
+
+# Component Architecture & Composition Patterns
+
+## Component Design Philosophy
+
+### Atomic Design Principles
+- **Atoms**: Basic HTML elements with styling (Button, Input, Text)
+- **Molecules**: Simple combinations of atoms (SearchInput, MessageBubble)
+- **Organisms**: Complex UI components (ChatInterface, WalletPanel)
+- **Templates**: Layout structures without specific content
+- **Pages**: Complete page implementations
+
+### Composition Over Inheritance
+```typescript
+// ✅ Good: Composition pattern
+interface MessageProps {
+  content: string;
+  author: User;
+  timestamp: Date;
+  actions?: ReactNode;
+}
+
+function Message({ content, author, timestamp, actions }: MessageProps) {
+  return (
+    <div className="message">
+      <MessageHeader author={author} timestamp={timestamp} />
+      <MessageContent content={content} />
+      {actions && <MessageActions>{actions}</MessageActions>}
+    </div>
+  );
+}
+
+// ❌ Avoid: Inheritance pattern
+class BaseMessage extends Component {
+  // Avoid class inheritance
+}
+```
+
+## Component Categories
+
+### 1. Base UI Components (`/components/ui/`)
+
+#### Button Component
+```typescript
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'default' | 'primary' | 'secondary' | 'ghost' | 'link';
+  size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
+}
+
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ variant = 'default', size = 'md', loading, leftIcon, rightIcon, children, className, ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        className={cn(buttonVariants({ variant, size }), className)}
+        disabled={loading || props.disabled}
+        {...props}
+      >
+        {loading && <Spinner className="mr-2 h-4 w-4" />}
+        {leftIcon && !loading && <span className="mr-2">{leftIcon}</span>}
+        {children}
+        {rightIcon && <span className="ml-2">{rightIcon}</span>}
+      </button>
+    );
+  }
+);
+```
+
+#### Input Component
+```typescript
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+  error?: string;
+  helper?: string;
+  leftAddon?: ReactNode;
+  rightAddon?: ReactNode;
+}
+
+const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ label, error, helper, leftAddon, rightAddon, className, ...props }, ref) => {
+    const inputId = useId();
+    
+    return (
+      <div className="space-y-2">
+        {label && (
+          <label htmlFor={inputId} className="text-sm font-medium">
+            {label}
+          </label>
+        )}
+        <div className="relative">
+          {leftAddon && (
+            <div className="absolute left-3 top-1/2 -translate-y-1/2">
+              {leftAddon}
+            </div>
+          )}
+          <input
+            id={inputId}
+            ref={ref}
+            className={cn(
+              "w-full rounded-md border border-border bg-background px-3 py-2",
+              leftAddon && "pl-10",
+              rightAddon && "pr-10",
+              error && "border-destructive",
+              className
+            )}
+            {...props}
+          />
+          {rightAddon && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              {rightAddon}
+            </div>
+          )}
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {helper && !error && <p className="text-sm text-muted-foreground">{helper}</p>}
+      </div>
+    );
+  }
+);
+```
+
+### 2. Chat Components (`/components/chat/`)
+
+#### MessageBubble Component
+```typescript
+interface MessageBubbleProps {
+  message: {
+    id: string;
+    content: string;
+    role: 'user' | 'assistant' | 'system';
+    timestamp: Date;
+    status?: 'sending' | 'sent' | 'failed';
+  };
+  isStreaming?: boolean;
+  onRetry?: () => void;
+}
+
+function MessageBubble({ message, isStreaming, onRetry }: MessageBubbleProps) {
+  const isUser = message.role === 'user';
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        "group flex gap-3 px-4 py-6",
+        isUser ? "flex-row-reverse" : "flex-row"
+      )}
+    >
+      <Avatar className="h-8 w-8 shrink-0">
+        {isUser ? <UserIcon /> : <BotIcon />}
+      </Avatar>
+      
+      <div className={cn("flex-1 space-y-2", isUser && "text-right")}>
+        <div
+          className={cn(
+            "inline-block max-w-[80%] rounded-lg px-4 py-2",
+            isUser
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted"
+          )}
+        >
+          {isStreaming ? (
+            <StreamingContent content={message.content} />
+          ) : (
+            <MessageContent content={message.content} />
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <time>{formatTime(message.timestamp)}</time>
+          <MessageStatus status={message.status} onRetry={onRetry} />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+```
+
+#### ChatInput Component
+```typescript
+interface ChatInputProps {
+  onSend: (message: string, files?: File[]) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  maxLength?: number;
+}
+
+function ChatInput({ onSend, disabled, placeholder = "Type a message...", maxLength = 4000 }: ChatInputProps) {
+  const [message, setMessage] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  const handleSubmit = useCallback(() => {
+    if (!message.trim()) return;
+    
+    onSend(message.trim(), files.length > 0 ? files : undefined);
+    setMessage('');
+    setFiles([]);
+  }, [message, files, onSend]);
+  
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }, [handleSubmit]);
+  
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [message]);
+  
+  return (
+    <div className="border-t bg-background p-4">
+      <div className="flex flex-col gap-2">
+        {files.length > 0 && (
+          <FilePreviewList files={files} onRemove={setFiles} />
+        )}
+        
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              disabled={disabled}
+              maxLength={maxLength}
+              rows={1}
+              className="max-h-[200px] min-h-[44px] w-full resize-none border-0 bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:ring-0"
+            />
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <FileUploadButton 
+              onFilesSelected={setFiles} 
+              disabled={disabled}
+              accept=".pdf,.txt,.md,.doc,.docx"
+            />
+            
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSubmit}
+              disabled={disabled || !message.trim()}
+            >
+              <SendIcon className="h-4 w-4" />
+              <span className="sr-only">Send message</span>
+            </Button>
+          </div>
+        </div>
+        
+        {maxLength && (
+          <div className="text-right text-xs text-muted-foreground">
+            {message.length}/{maxLength}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+### 3. Wallet Components (`/components/wallet/`)
+
+#### WalletButton Component
+```typescript
+interface WalletButtonProps {
+  variant?: 'connect' | 'disconnect' | 'switch';
+  showBalance?: boolean;
+  showAddress?: boolean;
+}
+
+function WalletButton({ variant = 'connect', showBalance, showAddress }: WalletButtonProps) {
+  const { wallet, connect, disconnect, publicKey, balance } = useWallet();
+  const [isOpen, setIsOpen] = useState(false);
+  
+  if (!wallet) {
+    return (
+      <WalletMultiButton className="btn-primary">
+        Connect Wallet
+      </WalletMultiButton>
+    );
+  }
+  
+  return (
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className="gap-2">
+          <WalletIcon className="h-4 w-4" />
+          
+          {showAddress && publicKey && (
+            <span className="hidden sm:inline">
+              {truncateAddress(publicKey.toString())}
+            </span>
+          )}
+          
+          {showBalance && balance !== null && (
+            <span className="font-mono text-sm">
+              {formatBalance(balance)} SOL
+            </span>
+          )}
+          
+          <ChevronDownIcon className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>
+          {wallet.adapter.name}
+        </DropdownMenuLabel>
+        
+        <DropdownMenuSeparator />
+        
+        <DropdownMenuItem asChild>
+          <a
+            href={`https://solscan.io/account/${publicKey?.toString()}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2"
+          >
+            <ExternalLinkIcon className="h-4 w-4" />
+            View on Solscan
+          </a>
+        </DropdownMenuItem>
+        
+        <DropdownMenuItem onClick={() => navigator.clipboard.writeText(publicKey?.toString() || '')}>
+          <CopyIcon className="mr-2 h-4 w-4" />
+          Copy Address
+        </DropdownMenuItem>
+        
+        <DropdownMenuSeparator />
+        
+        <DropdownMenuItem
+          onClick={() => disconnect()}
+          className="text-destructive focus:text-destructive"
+        >
+          <LogOutIcon className="mr-2 h-4 w-4" />
+          Disconnect
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+```
+
+## Component Patterns
+
+### Server vs Client Components
+
+```typescript
+// ✅ Server Component (default)
+async function ChatHistory({ userId }: { userId: string }) {
+  // Data fetching happens on server
+  const messages = await db.message.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' }
+  });
+  
+  return (
+    <div className="space-y-4">
+      {messages.map(message => (
+        <MessageBubble key={message.id} message={message} />
+      ))}
+    </div>
+  );
+}
+
+// ✅ Client Component (interactive)
+'use client';
+
+function InteractiveChat() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  
+  return (
+    <div className="flex h-full flex-col">
+      <ChatMessages messages={messages} isTyping={isTyping} />
+      <ChatInput onSend={handleSendMessage} />
+    </div>
+  );
+}
+```
+
+### Compound Components Pattern
+
+```typescript
+// Flexible component composition
+function ChatInterface({ children }: { children: ReactNode }) {
+  const context = useChatContext();
+  
+  return (
+    <ChatProvider value={context}>
+      <div className="flex h-full flex-col">
+        {children}
+      </div>
+    </ChatProvider>
+  );
+}
+
+// Sub-components
+ChatInterface.Header = function ChatHeader({ title }: { title: string }) {
+  return (
+    <header className="border-b p-4">
+      <h1 className="font-semibold">{title}</h1>
+    </header>
+  );
+};
+
+ChatInterface.Messages = function ChatMessages() {
+  const { messages } = useChatContext();
+  return (
+    <div className="flex-1 overflow-y-auto p-4">
+      {messages.map(message => (
+        <MessageBubble key={message.id} message={message} />
+      ))}
+    </div>
+  );
+};
+
+ChatInterface.Input = ChatInput;
+
+// Usage
+<ChatInterface>
+  <ChatInterface.Header title="AI Assistant" />
+  <ChatInterface.Messages />
+  <ChatInterface.Input onSend={handleSend} />
+</ChatInterface>
+```
+
+### Render Props Pattern
+
+```typescript
+interface ChatStreamProps {
+  messageId: string;
+  children: (props: {
+    content: string;
+    isComplete: boolean;
+    error?: string;
+  }) => ReactNode;
+}
+
+function ChatStream({ messageId, children }: ChatStreamProps) {
+  const { content, isComplete, error } = useMessageStream(messageId);
+  
+  return <>{children({ content, isComplete, error })}</>;
+}
+
+// Usage
+<ChatStream messageId={message.id}>
+  {({ content, isComplete, error }) => (
+    <div className={cn("message", isComplete && "complete")}>
+      <Markdown>{content}</Markdown>
+      {!isComplete && <TypingIndicator />}
+      {error && <ErrorMessage error={error} />}
+    </div>
+  )}
+</ChatStream>
+```
+
+## Component Guidelines
+
+### Props Interface Design
+
+```typescript
+// ✅ Good: Explicit interface with clear types
+interface MessageProps {
+  message: {
+    id: string;
+    content: string;
+    role: 'user' | 'assistant';
+    timestamp: Date;
+  };
+  variant?: 'bubble' | 'inline';
+  showTimestamp?: boolean;
+  onEdit?: (id: string, content: string) => void;
+  onDelete?: (id: string) => void;
+}
+
+// ❌ Avoid: Generic or unclear props
+interface BadProps {
+  data: any;
+  config?: object;
+  handlers?: Record<string, Function>;
+}
+```
+
+### Ref Forwarding
+
+```typescript
+const CustomInput = forwardRef<HTMLInputElement, InputProps>(
+  (props, ref) => {
+    return <input ref={ref} {...props} />;
+  }
+);
+
+CustomInput.displayName = 'CustomInput';
+```
+
+### Error Boundaries
+
+```typescript
+class ComponentErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ComponentType<{ error: Error }> },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Component error:', error, errorInfo);
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      const Fallback = this.props.fallback || DefaultErrorFallback;
+      return <Fallback error={this.state.error!} />;
+    }
+    
+    return this.props.children;
+  }
+}
+```
+
+## Testing Components
+
+### Unit Testing with Testing Library
+
+```typescript
+import { render, screen, fireEvent } from '@testing-library/react';
+import { ChatInput } from './ChatInput';
+
+describe('ChatInput', () => {
+  it('should call onSend when Enter is pressed', () => {
+    const mockOnSend = jest.fn();
+    
+    render(<ChatInput onSend={mockOnSend} />);
+    
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'Hello world' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    
+    expect(mockOnSend).toHaveBeenCalledWith('Hello world', undefined);
+  });
+  
+  it('should not send empty messages', () => {
+    const mockOnSend = jest.fn();
+    
+    render(<ChatInput onSend={mockOnSend} />);
+    
+    const textarea = screen.getByRole('textbox');
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    
+    expect(mockOnSend).not.toHaveBeenCalled();
+  });
+});
+```
+
+### Storybook Stories
+
+```typescript
+import type { Meta, StoryObj } from '@storybook/react';
+import { MessageBubble } from './MessageBubble';
+
+const meta: Meta<typeof MessageBubble> = {
+  title: 'Chat/MessageBubble',
+  component: MessageBubble,
+  parameters: {
+    layout: 'padded',
+  },
+  argTypes: {
+    message: {
+      control: { type: 'object' },
+    },
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const UserMessage: Story = {
+  args: {
+    message: {
+      id: '1',
+      content: 'Hello, how can you help me today?',
+      role: 'user',
+      timestamp: new Date(),
+      status: 'sent',
+    },
+  },
+};
+
+export const AssistantMessage: Story = {
+  args: {
+    message: {
+      id: '2',
+      content: 'I can help you with various tasks. What would you like to know?',
+      role: 'assistant',
+      timestamp: new Date(),
+    },
+  },
+};
+
+export const StreamingMessage: Story = {
+  args: {
+    message: {
+      id: '3',
+      content: 'This is a streaming response that appears gradually...',
+      role: 'assistant',
+      timestamp: new Date(),
+    },
+    isStreaming: true,
+  },
+};
+```
+
+## Performance Optimization
+
+### Memoization Strategies
+
+```typescript
+// Memoize expensive components
+const MessageBubble = memo(({ message, isStreaming }: MessageBubbleProps) => {
+  return (
+    <div className="message-bubble">
+      {/* Component content */}
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison for optimal re-renders
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.message.content === nextProps.message.content &&
+    prevProps.isStreaming === nextProps.isStreaming
+  );
+});
+
+// Memoize callback functions
+const ChatInterface = () => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  
+  const handleSendMessage = useCallback((content: string) => {
+    setMessages(prev => [...prev, createMessage(content)]);
+  }, []);
+  
+  return (
+    <div>
+      {messages.map(message => (
+        <MessageBubble key={message.id} message={message} />
+      ))}
+      <ChatInput onSend={handleSendMessage} />
+    </div>
+  );
+};
+```
+
+### Lazy Loading
+
+```typescript
+// Dynamic component imports
+const FileUploader = lazy(() => import('./FileUploader'));
+const AdvancedSettings = lazy(() => import('./AdvancedSettings'));
+
+function ChatInterface() {
+  const [showUploader, setShowUploader] = useState(false);
+  
+  return (
+    <div>
+      {/* Always-visible components */}
+      <ChatMessages />
+      <ChatInput />
+      
+      {/* Lazy-loaded components */}
+      <Suspense fallback={<div>Loading...</div>}>
+        {showUploader && <FileUploader />}
+      </Suspense>
+    </div>
+  );
+}
+```
+
+## Related Files
+
+- [Styling System](./styling.mdc) - TailwindCSS integration
+- [State Management](./state-management.mdc) - Component state patterns  
+- [Accessibility](./accessibility.mdc) - Accessible component practices
+- [Animations](./animations.mdc) - Motion and transition patterns

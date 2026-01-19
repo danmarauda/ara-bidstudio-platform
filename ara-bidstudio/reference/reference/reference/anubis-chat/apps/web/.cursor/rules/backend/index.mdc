@@ -1,0 +1,677 @@
+---
+category: backend
+subcategory: architecture-overview
+tags: [architecture, backend, convex, qdrant, vercel-edge, overview]
+cursor:
+  context_window: 8192
+  temperature: 0.5
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../architecture/system-design.mdc"]
+  exports: ["backend-patterns", "integration-strategies", "performance-guidelines"]
+  references: [
+    "./convex-patterns.mdc",
+    "./database-schema.mdc", 
+    "./api-design.mdc",
+    "./vector-search.mdc",
+    "./edge-functions.mdc",
+    "./caching.mdc",
+    "./queues.mdc"
+  ]
+---
+
+# Backend Architecture Overview - abubis.chat
+
+## System Architecture Summary
+
+**Real-time First**: Convex provides instant data sync with automatic type generation
+**Edge-Optimized**: Vercel Edge Functions for <50ms global response times
+**Vector-Native**: Qdrant v1.9+ with hybrid search for advanced RAG capabilities
+**Multi-Layer Caching**: Edge → Redis → Convex for optimal performance
+
+## Technology Stack Overview
+
+### Core Infrastructure
+```yaml
+Database:
+  Primary: Convex v1.7+ (real-time, ACID transactions)
+  Vector: Qdrant v1.9+ (semantic search, embeddings)
+  Cache: Redis via Upstash (multi-layer caching)
+
+Compute:
+  Edge: Vercel Edge Functions (global distribution)
+  Serverless: Convex Actions (background processing)
+  Queue: Convex Scheduler (native job processing)
+
+Authentication:
+  Method: Solana wallet signatures
+  Validation: Ed25519 signature verification
+  Isolation: Wallet-based row-level security
+```
+
+### Performance Characteristics
+```yaml
+Latency:
+  Edge Functions: <50ms globally
+  Convex Queries: <100ms average
+  Cache Hits: <10ms
+  Vector Search: <200ms
+
+Throughput:
+  API Requests: 10K+ req/sec
+  Real-time Updates: 1M+ concurrent connections
+  Vector Operations: 1K+ searches/sec
+  Background Jobs: 100+ jobs/minute
+
+Availability:
+  Uptime: 99.9% SLA
+  Data Durability: 99.999999999%
+  Global Distribution: 70+ edge locations
+  Auto-scaling: Unlimited horizontal scaling
+```
+
+## Data Flow Architecture
+
+### Request Processing Pipeline
+```mermaid
+graph TD
+    A[Client Request] --> B[Edge Function]
+    B --> C{Authentication}
+    C -->|Valid| D[Rate Limiting]
+    C -->|Invalid| E[401 Unauthorized]
+    D -->|Within Limits| F[Edge Cache Check]
+    D -->|Rate Limited| G[429 Too Many Requests]
+    F -->|Hit| H[Return Cached Response]
+    F -->|Miss| I[Convex Query/Mutation]
+    I --> J[Database Operation]
+    J --> K[Background Jobs Trigger]
+    K --> L[Response + Cache Update]
+    L --> M[Real-time Sync]
+```
+
+### Data Storage Strategy
+```yaml
+Hot Data (Edge Cache):
+  - User profiles and preferences
+  - Recent chat messages (last 20)
+  - Search results and suggestions
+  - TTL: 1-5 minutes
+
+Warm Data (Redis):
+  - Chat history (last 7 days)
+  - Document metadata
+  - User analytics and usage stats
+  - TTL: 5-60 minutes
+
+Cold Data (Convex):
+  - Complete chat archives
+  - Document content and chunks
+  - User account data
+  - System configuration
+
+Vector Data (Qdrant):
+  - Message embeddings for context
+  - Document chunk embeddings for RAG
+  - Semantic similarity indexes
+  - Hybrid search capabilities
+```
+
+## Component Integration Patterns
+
+### Convex Integration Layer
+```typescript
+// Central integration patterns for all components
+
+// 1. Real-time Subscription Management
+class RealtimeManager {
+  // Manage WebSocket connections per wallet
+  private connections = new Map<string, Set<WebSocket>>();
+  
+  subscribeToChat(walletAddress: string, chatId: string) {
+    // Subscribe to real-time updates for specific chat
+    return convex.subscribe("api.messages.subscribeToChatMessages", {
+      chatId,
+      walletAddress,
+    });
+  }
+  
+  broadcastUpdate(walletAddress: string, update: any) {
+    // Push updates to all connected clients for a wallet
+    const userConnections = this.connections.get(walletAddress) || new Set();
+    userConnections.forEach(ws => ws.send(JSON.stringify(update)));
+  }
+}
+
+// 2. Cross-Service Event Bus
+class EventBus {
+  async publishEvent(event: {
+    type: string;
+    walletAddress: string;
+    data: any;
+    timestamp: number;
+  }) {
+    // Trigger cascading updates across services
+    switch (event.type) {
+      case "message.created":
+        await this.triggerAIResponse(event);
+        await this.updateChatMetadata(event);
+        await this.invalidateCache(event.walletAddress, "chat.*");
+        break;
+        
+      case "document.uploaded":
+        await this.scheduleProcessing(event);
+        await this.invalidateCache(event.walletAddress, "documents.*");
+        break;
+        
+      case "user.subscription.updated":
+        await this.updateRateLimits(event);
+        await this.invalidateCache(event.walletAddress, "profile.*");
+        break;
+    }
+  }
+}
+```
+
+### Multi-Service Coordination
+```typescript
+// Service orchestration patterns
+
+interface ServiceRegistry {
+  convex: ConvexService;
+  qdrant: QdrantService; 
+  redis: RedisService;
+  edge: EdgeService;
+}
+
+class BackendOrchestrator {
+  constructor(private services: ServiceRegistry) {}
+  
+  // Coordinated chat message flow
+  async processNewMessage(walletAddress: string, chatId: string, content: string) {
+    const operations = await Promise.allSettled([
+      // 1. Store message in Convex
+      this.services.convex.createMessage({ walletAddress, chatId, content }),
+      
+      // 2. Generate embedding for vector search
+      this.services.qdrant.scheduleEmbedding({ content, walletAddress }),
+      
+      // 3. Invalidate related cache entries
+      this.services.redis.invalidatePattern(walletAddress, "chat.*"),
+      
+      // 4. Update edge cache with new message
+      this.services.edge.updateChatCache(walletAddress, chatId),
+    ]);
+    
+    // Handle any failed operations
+    const failures = operations
+      .map((op, index) => ({ index, op }))
+      .filter(({ op }) => op.status === "rejected");
+      
+    if (failures.length > 0) {
+      console.error("Message processing failures:", failures);
+      // Implement compensation logic
+    }
+    
+    return operations[0].status === "fulfilled" ? operations[0].value : null;
+  }
+  
+  // Coordinated document processing
+  async processDocumentUpload(walletAddress: string, document: Document) {
+    // Sequential processing with checkpoints
+    try {
+      // 1. Store document metadata
+      const documentId = await this.services.convex.createDocument({
+        walletAddress,
+        ...document.metadata
+      });
+      
+      // 2. Queue document processing job
+      await this.services.convex.queueJob({
+        type: "document_processing",
+        priority: "high",
+        data: { documentId, walletAddress },
+      });
+      
+      // 3. Warm cache for document list
+      await this.services.redis.warmDocumentCache(walletAddress);
+      
+      return documentId;
+      
+    } catch (error) {
+      // Rollback on failure
+      if (documentId) {
+        await this.services.convex.deleteDocument(documentId);
+      }
+      throw error;
+    }
+  }
+}
+```
+
+## Security Architecture
+
+### Multi-Layer Security Model
+```typescript
+// Security enforcement at each layer
+
+// 1. Edge Function Authentication
+class EdgeAuthenticator {
+  async validateRequest(request: Request): Promise<{
+    walletAddress: string;
+    isValid: boolean;
+    reason?: string;
+  }> {
+    const signature = request.headers.get('x-wallet-signature');
+    const message = request.headers.get('x-wallet-message');
+    const publicKey = request.headers.get('x-wallet-pubkey');
+    const timestamp = request.headers.get('x-timestamp');
+    
+    // Multi-stage validation
+    const validations = [
+      this.validateTimestamp(timestamp),
+      this.validateSignature(message, signature, publicKey),
+      this.checkNonceReuse(publicKey, timestamp),
+      this.verifyRateLimits(publicKey),
+    ];
+    
+    const results = await Promise.all(validations);
+    const isValid = results.every(result => result.valid);
+    
+    return {
+      walletAddress: publicKey!,
+      isValid,
+      reason: !isValid ? results.find(r => !r.valid)?.reason : undefined,
+    };
+  }
+}
+
+// 2. Database Row-Level Security
+class DatabaseSecurity {
+  // Automatic wallet validation for all queries
+  validateWalletAccess(requestWallet: string, resourceWallet: string): void {
+    if (requestWallet !== resourceWallet) {
+      throw new ConvexError("Unauthorized: Access denied");
+    }
+  }
+  
+  // Query wrapper with automatic security
+  async secureQuery<T>(
+    walletAddress: string, 
+    queryFn: () => Promise<T>
+  ): Promise<T> {
+    try {
+      const result = await queryFn();
+      
+      // Post-query validation for array results
+      if (Array.isArray(result)) {
+        const violations = result.filter(item => 
+          item.walletAddress && item.walletAddress !== walletAddress
+        );
+        
+        if (violations.length > 0) {
+          console.error("Security violation detected:", violations);
+          throw new ConvexError("Security violation: Unauthorized data access");
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error("Secure query failed:", error);
+      throw error;
+    }
+  }
+}
+```
+
+## Performance Optimization Strategy
+
+### Caching Hierarchy
+```typescript
+// Multi-layer caching with intelligent invalidation
+
+class CacheHierarchy {
+  private layers = {
+    edge: new EdgeCache(),      // 0-60 second TTL
+    redis: new RedisCache(),    // 5-60 minute TTL  
+    convex: new ConvexCache(),  // Source of truth
+  };
+  
+  async get<T>(key: string, walletAddress: string): Promise<T | null> {
+    // Try each cache layer in order
+    for (const [name, cache] of Object.entries(this.layers)) {
+      try {
+        const result = await cache.get<T>(walletAddress, key);
+        if (result !== null) {
+          // Populate upstream caches
+          await this.populateUpstreamCaches(key, walletAddress, result, name);
+          return result;
+        }
+      } catch (error) {
+        console.warn(`Cache layer ${name} failed:`, error);
+        continue; // Try next layer
+      }
+    }
+    
+    return null;
+  }
+  
+  async set<T>(
+    key: string, 
+    walletAddress: string, 
+    value: T, 
+    ttl: number = 300
+  ): Promise<void> {
+    // Set in all cache layers with appropriate TTLs
+    const operations = [
+      this.layers.edge.set(walletAddress, key, value, Math.min(ttl, 60)),
+      this.layers.redis.set(walletAddress, key, value, ttl),
+    ];
+    
+    await Promise.allSettled(operations);
+  }
+  
+  async invalidate(walletAddress: string, pattern: string): Promise<void> {
+    // Invalidate across all cache layers
+    const operations = Object.values(this.layers).map(cache =>
+      cache.invalidatePattern(walletAddress, pattern)
+    );
+    
+    await Promise.allSettled(operations);
+  }
+}
+```
+
+### Query Optimization Patterns
+```typescript
+// Database query optimization strategies
+
+class QueryOptimizer {
+  // Batch loading to reduce round trips
+  async batchLoadMessages(
+    walletAddress: string,
+    chatIds: string[]
+  ): Promise<Map<string, Message[]>> {
+    const batchQueries = chatIds.map(chatId =>
+      convex.query("api.messages.getChatMessages", {
+        chatId,
+        walletAddress,
+        limit: 50,
+      })
+    );
+    
+    const results = await Promise.all(batchQueries);
+    
+    return new Map(
+      chatIds.map((chatId, index) => [chatId, results[index]])
+    );
+  }
+  
+  // Pagination with cursor optimization
+  async getCursorPaginatedData<T>(
+    queryFn: (cursor?: string) => Promise<PaginatedResult<T>>,
+    totalLimit: number = 100
+  ): Promise<T[]> {
+    const results: T[] = [];
+    let cursor: string | null = null;
+    
+    while (results.length < totalLimit) {
+      const batch = await queryFn(cursor || undefined);
+      results.push(...batch.items);
+      
+      if (!batch.nextCursor || batch.items.length === 0) {
+        break;
+      }
+      
+      cursor = batch.nextCursor;
+    }
+    
+    return results.slice(0, totalLimit);
+  }
+}
+```
+
+## Monitoring & Observability
+
+### Health Check System
+```typescript
+// Comprehensive health monitoring
+
+interface HealthStatus {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  latency: number;
+  errors: number;
+  lastCheck: number;
+}
+
+class HealthMonitor {
+  private services = ['convex', 'qdrant', 'redis', 'edge'] as const;
+  
+  async checkSystemHealth(): Promise<Record<string, HealthStatus>> {
+    const healthChecks = this.services.map(async service => {
+      const startTime = Date.now();
+      
+      try {
+        await this.checkService(service);
+        
+        return {
+          [service]: {
+            status: 'healthy' as const,
+            latency: Date.now() - startTime,
+            errors: 0,
+            lastCheck: Date.now(),
+          }
+        };
+      } catch (error) {
+        return {
+          [service]: {
+            status: 'unhealthy' as const,
+            latency: Date.now() - startTime,
+            errors: 1,
+            lastCheck: Date.now(),
+          }
+        };
+      }
+    });
+    
+    const results = await Promise.all(healthChecks);
+    return results.reduce((acc, result) => ({ ...acc, ...result }), {});
+  }
+  
+  private async checkService(service: string): Promise<void> {
+    switch (service) {
+      case 'convex':
+        await convex.query("api.health.ping", {});
+        break;
+      case 'qdrant':
+        await qdrant.client.getCollections();
+        break;
+      case 'redis':
+        await redis.client.ping();
+        break;
+      case 'edge':
+        // Check via HTTP request to edge function
+        await fetch('/api/health');
+        break;
+    }
+  }
+}
+```
+
+### Performance Metrics
+```typescript
+// Key performance indicators tracking
+
+class MetricsCollector {
+  private metrics = new Map<string, number[]>();
+  
+  recordMetric(name: string, value: number): void {
+    if (!this.metrics.has(name)) {
+      this.metrics.set(name, []);
+    }
+    
+    const values = this.metrics.get(name)!;
+    values.push(value);
+    
+    // Keep only last 1000 values
+    if (values.length > 1000) {
+      values.shift();
+    }
+  }
+  
+  getMetricSummary(name: string): {
+    avg: number;
+    min: number;
+    max: number;
+    p95: number;
+    count: number;
+  } | null {
+    const values = this.metrics.get(name);
+    if (!values || values.length === 0) return null;
+    
+    const sorted = [...values].sort((a, b) => a - b);
+    const p95Index = Math.floor(sorted.length * 0.95);
+    
+    return {
+      avg: values.reduce((sum, val) => sum + val, 0) / values.length,
+      min: sorted[0],
+      max: sorted[sorted.length - 1],
+      p95: sorted[p95Index],
+      count: values.length,
+    };
+  }
+}
+```
+
+## Deployment & Scaling
+
+### Auto-Scaling Configuration
+```yaml
+# Vercel deployment configuration
+vercel:
+  functions:
+    maxDuration: 30s
+    memory: 1024MB
+    runtime: edge
+
+  edge-config:
+    regions: ["iad1", "fra1", "hnd1", "syd1"]
+    cache-control: "s-maxage=60, stale-while-revalidate=300"
+
+convex:
+  scaling:
+    read-replicas: 3
+    write-throughput: 10000
+    storage: unlimited
+    
+qdrant:
+  cluster:
+    nodes: 3
+    replicas: 2
+    quantization: scalar-int8
+    
+redis:
+  cluster: 
+    primary: 1
+    read-replicas: 2
+    memory: 1GB
+    max-connections: 1000
+```
+
+### Disaster Recovery
+```typescript
+// Backup and recovery strategies
+
+class DisasterRecovery {
+  async backupCriticalData(walletAddress: string): Promise<{
+    chats: any[];
+    documents: any[];
+    preferences: any;
+    timestamp: number;
+  }> {
+    return {
+      chats: await convex.query("api.chats.getUserChats", { walletAddress }),
+      documents: await convex.query("api.documents.getUserDocuments", { walletAddress }),
+      preferences: await convex.query("api.users.getUser", { walletAddress }),
+      timestamp: Date.now(),
+    };
+  }
+  
+  async restoreUserData(walletAddress: string, backup: any): Promise<void> {
+    // Restore user data from backup
+    // Implementation depends on specific recovery scenario
+    await convex.mutation("api.recovery.restoreUserData", {
+      walletAddress,
+      backup,
+    });
+  }
+}
+```
+
+## Best Practices Summary
+
+### Development Guidelines
+```yaml
+Code Organization:
+  - Feature-based directory structure
+  - Shared utilities in lib/ directory
+  - Type definitions in types/ directory
+  - API endpoints in app/api/ with route.ts files
+
+Performance:
+  - Use indexes for all query patterns
+  - Implement proper caching strategies
+  - Batch operations where possible
+  - Monitor query performance regularly
+
+Security:
+  - Validate wallet ownership for all operations
+  - Use proper input validation and sanitization
+  - Implement rate limiting per wallet
+  - Audit access patterns regularly
+
+Monitoring:
+  - Track key performance metrics
+  - Implement proper error logging
+  - Monitor queue health and job success rates
+  - Set up alerts for critical failures
+```
+
+### Operational Excellence
+```yaml
+Deployments:
+  - Use CI/CD for automated deployments
+  - Implement canary releases for edge functions
+  - Test database migrations in staging
+  - Monitor deployment success rates
+
+Maintenance:
+  - Regular dependency updates
+  - Database cleanup jobs for old data
+  - Cache optimization and cleanup
+  - Performance tuning based on metrics
+
+Scaling:
+  - Monitor resource usage trends
+  - Plan capacity for growth
+  - Implement auto-scaling policies
+  - Test system behavior under load
+```
+
+::alert{type="success"}
+**Architecture Benefits**:
+- Real-time synchronization across all clients
+- Global edge distribution for <50ms latency
+- Automatic scaling to handle traffic spikes  
+- 99.9% uptime with multi-region redundancy
+- Built-in security with wallet-based isolation
+::
+
+::alert{type="info"}
+**Key Decisions Made**:
+- Convex for real-time database with automatic type safety
+- Qdrant for advanced vector search with hybrid capabilities
+- Vercel Edge Functions for global performance
+- Multi-layer caching for optimal response times
+- Native job queuing with Convex Scheduler
+::

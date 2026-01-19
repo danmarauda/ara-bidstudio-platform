@@ -1,0 +1,747 @@
+---
+category: security
+subcategory: data-protection
+tags: [data-isolation, wallet-keying, privacy, encryption]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["./authentication.mdc"]
+  exports: ["isolation-patterns", "encryption-schemes"]
+  references: ["../backend/database-schema.mdc"]
+---
+
+# Data Isolation & Privacy Patterns
+
+## Wallet-Based Data Isolation
+
+### 1. Hierarchical Isolation Strategy
+```typescript
+export interface WalletDataNamespace {
+  walletAddress: string;
+  encryptionKey: string;
+  isolationLevel: 'strict' | 'shared_anonymous' | 'public';
+  dataCategories: {
+    conversations: string[]; // Chat history
+    memory: string[];       // RAG documents
+    preferences: string;    // User settings
+    analytics: string;      // Usage metrics (anonymized)
+  };
+}
+
+export class DataIsolationManager {
+  private walletNamespaces: Map<string, WalletDataNamespace> = new Map();
+  private encryptionKeys: Map<string, Buffer> = new Map();
+
+  public async createWalletNamespace(walletAddress: string): Promise<WalletDataNamespace> {
+    if (this.walletNamespaces.has(walletAddress)) {
+      return this.walletNamespaces.get(walletAddress)!;
+    }
+
+    // Generate wallet-specific encryption key
+    const encryptionKey = this.deriveWalletEncryptionKey(walletAddress);
+    this.encryptionKeys.set(walletAddress, encryptionKey);
+
+    const namespace: WalletDataNamespace = {
+      walletAddress,
+      encryptionKey: encryptionKey.toString('hex'),
+      isolationLevel: 'strict',
+      dataCategories: {
+        conversations: [],
+        memory: [],
+        preferences: this.generateNamespaceId(walletAddress, 'preferences'),
+        analytics: this.generateNamespaceId(walletAddress, 'analytics')
+      }
+    };
+
+    this.walletNamespaces.set(walletAddress, namespace);
+    return namespace;
+  }
+
+  private deriveWalletEncryptionKey(walletAddress: string): Buffer {
+    // Derive deterministic encryption key from wallet address and server secret
+    const serverSecret = Buffer.from(process.env.ENCRYPTION_SECRET!, 'hex');
+    const walletBuffer = Buffer.from(walletAddress, 'utf-8');
+    
+    return crypto.createHmac('sha256', serverSecret)
+      .update(walletBuffer)
+      .digest();
+  }
+
+  private generateNamespaceId(walletAddress: string, category: string): string {
+    return crypto.createHash('sha256')
+      .update(`${walletAddress}:${category}:${Date.now()}`)
+      .digest('hex');
+  }
+}
+```
+
+### 2. Encrypted Data Storage
+```typescript
+import crypto from 'crypto';
+
+export interface EncryptedData {
+  encryptedContent: string;
+  iv: string;
+  authTag: string;
+  version: number;
+  walletAddress: string;
+  timestamp: number;
+}
+
+export class WalletEncryptionService {
+  private readonly ALGORITHM = 'aes-256-gcm';
+  private readonly IV_LENGTH = 16;
+  private readonly TAG_LENGTH = 16;
+
+  public async encryptForWallet(
+    data: any,
+    walletAddress: string
+  ): Promise<EncryptedData> {
+    const encryptionKey = this.getWalletEncryptionKey(walletAddress);
+    const iv = crypto.randomBytes(this.IV_LENGTH);
+    const cipher = crypto.createCipher(this.ALGORITHM, encryptionKey);
+    cipher.setAAD(Buffer.from(walletAddress)); // Additional authenticated data
+
+    const plaintext = JSON.stringify(data);
+    let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    
+    const authTag = cipher.getAuthTag();
+
+    return {
+      encryptedContent: encrypted,
+      iv: iv.toString('hex'),
+      authTag: authTag.toString('hex'),
+      version: 1,
+      walletAddress,
+      timestamp: Date.now()
+    };
+  }
+
+  public async decryptForWallet(
+    encryptedData: EncryptedData,
+    walletAddress: string
+  ): Promise<any> {
+    // Verify wallet address matches
+    if (encryptedData.walletAddress !== walletAddress) {
+      throw new Error('Unauthorized: Data belongs to different wallet');
+    }
+
+    const encryptionKey = this.getWalletEncryptionKey(walletAddress);
+    const decipher = crypto.createDecipher(this.ALGORITHM, encryptionKey);
+    
+    decipher.setAAD(Buffer.from(walletAddress));
+    decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
+
+    let decrypted = decipher.update(encryptedData.encryptedContent, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return JSON.parse(decrypted);
+  }
+
+  private getWalletEncryptionKey(walletAddress: string): Buffer {
+    // This should use the same derivation as DataIsolationManager
+    const serverSecret = Buffer.from(process.env.ENCRYPTION_SECRET!, 'hex');
+    const walletBuffer = Buffer.from(walletAddress, 'utf-8');
+    
+    return crypto.createHmac('sha256', serverSecret)
+      .update(walletBuffer)
+      .digest();
+  }
+
+  public rotateEncryptionKey(walletAddress: string): Promise<void> {
+    // Implementation for key rotation - would re-encrypt all data
+    // This is critical for security but complex to implement
+    throw new Error('Key rotation not yet implemented');
+  }
+}
+```
+
+### 3. Conversation Isolation
+```typescript
+export interface IsolatedConversation {
+  conversationId: string;
+  walletAddress: string;
+  title: string;
+  messages: EncryptedMessage[];
+  createdAt: number;
+  updatedAt: number;
+  isArchived: boolean;
+  shareToken?: string; // For sharing conversations
+}
+
+export interface EncryptedMessage {
+  messageId: string;
+  role: 'user' | 'assistant' | 'system';
+  encryptedContent: string;
+  iv: string;
+  authTag: string;
+  timestamp: number;
+  metadata?: {
+    model: string;
+    tokenCount: number;
+    responseTime: number;
+  };
+}
+
+export class ConversationIsolationService {
+  private encryptionService: WalletEncryptionService;
+
+  constructor() {
+    this.encryptionService = new WalletEncryptionService();
+  }
+
+  public async createConversation(
+    walletAddress: string,
+    title: string
+  ): Promise<IsolatedConversation> {
+    const conversationId = this.generateConversationId(walletAddress);
+    
+    const conversation: IsolatedConversation = {
+      conversationId,
+      walletAddress,
+      title,
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isArchived: false
+    };
+
+    // Store in wallet-isolated database partition
+    await this.storeConversation(conversation);
+    
+    return conversation;
+  }
+
+  public async addMessage(
+    conversationId: string,
+    walletAddress: string,
+    message: {
+      role: 'user' | 'assistant' | 'system';
+      content: string;
+      metadata?: any;
+    }
+  ): Promise<void> {
+    // Verify conversation ownership
+    const conversation = await this.getConversation(conversationId, walletAddress);
+    if (!conversation) {
+      throw new Error('Conversation not found or access denied');
+    }
+
+    // Encrypt message content
+    const encryptedContent = await this.encryptionService.encryptForWallet(
+      { content: message.content },
+      walletAddress
+    );
+
+    const encryptedMessage: EncryptedMessage = {
+      messageId: crypto.randomBytes(16).toString('hex'),
+      role: message.role,
+      encryptedContent: encryptedContent.encryptedContent,
+      iv: encryptedContent.iv,
+      authTag: encryptedContent.authTag,
+      timestamp: Date.now(),
+      metadata: message.metadata
+    };
+
+    conversation.messages.push(encryptedMessage);
+    conversation.updatedAt = Date.now();
+
+    await this.updateConversation(conversation);
+  }
+
+  public async getConversationMessages(
+    conversationId: string,
+    walletAddress: string
+  ): Promise<Array<{ role: string; content: string; timestamp: number }>> {
+    const conversation = await this.getConversation(conversationId, walletAddress);
+    if (!conversation) {
+      throw new Error('Conversation not found or access denied');
+    }
+
+    const decryptedMessages = [];
+    
+    for (const message of conversation.messages) {
+      try {
+        const encryptedData: EncryptedData = {
+          encryptedContent: message.encryptedContent,
+          iv: message.iv,
+          authTag: message.authTag,
+          version: 1,
+          walletAddress,
+          timestamp: message.timestamp
+        };
+
+        const decrypted = await this.encryptionService.decryptForWallet(
+          encryptedData,
+          walletAddress
+        );
+
+        decryptedMessages.push({
+          role: message.role,
+          content: decrypted.content,
+          timestamp: message.timestamp
+        });
+      } catch (error) {
+        console.error('Failed to decrypt message:', error);
+        // Skip corrupted messages but log for investigation
+      }
+    }
+
+    return decryptedMessages;
+  }
+
+  private generateConversationId(walletAddress: string): string {
+    return crypto.createHash('sha256')
+      .update(`${walletAddress}:conversation:${Date.now()}:${crypto.randomBytes(8).toString('hex')}`)
+      .digest('hex');
+  }
+
+  private async storeConversation(conversation: IsolatedConversation): Promise<void> {
+    // Implementation would store in Convex with wallet-based partitioning
+    console.log(`Storing conversation ${conversation.conversationId} for wallet ${conversation.walletAddress}`);
+  }
+
+  private async getConversation(
+    conversationId: string,
+    walletAddress: string
+  ): Promise<IsolatedConversation | null> {
+    // Implementation would fetch from Convex with wallet verification
+    console.log(`Fetching conversation ${conversationId} for wallet ${walletAddress}`);
+    return null;
+  }
+
+  private async updateConversation(conversation: IsolatedConversation): Promise<void> {
+    // Implementation would update in Convex
+    console.log(`Updating conversation ${conversation.conversationId}`);
+  }
+}
+```
+
+### 4. Memory (RAG) Isolation
+```typescript
+export interface IsolatedMemory {
+  memoryId: string;
+  walletAddress: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  encryptedContent: EncryptedData;
+  vectorStoreKey: string; // Key for Qdrant collection
+  createdAt: number;
+  metadata: {
+    documentHash: string;
+    chunkCount: number;
+    processedAt: number;
+  };
+}
+
+export class MemoryIsolationService {
+  private encryptionService: WalletEncryptionService;
+  private vectorStore: QdrantVectorStore;
+
+  constructor() {
+    this.encryptionService = new WalletEncryptionService();
+    this.vectorStore = new QdrantVectorStore();
+  }
+
+  public async uploadMemory(
+    walletAddress: string,
+    filename: string,
+    content: Buffer,
+    contentType: string
+  ): Promise<IsolatedMemory> {
+    // Generate unique memory ID
+    const memoryId = this.generateMemoryId(walletAddress, filename);
+    
+    // Create document hash for deduplication
+    const documentHash = crypto.createHash('sha256').update(content).digest('hex');
+    
+    // Check if document already exists
+    const existingMemory = await this.findMemoryByHash(walletAddress, documentHash);
+    if (existingMemory) {
+      return existingMemory;
+    }
+
+    // Extract text content
+    const textContent = await this.extractTextContent(content, contentType);
+    
+    // Encrypt content
+    const encryptedContent = await this.encryptionService.encryptForWallet(
+      { content: textContent, filename, contentType },
+      walletAddress
+    );
+
+    // Generate vector store collection key (wallet-specific)
+    const vectorStoreKey = this.generateVectorStoreKey(walletAddress);
+
+    // Process for vector storage
+    const chunks = this.chunkContent(textContent);
+    await this.storeVectors(vectorStoreKey, chunks, memoryId, walletAddress);
+
+    const memory: IsolatedMemory = {
+      memoryId,
+      walletAddress,
+      filename,
+      contentType,
+      size: content.length,
+      encryptedContent,
+      vectorStoreKey,
+      createdAt: Date.now(),
+      metadata: {
+        documentHash,
+        chunkCount: chunks.length,
+        processedAt: Date.now()
+      }
+    };
+
+    await this.storeMemory(memory);
+    return memory;
+  }
+
+  public async queryMemory(
+    walletAddress: string,
+    query: string,
+    limit: number = 5
+  ): Promise<Array<{ content: string; filename: string; relevance: number }>> {
+    const vectorStoreKey = this.generateVectorStoreKey(walletAddress);
+    
+    // Query vectors from wallet-specific collection
+    const vectorResults = await this.vectorStore.query(vectorStoreKey, query, limit);
+    
+    const results = [];
+    for (const vectorResult of vectorResults) {
+      try {
+        // Decrypt content for this specific wallet
+        const memory = await this.getMemory(vectorResult.memoryId, walletAddress);
+        if (memory) {
+          const decryptedContent = await this.encryptionService.decryptForWallet(
+            memory.encryptedContent,
+            walletAddress
+          );
+          
+          results.push({
+            content: vectorResult.content,
+            filename: memory.filename,
+            relevance: vectorResult.score
+          });
+        }
+      } catch (error) {
+        console.error('Failed to decrypt memory content:', error);
+        // Skip corrupted memories
+      }
+    }
+
+    return results;
+  }
+
+  public async deleteMemory(memoryId: string, walletAddress: string): Promise<boolean> {
+    const memory = await this.getMemory(memoryId, walletAddress);
+    if (!memory) {
+      return false;
+    }
+
+    // Delete from vector store
+    await this.vectorStore.deleteDocument(memory.vectorStoreKey, memoryId);
+    
+    // Delete from database
+    await this.removeMemory(memoryId, walletAddress);
+    
+    return true;
+  }
+
+  public async purgeAllMemory(walletAddress: string): Promise<number> {
+    const memories = await this.getAllWalletMemories(walletAddress);
+    let deletedCount = 0;
+
+    for (const memory of memories) {
+      try {
+        await this.deleteMemory(memory.memoryId, walletAddress);
+        deletedCount++;
+      } catch (error) {
+        console.error(`Failed to delete memory ${memory.memoryId}:`, error);
+      }
+    }
+
+    // Delete wallet-specific vector collection
+    const vectorStoreKey = this.generateVectorStoreKey(walletAddress);
+    await this.vectorStore.deleteCollection(vectorStoreKey);
+
+    return deletedCount;
+  }
+
+  private generateMemoryId(walletAddress: string, filename: string): string {
+    return crypto.createHash('sha256')
+      .update(`${walletAddress}:memory:${filename}:${Date.now()}`)
+      .digest('hex');
+  }
+
+  private generateVectorStoreKey(walletAddress: string): string {
+    // Create deterministic collection name for wallet
+    return crypto.createHash('sha256')
+      .update(`anubis_chat_vectors:${walletAddress}`)
+      .digest('hex')
+      .substring(0, 32); // Qdrant collection name limit
+  }
+
+  private async extractTextContent(content: Buffer, contentType: string): Promise<string> {
+    // Implementation would handle different file types
+    switch (contentType) {
+      case 'text/plain':
+        return content.toString('utf-8');
+      case 'application/pdf':
+        // Use PDF parsing library
+        return 'PDF content extracted';
+      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        // Use docx parsing library
+        return 'DOCX content extracted';
+      default:
+        throw new Error(`Unsupported content type: ${contentType}`);
+    }
+  }
+
+  private chunkContent(content: string): string[] {
+    // Simple chunking - in production use more sophisticated methods
+    const chunks = [];
+    const chunkSize = 1000;
+    const overlap = 100;
+
+    for (let i = 0; i < content.length; i += chunkSize - overlap) {
+      chunks.push(content.substring(i, i + chunkSize));
+    }
+
+    return chunks;
+  }
+
+  private async storeVectors(
+    collectionKey: string,
+    chunks: string[],
+    memoryId: string,
+    walletAddress: string
+  ): Promise<void> {
+    // Implementation would store in Qdrant with wallet metadata
+    console.log(`Storing ${chunks.length} vectors for memory ${memoryId} in collection ${collectionKey}`);
+  }
+
+  private async findMemoryByHash(walletAddress: string, documentHash: string): Promise<IsolatedMemory | null> {
+    // Implementation would query database
+    return null;
+  }
+
+  private async storeMemory(memory: IsolatedMemory): Promise<void> {
+    // Implementation would store in Convex
+    console.log(`Storing memory ${memory.memoryId} for wallet ${memory.walletAddress}`);
+  }
+
+  private async getMemory(memoryId: string, walletAddress: string): Promise<IsolatedMemory | null> {
+    // Implementation would fetch from Convex with wallet verification
+    return null;
+  }
+
+  private async removeMemory(memoryId: string, walletAddress: string): Promise<void> {
+    // Implementation would remove from Convex
+    console.log(`Removing memory ${memoryId} for wallet ${walletAddress}`);
+  }
+
+  private async getAllWalletMemories(walletAddress: string): Promise<IsolatedMemory[]> {
+    // Implementation would fetch all memories for wallet
+    return [];
+  }
+}
+
+// Qdrant vector store interface
+class QdrantVectorStore {
+  async query(collectionKey: string, query: string, limit: number): Promise<Array<{
+    memoryId: string;
+    content: string;
+    score: number;
+  }>> {
+    // Implementation would query Qdrant
+    return [];
+  }
+
+  async deleteDocument(collectionKey: string, memoryId: string): Promise<void> {
+    // Implementation would delete from Qdrant
+  }
+
+  async deleteCollection(collectionKey: string): Promise<void> {
+    // Implementation would delete entire collection
+  }
+}
+```
+
+### 5. Data Access Auditing
+```typescript
+export interface DataAccessLog {
+  walletAddress: string;
+  resourceType: 'conversation' | 'memory' | 'subscription' | 'preferences';
+  resourceId: string;
+  action: 'read' | 'write' | 'delete' | 'share';
+  timestamp: number;
+  ipAddress: string;
+  userAgent: string;
+  sessionId: string;
+  result: 'success' | 'denied' | 'error';
+  errorMessage?: string;
+}
+
+export class DataAccessAuditor {
+  private accessLogs: DataAccessLog[] = [];
+  private readonly MAX_LOGS = 100000;
+
+  public logDataAccess(
+    walletAddress: string,
+    resourceType: DataAccessLog['resourceType'],
+    resourceId: string,
+    action: DataAccessLog['action'],
+    sessionId: string,
+    ipAddress: string,
+    userAgent: string,
+    result: DataAccessLog['result'],
+    errorMessage?: string
+  ): void {
+    const logEntry: DataAccessLog = {
+      walletAddress,
+      resourceType,
+      resourceId,
+      action,
+      timestamp: Date.now(),
+      ipAddress,
+      userAgent,
+      sessionId,
+      result,
+      errorMessage
+    };
+
+    this.accessLogs.push(logEntry);
+
+    // Maintain log size limit
+    if (this.accessLogs.length > this.MAX_LOGS) {
+      this.accessLogs = this.accessLogs.slice(-this.MAX_LOGS / 2);
+    }
+
+    // Alert on suspicious activity
+    this.detectSuspiciousActivity(walletAddress, logEntry);
+  }
+
+  public getWalletAccessHistory(
+    walletAddress: string,
+    timeWindow?: number
+  ): DataAccessLog[] {
+    const now = Date.now();
+    const windowStart = timeWindow ? now - timeWindow : 0;
+
+    return this.accessLogs.filter(
+      log => log.walletAddress === walletAddress && log.timestamp >= windowStart
+    );
+  }
+
+  public detectSuspiciousActivity(walletAddress: string, newLog: DataAccessLog): void {
+    const recentLogs = this.getWalletAccessHistory(walletAddress, 5 * 60 * 1000); // 5 minutes
+
+    // High frequency access detection
+    if (recentLogs.length > 100) {
+      this.alertSuspiciousActivity(walletAddress, 'high_frequency_access', {
+        requestCount: recentLogs.length,
+        timeWindow: '5 minutes'
+      });
+    }
+
+    // Multiple IP addresses
+    const uniqueIPs = new Set(recentLogs.map(log => log.ipAddress));
+    if (uniqueIPs.size > 3) {
+      this.alertSuspiciousActivity(walletAddress, 'multiple_ip_addresses', {
+        ipCount: uniqueIPs.size,
+        ips: Array.from(uniqueIPs)
+      });
+    }
+
+    // High error rate
+    const errorRate = recentLogs.filter(log => log.result === 'error').length / recentLogs.length;
+    if (errorRate > 0.2 && recentLogs.length > 10) {
+      this.alertSuspiciousActivity(walletAddress, 'high_error_rate', {
+        errorRate,
+        totalRequests: recentLogs.length
+      });
+    }
+
+    // Unusual access patterns (accessing data they don't normally access)
+    const resourceTypes = new Set(recentLogs.map(log => log.resourceType));
+    if (resourceTypes.size > 2 && recentLogs.length < 20) {
+      this.alertSuspiciousActivity(walletAddress, 'unusual_access_pattern', {
+        resourceTypes: Array.from(resourceTypes)
+      });
+    }
+  }
+
+  private alertSuspiciousActivity(
+    walletAddress: string,
+    alertType: string,
+    metadata: any
+  ): void {
+    console.warn(`Suspicious activity detected for wallet ${walletAddress}:`, {
+      alertType,
+      metadata,
+      timestamp: new Date().toISOString()
+    });
+
+    // In production, this would:
+    // 1. Send alerts to security team
+    // 2. Potentially throttle or block the wallet temporarily
+    // 3. Require additional authentication
+    // 4. Log to security monitoring system
+  }
+
+  public generateSecurityReport(walletAddress?: string): {
+    totalAccess: number;
+    successRate: number;
+    topResourceTypes: Array<{ type: string; count: number }>;
+    suspiciousActivity: number;
+  } {
+    const relevantLogs = walletAddress 
+      ? this.getWalletAccessHistory(walletAddress)
+      : this.accessLogs;
+
+    const successRate = relevantLogs.length > 0 
+      ? relevantLogs.filter(log => log.result === 'success').length / relevantLogs.length
+      : 0;
+
+    const resourceTypeCounts = relevantLogs.reduce((counts, log) => {
+      counts[log.resourceType] = (counts[log.resourceType] || 0) + 1;
+      return counts;
+    }, {} as Record<string, number>);
+
+    const topResourceTypes = Object.entries(resourceTypeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Count suspicious activity (error rate > 10%)
+    const walletGroups = relevantLogs.reduce((groups, log) => {
+      if (!groups[log.walletAddress]) {
+        groups[log.walletAddress] = [];
+      }
+      groups[log.walletAddress].push(log);
+      return groups;
+    }, {} as Record<string, DataAccessLog[]>);
+
+    let suspiciousWallets = 0;
+    for (const [wallet, logs] of Object.entries(walletGroups)) {
+      const errorRate = logs.filter(log => log.result === 'error').length / logs.length;
+      if (errorRate > 0.1 && logs.length > 5) {
+        suspiciousWallets++;
+      }
+    }
+
+    return {
+      totalAccess: relevantLogs.length,
+      successRate,
+      topResourceTypes,
+      suspiciousActivity: suspiciousWallets
+    };
+  }
+}
+```

@@ -1,0 +1,61 @@
+{
+    "repo": "nodebench-ai",
+    "branch": "main", 
+    "packageManagers": ["npm"],
+    "node": "20.x",
+    "workspaces": ["src/*", "convex/*", "agents/*"],
+    "rootScripts": {
+        "dev": "npm-run-all --parallel dev:frontend dev:backend",
+        "dev:frontend": "vite --open", 
+        "dev:backend": "convex dev",
+        "build": "vite build",
+        "lint": "tsc -p convex -noEmit --pretty false && tsc -p . -noEmit --pretty false && convex dev --once && vite build",
+        "test": "vitest",
+        "test:run": "vitest run", 
+        "eval": "tsx scripts/runEvaluation.ts",
+        "eval:quick": "convex run tools/evaluation/quickTest:runQuickTest",
+        "eval:all": "convex run tools/evaluation/comprehensiveTest:runComprehensiveTest",
+        "storybook": "storybook dev -p 6006",
+        "build-storybook": "storybook build"
+    },
+    "envExamplePaths": [".env"],
+    "ciPipelines": [".github/workflows/auto-release.yml"],
+    "cloudTargets": ["convex"],
+    "files": [
+        {
+            "path": "package.json",
+            "sha": "analyzed_via_scan",
+            "size": 17544
+        },
+        {
+            "path": "convex/schema.ts", 
+            "sha": "complex_document_schema",
+            "size": 0
+        },
+        {
+            "path": "src/components/FastAgentPanel/FastAgentPanel.tsx",
+            "sha": "dual_mode_chat_interface", 
+            "size": 0
+        },
+        {
+            "path": "convex/agents/agentDispatcher.ts",
+            "sha": "security_critical_tool_dispatch",
+            "size": 0
+        },
+        {
+            "path": "agents/core/orchestrator.ts",
+            "sha": "graph_based_execution",
+            "size": 0
+        },
+        {
+            "path": "src/App.tsx",
+            "sha": "main_entry_point",
+            "size": 0
+        },
+        {
+            "path": "convex/_generated/api.d.ts",
+            "sha": "convex_generated_api",
+            "size": 0
+        }
+    ]
+}

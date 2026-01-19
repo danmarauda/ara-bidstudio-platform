@@ -1,0 +1,644 @@
+---
+category: web3
+subcategory: infrastructure
+tags: [rpc, helius, shyft, optimization, fallback]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./transaction-handling.mdc"]
+  exports: ["rpc-patterns", "connection-management"]
+  references: ["../backend/database-schema.mdc"]
+---
+
+# RPC Optimization & Fallback Patterns
+
+## Multi-Provider Architecture
+
+abubis.chat uses a tiered RPC strategy for maximum reliability:
+- **Primary**: Helius (premium features, enhanced APIs)
+- **Fallback**: Shyft (backup reliability)
+- **Emergency**: Public Solana RPC (last resort)
+
+## Connection Management
+
+### 1. RPC Provider Configuration
+```typescript
+export interface RPCProvider {
+  name: string;
+  endpoint: string;
+  priority: number;
+  features: RPCFeature[];
+  rateLimit: {
+    requestsPerSecond: number;
+    burstLimit: number;
+  };
+  healthCheck: {
+    endpoint: string;
+    timeout: number;
+    interval: number;
+  };
+}
+
+export enum RPCFeature {
+  ENHANCED_TRANSACTIONS = 'enhanced_transactions',
+  WEBSOCKET_SUBSCRIPTIONS = 'websocket_subscriptions',  
+  GEYSER_PLUGIN = 'geyser_plugin',
+  PRIORITY_FEES = 'priority_fees',
+  COMPRESSED_RESPONSES = 'compressed_responses'
+}
+
+export const RPC_PROVIDERS: RPCProvider[] = [
+  {
+    name: 'helius',
+    endpoint: process.env.HELIUS_RPC_URL!,
+    priority: 1,
+    features: [
+      RPCFeature.ENHANCED_TRANSACTIONS,
+      RPCFeature.WEBSOCKET_SUBSCRIPTIONS,
+      RPCFeature.GEYSER_PLUGIN,
+      RPCFeature.PRIORITY_FEES,
+      RPCFeature.COMPRESSED_RESPONSES
+    ],
+    rateLimit: {
+      requestsPerSecond: 100,
+      burstLimit: 200
+    },
+    healthCheck: {
+      endpoint: '/health',
+      timeout: 5000,
+      interval: 30000
+    }
+  },
+  {
+    name: 'shyft',
+    endpoint: process.env.SHYFT_RPC_URL!,
+    priority: 2,
+    features: [
+      RPCFeature.ENHANCED_TRANSACTIONS,
+      RPCFeature.WEBSOCKET_SUBSCRIPTIONS
+    ],
+    rateLimit: {
+      requestsPerSecond: 50,
+      burstLimit: 100
+    },
+    healthCheck: {
+      endpoint: '/health',
+      timeout: 5000,
+      interval: 60000
+    }
+  },
+  {
+    name: 'solana-mainnet',
+    endpoint: 'https://api.mainnet-beta.solana.com',
+    priority: 3,
+    features: [],
+    rateLimit: {
+      requestsPerSecond: 20,
+      burstLimit: 40
+    },
+    healthCheck: {
+      endpoint: '/',
+      timeout: 10000,
+      interval: 120000
+    }
+  }
+];
+```
+
+### 2. Smart Connection Manager
+```typescript
+import { Connection, ConnectionConfig } from '@solana/web3.js';
+import { EventEmitter } from 'events';
+
+export class SmartConnectionManager extends EventEmitter {
+  private connections: Map<string, Connection> = new Map();
+  private healthStatus: Map<string, boolean> = new Map();
+  private failoverHistory: Map<string, number[]> = new Map();
+  private currentProvider: RPCProvider;
+  private rateLimiters: Map<string, RateLimiter> = new Map();
+
+  constructor() {
+    super();
+    this.currentProvider = RPC_PROVIDERS[0];
+    this.initializeConnections();
+    this.startHealthChecks();
+  }
+
+  private initializeConnections() {
+    RPC_PROVIDERS.forEach(provider => {
+      const config: ConnectionConfig = {
+        commitment: 'confirmed',
+        wsEndpoint: this.getWebSocketEndpoint(provider),
+        httpHeaders: this.getAuthHeaders(provider),
+        fetch: this.createFetchWithTimeout(provider.healthCheck.timeout),
+        confirmTransactionInitialTimeout: 30000,
+        disableRetryOnRateLimit: false,
+      };
+
+      const connection = new Connection(provider.endpoint, config);
+      this.connections.set(provider.name, connection);
+      this.healthStatus.set(provider.name, true);
+      this.failoverHistory.set(provider.name, []);
+      
+      // Initialize rate limiter
+      this.rateLimiters.set(
+        provider.name,
+        new RateLimiter(provider.rateLimit.requestsPerSecond, provider.rateLimit.burstLimit)
+      );
+    });
+  }
+
+  public async getConnection(): Promise<Connection> {
+    // Try current provider first
+    if (await this.isProviderHealthy(this.currentProvider.name)) {
+      return this.connections.get(this.currentProvider.name)!;
+    }
+
+    // Fallback to next available provider
+    for (const provider of RPC_PROVIDERS) {
+      if (await this.isProviderHealthy(provider.name)) {
+        this.currentProvider = provider;
+        this.emit('provider-changed', provider.name);
+        return this.connections.get(provider.name)!;
+      }
+    }
+
+    // All providers are down - use the primary anyway and hope for the best
+    console.warn('All RPC providers appear unhealthy, using primary anyway');
+    return this.connections.get(RPC_PROVIDERS[0].name)!;
+  }
+
+  public async executeWithFallback<T>(
+    operation: (connection: Connection) => Promise<T>,
+    maxRetries = 3
+  ): Promise<T> {
+    const providers = [...RPC_PROVIDERS].sort((a, b) => a.priority - b.priority);
+    
+    for (const provider of providers) {
+      // Check rate limit
+      const rateLimiter = this.rateLimiters.get(provider.name)!;
+      if (!rateLimiter.tryAcquire()) {
+        continue; // Skip if rate limited
+      }
+
+      try {
+        const connection = this.connections.get(provider.name)!;
+        const result = await this.retryWithBackoff(
+          () => operation(connection),
+          maxRetries
+        );
+        
+        // Mark provider as healthy on success
+        this.healthStatus.set(provider.name, true);
+        return result;
+        
+      } catch (error) {
+        console.warn(`RPC operation failed with ${provider.name}:`, error);
+        this.recordFailure(provider.name);
+        
+        // Mark as unhealthy if too many failures
+        const failures = this.failoverHistory.get(provider.name)!;
+        if (failures.length >= 3) {
+          this.healthStatus.set(provider.name, false);
+        }
+        
+        // Continue to next provider
+        continue;
+      }
+    }
+
+    throw new Error('All RPC providers failed');
+  }
+
+  private async isProviderHealthy(providerName: string): Promise<boolean> {
+    return this.healthStatus.get(providerName) || false;
+  }
+
+  private recordFailure(providerName: string) {
+    const now = Date.now();
+    const failures = this.failoverHistory.get(providerName)!;
+    
+    // Keep only failures from last 5 minutes
+    const recentFailures = failures.filter(time => now - time < 5 * 60 * 1000);
+    recentFailures.push(now);
+    
+    this.failoverHistory.set(providerName, recentFailures);
+  }
+
+  private async retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    maxRetries: number
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (attempt === maxRetries) throw error;
+        
+        // Exponential backoff with jitter
+        const baseDelay = Math.pow(2, attempt) * 100;
+        const jitter = Math.random() * 100;
+        await new Promise(resolve => setTimeout(resolve, baseDelay + jitter));
+      }
+    }
+    throw new Error('Unreachable');
+  }
+
+  private startHealthChecks() {
+    RPC_PROVIDERS.forEach(provider => {
+      setInterval(async () => {
+        try {
+          const connection = this.connections.get(provider.name)!;
+          await connection.getLatestBlockhash();
+          this.healthStatus.set(provider.name, true);
+          
+          // Clear failure history on successful health check
+          this.failoverHistory.set(provider.name, []);
+          
+        } catch (error) {
+          console.warn(`Health check failed for ${provider.name}:`, error);
+          this.healthStatus.set(provider.name, false);
+        }
+      }, provider.healthCheck.interval);
+    });
+  }
+}
+```
+
+### 3. Rate Limiting Implementation  
+```typescript
+export class RateLimiter {
+  private tokens: number;
+  private lastRefill: number;
+  private readonly capacity: number;
+  private readonly refillRate: number; // tokens per second
+
+  constructor(requestsPerSecond: number, burstLimit: number) {
+    this.capacity = burstLimit;
+    this.refillRate = requestsPerSecond;
+    this.tokens = burstLimit;
+    this.lastRefill = Date.now();
+  }
+
+  public tryAcquire(tokensRequested = 1): boolean {
+    this.refill();
+    
+    if (this.tokens >= tokensRequested) {
+      this.tokens -= tokensRequested;
+      return true;
+    }
+    
+    return false;
+  }
+
+  private refill() {
+    const now = Date.now();
+    const timePassed = (now - this.lastRefill) / 1000;
+    const tokensToAdd = Math.floor(timePassed * this.refillRate);
+    
+    if (tokensToAdd > 0) {
+      this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
+      this.lastRefill = now;
+    }
+  }
+
+  public getAvailableTokens(): number {
+    this.refill();
+    return this.tokens;
+  }
+}
+```
+
+## Optimized RPC Calls
+
+### 1. Batch Operations
+```typescript
+export class BatchedRPCClient {
+  private pendingRequests: Map<string, {
+    resolve: (value: any) => void;
+    reject: (error: any) => void;
+    method: string;
+    params: any[];
+  }> = new Map();
+  
+  private batchTimeout: NodeJS.Timeout | null = null;
+  private connectionManager: SmartConnectionManager;
+
+  constructor(connectionManager: SmartConnectionManager) {
+    this.connectionManager = connectionManager;
+  }
+
+  public async batchGetAccountInfo(
+    publicKeys: string[]
+  ): Promise<(AccountInfo<Buffer> | null)[]> {
+    if (publicKeys.length <= 1) {
+      const connection = await this.connectionManager.getConnection();
+      return publicKeys.length === 1 
+        ? [await connection.getAccountInfo(new PublicKey(publicKeys[0]))]
+        : [];
+    }
+
+    return this.connectionManager.executeWithFallback(async (connection) => {
+      const accounts = await connection.getMultipleAccountsInfo(
+        publicKeys.map(pk => new PublicKey(pk))
+      );
+      return accounts;
+    });
+  }
+
+  public async batchGetSignatureStatuses(
+    signatures: string[]
+  ): Promise<(SignatureStatus | null)[]> {
+    if (signatures.length === 0) return [];
+
+    return this.connectionManager.executeWithFallback(async (connection) => {
+      const response = await connection.getSignatureStatuses(signatures);
+      return response.value;
+    });
+  }
+
+  public async optimizedGetParsedTransaction(
+    signature: string,
+    maxSupportedTransactionVersion?: number
+  ) {
+    return this.connectionManager.executeWithFallback(async (connection) => {
+      // Use enhanced transaction parsing if available (Helius)
+      if (this.connectionManager.currentProvider.features.includes(RPCFeature.ENHANCED_TRANSACTIONS)) {
+        return connection.getParsedTransaction(signature, {
+          maxSupportedTransactionVersion,
+          commitment: 'confirmed'
+        });
+      }
+      
+      // Fallback to basic transaction parsing
+      return connection.getTransaction(signature, {
+        maxSupportedTransactionVersion,
+        commitment: 'confirmed'
+      });
+    });
+  }
+}
+```
+
+### 2. Caching Layer
+```typescript
+export class RPCCache {
+  private cache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
+  private readonly DEFAULT_TTL = 30000; // 30 seconds
+
+  public async getCachedAccountInfo(
+    publicKey: string,
+    connection: Connection,
+    ttl = this.DEFAULT_TTL
+  ): Promise<AccountInfo<Buffer> | null> {
+    const cacheKey = `account:${publicKey}`;
+    const cached = this.get(cacheKey);
+    
+    if (cached) {
+      return cached;
+    }
+
+    const accountInfo = await connection.getAccountInfo(new PublicKey(publicKey));
+    this.set(cacheKey, accountInfo, ttl);
+    
+    return accountInfo;
+  }
+
+  public async getCachedBlockhash(
+    connection: Connection,
+    ttl = 10000 // 10 seconds for blockhash
+  ): Promise<BlockhashWithExpiryBlockHeight> {
+    const cacheKey = 'latest-blockhash';
+    const cached = this.get(cacheKey);
+    
+    if (cached) {
+      return cached;
+    }
+
+    const blockhash = await connection.getLatestBlockhash('confirmed');
+    this.set(cacheKey, blockhash, ttl);
+    
+    return blockhash;
+  }
+
+  private get(key: string): any | null {
+    const entry = this.cache.get(key);
+    
+    if (!entry) {
+      return null;
+    }
+    
+    if (Date.now() - entry.timestamp > entry.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return entry.data;
+  }
+
+  private set(key: string, data: any, ttl: number) {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl
+    });
+  }
+
+  public clear() {
+    this.cache.clear();
+  }
+
+  public size(): number {
+    return this.cache.size;
+  }
+}
+```
+
+## WebSocket Subscriptions
+
+### 1. Account Monitoring
+```typescript
+export class SubscriptionManager {
+  private subscriptions: Map<string, number> = new Map();
+  private connectionManager: SmartConnectionManager;
+  private eventEmitter: EventEmitter;
+
+  constructor(connectionManager: SmartConnectionManager) {
+    this.connectionManager = connectionManager;
+    this.eventEmitter = new EventEmitter();
+  }
+
+  public async subscribeToAccountChanges(
+    publicKey: string,
+    callback: (accountInfo: AccountInfo<Buffer>, context: Context) => void
+  ): Promise<string> {
+    const connection = await this.connectionManager.getConnection();
+    
+    const subscriptionId = connection.onAccountChange(
+      new PublicKey(publicKey),
+      callback,
+      'confirmed'
+    );
+
+    const subscriptionKey = `account:${publicKey}`;
+    this.subscriptions.set(subscriptionKey, subscriptionId);
+
+    return subscriptionKey;
+  }
+
+  public async subscribeToSubscriptionChanges(
+    userPublicKey: string,
+    callback: (accountInfo: AccountInfo<Buffer>) => void
+  ): Promise<string> {
+    // Derive subscription PDA
+    const [subscriptionPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from('subscription'),
+        new PublicKey(userPublicKey).toBuffer()
+      ],
+      PROGRAM_ID
+    );
+
+    return this.subscribeToAccountChanges(
+      subscriptionPDA.toString(),
+      (accountInfo, context) => {
+        // Parse subscription account data
+        try {
+          const subscriptionData = parseSubscriptionAccount(accountInfo.data);
+          this.eventEmitter.emit('subscription-updated', {
+            userPublicKey,
+            subscription: subscriptionData,
+            slot: context.slot
+          });
+          
+          callback(accountInfo);
+        } catch (error) {
+          console.error('Failed to parse subscription data:', error);
+        }
+      }
+    );
+  }
+
+  public async unsubscribe(subscriptionKey: string) {
+    const subscriptionId = this.subscriptions.get(subscriptionKey);
+    
+    if (subscriptionId) {
+      const connection = await this.connectionManager.getConnection();
+      await connection.removeAccountChangeListener(subscriptionId);
+      this.subscriptions.delete(subscriptionKey);
+    }
+  }
+
+  public async unsubscribeAll() {
+    const connection = await this.connectionManager.getConnection();
+    
+    for (const [key, subscriptionId] of this.subscriptions) {
+      await connection.removeAccountChangeListener(subscriptionId);
+    }
+    
+    this.subscriptions.clear();
+  }
+
+  public on(event: string, callback: (...args: any[]) => void) {
+    this.eventEmitter.on(event, callback);
+  }
+
+  public off(event: string, callback: (...args: any[]) => void) {
+    this.eventEmitter.off(event, callback);
+  }
+}
+```
+
+## Performance Monitoring
+
+### 1. RPC Metrics Collection
+```typescript
+export interface RPCMetrics {
+  provider: string;
+  method: string;
+  duration: number;
+  success: boolean;
+  error?: string;
+  timestamp: number;
+}
+
+export class RPCMetricsCollector {
+  private metrics: RPCMetrics[] = [];
+  private readonly MAX_METRICS = 10000;
+
+  public recordMetric(metric: RPCMetrics) {
+    this.metrics.push(metric);
+    
+    // Keep only recent metrics
+    if (this.metrics.length > this.MAX_METRICS) {
+      this.metrics = this.metrics.slice(-this.MAX_METRICS / 2);
+    }
+  }
+
+  public getProviderStats(provider: string, timeWindow = 5 * 60 * 1000): {
+    totalRequests: number;
+    successRate: number;
+    averageLatency: number;
+    errorRate: number;
+  } {
+    const now = Date.now();
+    const recentMetrics = this.metrics.filter(
+      m => m.provider === provider && (now - m.timestamp) <= timeWindow
+    );
+
+    if (recentMetrics.length === 0) {
+      return { totalRequests: 0, successRate: 0, averageLatency: 0, errorRate: 0 };
+    }
+
+    const successfulRequests = recentMetrics.filter(m => m.success);
+    const totalRequests = recentMetrics.length;
+    const successRate = successfulRequests.length / totalRequests;
+    const averageLatency = successfulRequests.reduce((sum, m) => sum + m.duration, 0) / successfulRequests.length;
+    const errorRate = 1 - successRate;
+
+    return {
+      totalRequests,
+      successRate,
+      averageLatency,
+      errorRate
+    };
+  }
+
+  public getBestProvider(): string | null {
+    const now = Date.now();
+    const recentWindow = 5 * 60 * 1000; // 5 minutes
+    
+    const providerStats = RPC_PROVIDERS.map(provider => ({
+      name: provider.name,
+      priority: provider.priority,
+      stats: this.getProviderStats(provider.name, recentWindow)
+    }));
+
+    // Filter providers with reasonable stats
+    const viableProviders = providerStats.filter(p => 
+      p.stats.totalRequests > 10 && 
+      p.stats.successRate > 0.8
+    );
+
+    if (viableProviders.length === 0) {
+      return RPC_PROVIDERS[0].name; // Fallback to primary
+    }
+
+    // Sort by success rate, then by latency, then by priority
+    viableProviders.sort((a, b) => {
+      if (b.stats.successRate !== a.stats.successRate) {
+        return b.stats.successRate - a.stats.successRate;
+      }
+      if (a.stats.averageLatency !== b.stats.averageLatency) {
+        return a.stats.averageLatency - b.stats.averageLatency;
+      }
+      return a.priority - b.priority;
+    });
+
+    return viableProviders[0].name;
+  }
+}
+```

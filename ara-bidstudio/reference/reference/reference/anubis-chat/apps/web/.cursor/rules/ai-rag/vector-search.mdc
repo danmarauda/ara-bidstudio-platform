@@ -1,0 +1,573 @@
+---
+category: ai-rag
+subcategory: vector-search
+tags: [qdrant, vector-database, similarity-search, optimization]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./embeddings.mdc"]
+  exports: ["search-patterns", "qdrant-optimization"]
+  references: ["../backend/database-config.mdc"]
+---
+
+# Vector Search Optimization with Qdrant (2025)
+
+## Qdrant Configuration
+
+### Production Setup
+```typescript
+import { QdrantClient } from '@qdrant/js-client-rest';
+
+export const qdrantClient = new QdrantClient({
+  url: process.env.QDRANT_URL || 'http://localhost:6333',
+  apiKey: process.env.QDRANT_API_KEY,
+  timeout: 30000,
+});
+
+export const COLLECTION_CONFIG = {
+  name: 'anubis_knowledge_base',
+  vectors: {
+    size: 3072, // text-embedding-3-large
+    distance: 'Cosine' as const,
+    hnsw_config: {
+      m: 16,         // Number of bi-directional links for new elements
+      ef_construct: 200, // Size of dynamic candidate list
+      full_scan_threshold: 10000, // Switch to full scan below this threshold
+      max_indexing_threads: 4,
+      on_disk: false  // Keep in memory for speed
+    },
+    quantization_config: {
+      scalar: {
+        type: 'int8' as const,
+        quantile: 0.99,
+        always_ram: true
+      }
+    }
+  },
+  optimizers_config: {
+    deleted_threshold: 0.2,
+    vacuum_min_vector_number: 1000,
+    default_segment_number: 2,
+    max_segment_size: 200000,
+    memmap_threshold: 10000,
+    indexing_threshold: 20000,
+    flush_interval_sec: 5,
+    max_optimization_threads: 2
+  }
+} as const;
+```
+
+### Collection Management
+```typescript
+export class QdrantManager {
+  constructor(private client: QdrantClient) {}
+
+  async initializeCollection(): Promise<void> {
+    try {
+      // Check if collection exists
+      const collections = await this.client.getCollections();
+      const exists = collections.collections.some(
+        c => c.name === COLLECTION_CONFIG.name
+      );
+
+      if (!exists) {
+        await this.client.createCollection(COLLECTION_CONFIG.name, {
+          vectors: COLLECTION_CONFIG.vectors,
+          optimizers_config: COLLECTION_CONFIG.optimizers_config,
+        });
+      }
+
+      // Create indexes for better filtering
+      await this.createIndexes();
+    } catch (error) {
+      console.error('Failed to initialize collection:', error);
+      throw error;
+    }
+  }
+
+  private async createIndexes(): Promise<void> {
+    const indexes = [
+      { field_name: 'document_id', field_schema: 'keyword' },
+      { field_name: 'content_type', field_schema: 'keyword' },
+      { field_name: 'created_at', field_schema: 'datetime' },
+      { field_name: 'user_id', field_schema: 'uuid' },
+    ];
+
+    for (const index of indexes) {
+      try {
+        await this.client.createPayloadIndex(COLLECTION_CONFIG.name, index);
+      } catch (error) {
+        console.warn(`Failed to create index ${index.field_name}:`, error);
+      }
+    }
+  }
+}
+```
+
+## Advanced Search Patterns
+
+### Hybrid Search Implementation
+```typescript
+export class HybridSearchEngine {
+  constructor(
+    private qdrant: QdrantClient,
+    private embeddingPipeline: EmbeddingPipeline
+  ) {}
+
+  async search(query: SearchQuery): Promise<SearchResult[]> {
+    // 1. Generate query embedding
+    const queryEmbedding = await this.embeddingPipeline.embedSingle(query.text);
+
+    // 2. Perform vector search
+    const vectorResults = await this.vectorSearch(queryEmbedding, query);
+
+    // 3. Apply keyword filtering if needed
+    if (query.keywords && query.keywords.length > 0) {
+      return this.keywordFilter(vectorResults, query.keywords);
+    }
+
+    // 4. Re-rank if specified
+    if (query.rerank) {
+      return this.rerank(vectorResults, query.text);
+    }
+
+    return vectorResults;
+  }
+
+  private async vectorSearch(
+    embedding: number[],
+    query: SearchQuery
+  ): Promise<SearchResult[]> {
+    const searchParams = {
+      vector: embedding,
+      limit: query.limit || 10,
+      offset: query.offset || 0,
+      score_threshold: query.threshold || 0.7,
+      with_payload: true,
+      with_vector: false, // Don't return vectors to save bandwidth
+    };
+
+    // Add filters
+    if (query.filters) {
+      searchParams.filter = this.buildFilter(query.filters);
+    }
+
+    const results = await this.qdrant.search(COLLECTION_CONFIG.name, searchParams);
+
+    return results.map(result => ({
+      id: result.id as string,
+      content: result.payload?.content as string,
+      score: result.score,
+      metadata: result.payload?.metadata as any,
+    }));
+  }
+
+  private buildFilter(filters: SearchFilters) {
+    const conditions = [];
+
+    if (filters.userId) {
+      conditions.push({
+        key: 'user_id',
+        match: { value: filters.userId }
+      });
+    }
+
+    if (filters.contentType) {
+      conditions.push({
+        key: 'content_type',
+        match: { value: filters.contentType }
+      });
+    }
+
+    if (filters.dateRange) {
+      conditions.push({
+        key: 'created_at',
+        range: {
+          gte: filters.dateRange.from,
+          lte: filters.dateRange.to,
+        }
+      });
+    }
+
+    return conditions.length > 0 ? { must: conditions } : undefined;
+  }
+
+  private async rerank(results: SearchResult[], originalQuery: string): Promise<SearchResult[]> {
+    // Simple re-ranking based on keyword overlap
+    const queryWords = new Set(originalQuery.toLowerCase().split(/\s+/));
+    
+    return results
+      .map(result => ({
+        ...result,
+        rerankScore: this.calculateRerankScore(result.content, queryWords)
+      }))
+      .sort((a, b) => (b.rerankScore * b.score) - (a.rerankScore * a.score));
+  }
+
+  private calculateRerankScore(content: string, queryWords: Set<string>): number {
+    const contentWords = new Set(content.toLowerCase().split(/\s+/));
+    const intersection = new Set([...queryWords].filter(x => contentWords.has(x)));
+    return intersection.size / queryWords.size;
+  }
+}
+
+interface SearchQuery {
+  text: string;
+  limit?: number;
+  offset?: number;
+  threshold?: number;
+  filters?: SearchFilters;
+  keywords?: string[];
+  rerank?: boolean;
+}
+
+interface SearchFilters {
+  userId?: string;
+  contentType?: string;
+  dateRange?: {
+    from: string;
+    to: string;
+  };
+}
+
+interface SearchResult {
+  id: string;
+  content: string;
+  score: number;
+  metadata: any;
+  rerankScore?: number;
+}
+```
+
+### Contextual Retrieval
+```typescript
+export class ContextualRetriever {
+  constructor(
+    private searchEngine: HybridSearchEngine,
+    private windowSize = 3 // Number of surrounding chunks to include
+  ) {}
+
+  async retrieveWithContext(
+    query: string,
+    options: RetrievalOptions = {}
+  ): Promise<ContextualResult[]> {
+    // 1. Initial search
+    const initialResults = await this.searchEngine.search({
+      text: query,
+      limit: options.limit || 5,
+      threshold: options.threshold || 0.75,
+      ...options
+    });
+
+    // 2. Expand with context
+    const contextualResults = await Promise.all(
+      initialResults.map(result => this.expandWithContext(result))
+    );
+
+    // 3. Deduplicate and merge overlapping contexts
+    return this.deduplicateContexts(contextualResults);
+  }
+
+  private async expandWithContext(result: SearchResult): Promise<ContextualResult> {
+    const chunkIndex = result.metadata?.index;
+    const documentId = result.metadata?.document_id;
+
+    if (!chunkIndex || !documentId) {
+      return { ...result, context: [] };
+    }
+
+    // Get surrounding chunks
+    const contextChunks = await this.getSurroundingChunks(
+      documentId,
+      chunkIndex,
+      this.windowSize
+    );
+
+    return {
+      ...result,
+      context: contextChunks,
+      expandedContent: this.mergeChunks([...contextChunks, result.content])
+    };
+  }
+
+  private async getSurroundingChunks(
+    documentId: string,
+    centerIndex: number,
+    windowSize: number
+  ): Promise<string[]> {
+    const startIndex = Math.max(0, centerIndex - windowSize);
+    const endIndex = centerIndex + windowSize;
+
+    const results = await this.qdrant.search(COLLECTION_CONFIG.name, {
+      vector: new Array(3072).fill(0), // Dummy vector for filtering
+      limit: windowSize * 2 + 1,
+      filter: {
+        must: [
+          { key: 'document_id', match: { value: documentId } },
+          { 
+            key: 'metadata.index', 
+            range: { gte: startIndex, lte: endIndex }
+          }
+        ]
+      }
+    });
+
+    return results
+      .sort((a, b) => a.payload.metadata.index - b.payload.metadata.index)
+      .map(r => r.payload.content as string)
+      .filter((_, index) => index !== windowSize); // Remove center chunk
+  }
+
+  private mergeChunks(chunks: string[]): string {
+    return chunks.join('\n\n---\n\n');
+  }
+
+  private deduplicateContexts(results: ContextualResult[]): ContextualResult[] {
+    // Simple deduplication based on content similarity
+    const seen = new Set<string>();
+    return results.filter(result => {
+      const key = result.content.substring(0, 100);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+}
+
+interface RetrievalOptions extends Omit<SearchQuery, 'text'> {
+  expandContext?: boolean;
+}
+
+interface ContextualResult extends SearchResult {
+  context: string[];
+  expandedContent?: string;
+}
+```
+
+## Performance Optimization
+
+### Query Optimization
+```typescript
+export class QueryOptimizer {
+  private queryCache = new Map<string, SearchResult[]>();
+  private cacheExpiry = 5 * 60 * 1000; // 5 minutes
+
+  async optimizedSearch(query: SearchQuery): Promise<SearchResult[]> {
+    // 1. Check cache first
+    const cacheKey = this.getCacheKey(query);
+    const cached = this.queryCache.get(cacheKey);
+    
+    if (cached && this.isCacheValid(cacheKey)) {
+      return cached;
+    }
+
+    // 2. Query expansion for better recall
+    const expandedQuery = await this.expandQuery(query.text);
+
+    // 3. Adaptive threshold based on query complexity
+    const adaptiveThreshold = this.calculateAdaptiveThreshold(query.text);
+
+    // 4. Perform search
+    const results = await this.searchEngine.search({
+      ...query,
+      text: expandedQuery,
+      threshold: adaptiveThreshold,
+    });
+
+    // 5. Cache results
+    this.queryCache.set(cacheKey, results);
+    setTimeout(() => this.queryCache.delete(cacheKey), this.cacheExpiry);
+
+    return results;
+  }
+
+  private async expandQuery(query: string): Promise<string> {
+    // Simple query expansion with synonyms
+    const synonyms = {
+      'AI': ['artificial intelligence', 'machine learning', 'ML'],
+      'bug': ['error', 'issue', 'problem', 'defect'],
+      'fix': ['resolve', 'solve', 'repair'],
+    };
+
+    let expandedQuery = query;
+    
+    for (const [term, syns] of Object.entries(synonyms)) {
+      if (query.toLowerCase().includes(term.toLowerCase())) {
+        expandedQuery += ' ' + syns.join(' ');
+      }
+    }
+
+    return expandedQuery;
+  }
+
+  private calculateAdaptiveThreshold(query: string): number {
+    const baseThreshold = 0.7;
+    
+    // Lower threshold for complex queries (more lenient)
+    const complexity = query.split(' ').length;
+    const adjustment = Math.min(0.2, complexity * 0.02);
+    
+    return Math.max(0.5, baseThreshold - adjustment);
+  }
+
+  private getCacheKey(query: SearchQuery): string {
+    return JSON.stringify({
+      text: query.text,
+      limit: query.limit,
+      filters: query.filters,
+    });
+  }
+
+  private isCacheValid(key: string): boolean {
+    // Simple time-based validation
+    return true; // Implement actual cache timestamp checking
+  }
+}
+```
+
+### Batch Operations
+```typescript
+export class QdrantBatchManager {
+  private batchSize = 100;
+  private maxRetries = 3;
+
+  async upsertBatch(points: QdrantPoint[]): Promise<void> {
+    for (let i = 0; i < points.length; i += this.batchSize) {
+      const batch = points.slice(i, i + this.batchSize);
+      await this.retryOperation(() => this.upsertSingleBatch(batch));
+    }
+  }
+
+  private async upsertSingleBatch(points: QdrantPoint[]): Promise<void> {
+    try {
+      await this.qdrant.upsert(COLLECTION_CONFIG.name, {
+        wait: true,
+        points: points.map(point => ({
+          id: point.id,
+          vector: point.vector,
+          payload: point.payload,
+        })),
+      });
+    } catch (error) {
+      console.error('Batch upsert failed:', error);
+      throw error;
+    }
+  }
+
+  private async retryOperation<T>(
+    operation: () => Promise<T>,
+    retries = this.maxRetries
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (retries > 0) {
+        console.warn(`Operation failed, retrying... (${retries} attempts left)`);
+        await this.delay(1000 * (this.maxRetries - retries + 1));
+        return this.retryOperation(operation, retries - 1);
+      }
+      throw error;
+    }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+interface QdrantPoint {
+  id: string;
+  vector: number[];
+  payload: Record<string, any>;
+}
+```
+
+## Monitoring & Analytics
+
+### Search Analytics
+```typescript
+export class SearchAnalytics {
+  private metrics = {
+    totalQueries: 0,
+    averageLatency: 0,
+    averageScore: 0,
+    cacheHitRate: 0,
+  };
+
+  recordQuery(query: string, latency: number, results: SearchResult[]): void {
+    this.metrics.totalQueries++;
+    this.updateAverageLatency(latency);
+    
+    if (results.length > 0) {
+      this.updateAverageScore(results[0].score);
+    }
+
+    // Log slow queries
+    if (latency > 1000) {
+      console.warn('Slow query detected:', { query, latency });
+    }
+  }
+
+  private updateAverageLatency(newLatency: number): void {
+    const weight = 1 / Math.min(this.metrics.totalQueries, 1000);
+    this.metrics.averageLatency = 
+      (1 - weight) * this.metrics.averageLatency + weight * newLatency;
+  }
+
+  private updateAverageScore(newScore: number): void {
+    const weight = 1 / Math.min(this.metrics.totalQueries, 1000);
+    this.metrics.averageScore = 
+      (1 - weight) * this.metrics.averageScore + weight * newScore;
+  }
+
+  getMetrics(): typeof this.metrics {
+    return { ...this.metrics };
+  }
+}
+```
+
+## Testing Vector Search
+
+### Integration Tests
+```typescript
+describe('Vector Search Integration', () => {
+  let searchEngine: HybridSearchEngine;
+  let qdrantClient: QdrantClient;
+
+  beforeAll(async () => {
+    qdrantClient = new QdrantClient({ url: 'http://localhost:6333' });
+    searchEngine = new HybridSearchEngine(qdrantClient, embeddingPipeline);
+    
+    // Setup test collection
+    await qdrantClient.createCollection('test_collection', {
+      vectors: { size: 3072, distance: 'Cosine' }
+    });
+  });
+
+  it('should return relevant results for queries', async () => {
+    // Insert test data
+    await qdrantClient.upsert('test_collection', {
+      points: [{
+        id: '1',
+        vector: Array(3072).fill(0.1),
+        payload: { content: 'AI and machine learning concepts' }
+      }]
+    });
+
+    const results = await searchEngine.search({
+      text: 'artificial intelligence',
+      limit: 5
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].score).toBeGreaterThan(0.8);
+  });
+
+  afterAll(async () => {
+    await qdrantClient.deleteCollection('test_collection');
+  });
+});
+```

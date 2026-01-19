@@ -1,0 +1,1613 @@
+---
+category: frontend
+subcategory: wallet-integration
+tags: [solana, wallet, web3, ux, phantom, backpack, solflare]
+cursor:
+  context_window: 8192
+  temperature: 0.6
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["./index.mdc", "./components.mdc", "./state-management.mdc"]
+  exports: ["wallet-patterns", "web3-ux", "solana-integration"]
+  references: ["./accessibility.mdc", "./animations.mdc", "../web3/solana-patterns.mdc"]
+---
+
+# Solana Wallet Integration & Web3 UX Patterns
+
+## Wallet Integration Architecture
+
+### Core Wallet Setup
+
+```typescript
+// Wallet provider setup with multiple wallet support
+'use client';
+
+import { FC, ReactNode, useMemo } from 'react';
+import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import {
+  PhantomWalletAdapter,
+  BackpackWalletAdapter,
+  SolflareWalletAdapter,
+  TorusWalletAdapter,
+  LedgerWalletAdapter,
+  SolletWalletAdapter,
+  MathWalletAdapter,
+  Coin98WalletAdapter,
+  SlopeWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import { clusterApiUrl } from '@solana/web3.js';
+import { WalletError } from '@solana/wallet-adapter-base';
+import { useToast } from '@/hooks/use-toast';
+
+// Wallet configuration
+const WALLET_CONFIG = {
+  network: process.env.NODE_ENV === 'production' 
+    ? WalletAdapterNetwork.Mainnet 
+    : WalletAdapterNetwork.Devnet,
+  
+  endpoint: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 
+    clusterApiUrl(process.env.NODE_ENV === 'production' 
+      ? WalletAdapterNetwork.Mainnet 
+      : WalletAdapterNetwork.Devnet
+    ),
+    
+  commitment: 'confirmed' as const,
+} as const;
+
+interface WalletContextProviderProps {
+  children: ReactNode;
+}
+
+export const WalletContextProvider: FC<WalletContextProviderProps> = ({ children }) => {
+  const { toast } = useToast();
+  
+  // Initialize wallets
+  const wallets = useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+      new BackpackWalletAdapter(),
+      new SolflareWalletAdapter({ network: WALLET_CONFIG.network }),
+      new TorusWalletAdapter(),
+      new LedgerWalletAdapter(),
+      new SolletWalletAdapter({ network: WALLET_CONFIG.network }),
+      new MathWalletAdapter(),
+      new Coin98WalletAdapter(),
+      new SlopeWalletAdapter(),
+    ],
+    [WALLET_CONFIG.network]
+  );
+  
+  // Error handler
+  const onError = useCallback((error: WalletError) => {
+    console.error('Wallet error:', error);
+    
+    let message = 'Wallet connection failed';
+    
+    switch (error.name) {
+      case 'WalletNotFoundError':
+        message = 'Wallet not found. Please install a Solana wallet.';
+        break;
+      case 'WalletDisconnectedError':
+        message = 'Wallet disconnected unexpectedly.';
+        break;
+      case 'WalletTimeoutError':
+        message = 'Wallet connection timed out. Please try again.';
+        break;
+      case 'WalletNotReadyError':
+        message = 'Wallet is not ready. Please try again.';
+        break;
+      case 'WalletLoadError':
+        message = 'Failed to load wallet. Please refresh the page.';
+        break;
+      case 'WalletAccountError':
+        message = 'Failed to access wallet account.';
+        break;
+      case 'WalletConnectionError':
+        message = 'Failed to connect to wallet.';
+        break;
+      case 'WalletSignTransactionError':
+        message = 'Transaction signature was rejected.';
+        break;
+      default:
+        message = error.message || 'An unknown wallet error occurred.';
+    }
+    
+    toast({
+      title: 'Wallet Error',
+      description: message,
+      variant: 'destructive',
+    });
+  }, [toast]);
+  
+  return (
+    <ConnectionProvider endpoint={WALLET_CONFIG.endpoint}>
+      <WalletProvider wallets={wallets} onError={onError} autoConnect>
+        <WalletModalProvider>
+          {children}
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
+  );
+};
+```
+
+### Enhanced Wallet Hook
+
+```typescript
+// Enhanced wallet hook with additional utilities
+import { useWallet as useSolanaWallet, useConnection } from '@solana/wallet-adapter-react';
+import { PublicKey, LAMPORTS_PER_SOL, Transaction } from '@solana/web3.js';
+import { useState, useEffect, useCallback } from 'react';
+
+interface WalletBalance {
+  sol: number;
+  usd?: number;
+  lastUpdated: Date;
+}
+
+interface WalletHookReturn {
+  // Base wallet functionality
+  wallet: ReturnType<typeof useSolanaWallet>['wallet'];
+  connected: boolean;
+  connecting: boolean;
+  disconnecting: boolean;
+  publicKey: PublicKey | null;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  
+  // Enhanced functionality
+  balance: WalletBalance | null;
+  isBalanceLoading: boolean;
+  refreshBalance: () => Promise<void>;
+  sendTransaction: (transaction: Transaction) => Promise<string>;
+  signMessage: (message: string) => Promise<Uint8Array>;
+  
+  // Utility functions
+  formatAddress: (length?: number) => string | null;
+  copyAddress: () => Promise<boolean>;
+  getExplorerUrl: () => string | null;
+  
+  // State indicators
+  isPhantom: boolean;
+  isBackpack: boolean;
+  isSolflare: boolean;
+  isLedger: boolean;
+}
+
+export function useWallet(): WalletHookReturn {
+  const walletAdapter = useSolanaWallet();
+  const { connection } = useConnection();
+  const [balance, setBalance] = useState<WalletBalance | null>(null);
+  const [isBalanceLoading, setIsBalanceLoading] = useState(false);
+  
+  const { 
+    wallet, 
+    connected, 
+    connecting, 
+    disconnecting, 
+    publicKey,
+    connect: connectWallet,
+    disconnect: disconnectWallet,
+    sendTransaction: sendTx,
+    signMessage: signMsg,
+  } = walletAdapter;
+  
+  // Fetch SOL balance
+  const refreshBalance = useCallback(async () => {
+    if (!publicKey || !connected) {
+      setBalance(null);
+      return;
+    }
+    
+    setIsBalanceLoading(true);
+    
+    try {
+      const lamports = await connection.getBalance(publicKey);
+      const sol = lamports / LAMPORTS_PER_SOL;
+      
+      // TODO: Fetch USD price from an API
+      const usd = undefined; // await fetchSolPrice(sol);
+      
+      setBalance({
+        sol,
+        usd,
+        lastUpdated: new Date(),
+      });
+    } catch (error) {
+      console.error('Failed to fetch wallet balance:', error);
+      setBalance(null);
+    } finally {
+      setIsBalanceLoading(false);
+    }
+  }, [publicKey, connected, connection]);
+  
+  // Auto-refresh balance on connection
+  useEffect(() => {
+    if (connected && publicKey) {
+      refreshBalance();
+    } else {
+      setBalance(null);
+    }
+  }, [connected, publicKey, refreshBalance]);
+  
+  // Enhanced connect with error handling
+  const connect = useCallback(async () => {
+    try {
+      await connectWallet();
+    } catch (error) {
+      console.error('Connection failed:', error);
+      throw error;
+    }
+  }, [connectWallet]);
+  
+  // Enhanced disconnect
+  const disconnect = useCallback(async () => {
+    try {
+      await disconnectWallet();
+      setBalance(null);
+    } catch (error) {
+      console.error('Disconnection failed:', error);
+      throw error;
+    }
+  }, [disconnectWallet]);
+  
+  // Enhanced transaction sending
+  const sendTransaction = useCallback(async (transaction: Transaction): Promise<string> => {
+    if (!connected || !publicKey) {
+      throw new Error('Wallet not connected');
+    }
+    
+    try {
+      const signature = await sendTx(transaction, connection);
+      
+      // Wait for confirmation
+      await connection.confirmTransaction(signature, 'confirmed');
+      
+      // Refresh balance after successful transaction
+      setTimeout(refreshBalance, 2000);
+      
+      return signature;
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      throw error;
+    }
+  }, [connected, publicKey, sendTx, connection, refreshBalance]);
+  
+  // Enhanced message signing
+  const signMessage = useCallback(async (message: string): Promise<Uint8Array> => {
+    if (!connected || !signMsg) {
+      throw new Error('Wallet not connected or message signing not supported');
+    }
+    
+    try {
+      const encodedMessage = new TextEncoder().encode(message);
+      const signature = await signMsg(encodedMessage);
+      return signature;
+    } catch (error) {
+      console.error('Message signing failed:', error);
+      throw error;
+    }
+  }, [connected, signMsg]);
+  
+  // Utility functions
+  const formatAddress = useCallback((length: number = 4): string | null => {
+    if (!publicKey) return null;
+    
+    const address = publicKey.toString();
+    return `${address.slice(0, length)}...${address.slice(-length)}`;
+  }, [publicKey]);
+  
+  const copyAddress = useCallback(async (): Promise<boolean> => {
+    if (!publicKey) return false;
+    
+    try {
+      await navigator.clipboard.writeText(publicKey.toString());
+      return true;
+    } catch (error) {
+      console.error('Failed to copy address:', error);
+      return false;
+    }
+  }, [publicKey]);
+  
+  const getExplorerUrl = useCallback((): string | null => {
+    if (!publicKey) return null;
+    
+    const network = process.env.NODE_ENV === 'production' ? 'mainnet-beta' : 'devnet';
+    return `https://solscan.io/account/${publicKey.toString()}?cluster=${network}`;
+  }, [publicKey]);
+  
+  // Wallet type detection
+  const isPhantom = wallet?.adapter.name === 'Phantom';
+  const isBackpack = wallet?.adapter.name === 'Backpack';
+  const isSolflare = wallet?.adapter.name === 'Solflare';
+  const isLedger = wallet?.adapter.name === 'Ledger';
+  
+  return {
+    // Base functionality
+    wallet,
+    connected,
+    connecting,
+    disconnecting,
+    publicKey,
+    connect,
+    disconnect,
+    
+    // Enhanced functionality
+    balance,
+    isBalanceLoading,
+    refreshBalance,
+    sendTransaction,
+    signMessage,
+    
+    // Utilities
+    formatAddress,
+    copyAddress,
+    getExplorerUrl,
+    
+    // Type detection
+    isPhantom,
+    isBackpack,
+    isSolflare,
+    isLedger,
+  };
+}
+```
+
+## Wallet UI Components
+
+### Advanced Wallet Button
+
+```typescript
+// Advanced wallet connection button with progressive disclosure
+import { WalletIcon } from '@solana/wallet-adapter-react-ui';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface WalletButtonProps {
+  variant?: 'connect' | 'account' | 'compact';
+  showBalance?: boolean;
+  showAddress?: boolean;
+  showNetwork?: boolean;
+  className?: string;
+}
+
+export function WalletButton({
+  variant = 'connect',
+  showBalance = false,
+  showAddress = false,
+  showNetwork = false,
+  className,
+}: WalletButtonProps) {
+  const {
+    connected,
+    connecting,
+    wallet,
+    balance,
+    isBalanceLoading,
+    formatAddress,
+    connect,
+    disconnect,
+    copyAddress,
+    getExplorerUrl,
+  } = useWallet();
+  
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  
+  // Handle copy address
+  const handleCopyAddress = useCallback(async () => {
+    const success = await copyAddress();
+    if (success) {
+      setCopied(true);
+      toast({
+        title: 'Address copied',
+        description: 'Wallet address copied to clipboard',
+      });
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [copyAddress]);
+  
+  // Not connected state
+  if (!connected) {
+    return (
+      <Button
+        onClick={connect}
+        disabled={connecting}
+        className={cn(
+          'wallet-button wallet-button--connect',
+          className
+        )}
+      >
+        {connecting ? (
+          <>
+            <Spinner size="sm" />
+            <span>Connecting...</span>
+          </>
+        ) : (
+          <>
+            <WalletIcon className="w-4 h-4" />
+            <span>Connect Wallet</span>
+          </>
+        )}
+      </Button>
+    );
+  }
+  
+  // Compact variant
+  if (variant === 'compact') {
+    return (
+      <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn('wallet-button--compact', className)}
+          >
+            {wallet?.adapter.icon && (
+              <img
+                src={wallet.adapter.icon}
+                alt={wallet.adapter.name}
+                className="w-4 h-4"
+              />
+            )}
+            <span className="hidden sm:inline">
+              {formatAddress(4)}
+            </span>
+            <ChevronDownIcon className="w-3 h-3" />
+          </Button>
+        </DropdownMenuTrigger>
+        <WalletDropdownContent
+          onCopyAddress={handleCopyAddress}
+          onDisconnect={disconnect}
+          copied={copied}
+        />
+      </DropdownMenu>
+    );
+  }
+  
+  // Account variant (full display)
+  return (
+    <div className={cn('wallet-account', className)}>
+      <div className="wallet-account__header">
+        <div className="wallet-account__info">
+          <div className="flex items-center gap-2">
+            {wallet?.adapter.icon && (
+              <img
+                src={wallet.adapter.icon}
+                alt={wallet.adapter.name}
+                className="w-6 h-6 rounded"
+              />
+            )}
+            <div>
+              <div className="wallet-account__name">
+                {wallet?.adapter.name}
+              </div>
+              {showNetwork && (
+                <div className="wallet-account__network">
+                  {process.env.NODE_ENV === 'production' ? 'Mainnet' : 'Devnet'}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <MoreVerticalIcon className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <WalletDropdownContent
+              onCopyAddress={handleCopyAddress}
+              onDisconnect={disconnect}
+              copied={copied}
+              showExplorer
+            />
+          </DropdownMenu>
+        </div>
+      </div>
+      
+      {(showAddress || showBalance) && (
+        <div className="wallet-account__details">
+          {showAddress && (
+            <div className="wallet-account__address">
+              <label className="text-xs text-muted-foreground">Address</label>
+              <div className="font-mono text-sm">
+                {formatAddress(8)}
+              </div>
+            </div>
+          )}
+          
+          {showBalance && (
+            <div className="wallet-account__balance">
+              <label className="text-xs text-muted-foreground">Balance</label>
+              <div className="flex items-center gap-2">
+                {isBalanceLoading ? (
+                  <Skeleton className="h-4 w-16" />
+                ) : balance ? (
+                  <div>
+                    <div className="font-medium">
+                      {balance.sol.toFixed(4)} SOL
+                    </div>
+                    {balance.usd && (
+                      <div className="text-sm text-muted-foreground">
+                        ${balance.usd.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Reusable dropdown content
+function WalletDropdownContent({
+  onCopyAddress,
+  onDisconnect,
+  copied,
+  showExplorer = false,
+}: {
+  onCopyAddress: () => void;
+  onDisconnect: () => void;
+  copied: boolean;
+  showExplorer?: boolean;
+}) {
+  const { getExplorerUrl, refreshBalance } = useWallet();
+  
+  return (
+    <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuItem onClick={onCopyAddress}>
+        <CopyIcon className="mr-2 h-4 w-4" />
+        {copied ? 'Copied!' : 'Copy Address'}
+      </DropdownMenuItem>
+      
+      {showExplorer && (
+        <DropdownMenuItem asChild>
+          <a
+            href={getExplorerUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLinkIcon className="mr-2 h-4 w-4" />
+            View on Solscan
+          </a>
+        </DropdownMenuItem>
+      )}
+      
+      <DropdownMenuItem onClick={refreshBalance}>
+        <RefreshCwIcon className="mr-2 h-4 w-4" />
+        Refresh Balance
+      </DropdownMenuItem>
+      
+      <DropdownMenuSeparator />
+      
+      <DropdownMenuItem
+        onClick={onDisconnect}
+        className="text-destructive focus:text-destructive"
+      >
+        <LogOutIcon className="mr-2 h-4 w-4" />
+        Disconnect
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  );
+}
+```
+
+### Wallet Selection Modal
+
+```typescript
+// Enhanced wallet selection with recommendations
+interface WalletSelectionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConnect?: (walletName: string) => void;
+}
+
+export function WalletSelectionModal({
+  isOpen,
+  onClose,
+  onConnect,
+}: WalletSelectionModalProps) {
+  const { wallets, connect } = useWallet();
+  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  
+  // Wallet recommendations based on platform and features
+  const walletRecommendations = useMemo(() => {
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    
+    return {
+      phantom: {
+        priority: 1,
+        recommended: true,
+        reasons: ['Most popular', 'Great mobile support', 'Built-in swap'],
+        features: ['NFTs', 'DeFi', 'Mobile app', 'Browser extension'],
+        platforms: ['Chrome', 'Firefox', 'iOS', 'Android'],
+      },
+      backpack: {
+        priority: 2,
+        recommended: true,
+        reasons: ['xNFT support', 'Advanced features', 'Mad Lads ecosystem'],
+        features: ['xNFTs', 'Multi-chain', 'Built-in exchange'],
+        platforms: ['Chrome', 'Mobile (coming soon)'],
+      },
+      solflare: {
+        priority: 3,
+        recommended: false,
+        reasons: ['Hardware wallet support', 'Open source'],
+        features: ['Hardware wallets', 'Staking', 'Open source'],
+        platforms: ['Chrome', 'Firefox', 'iOS', 'Android'],
+      },
+    };
+  }, []);
+  
+  const handleWalletSelect = async (walletName: string) => {
+    setSelectedWallet(walletName);
+    setIsConnecting(true);
+    
+    try {
+      await connect();
+      onConnect?.(walletName);
+      onClose();
+    } catch (error) {
+      console.error(`Failed to connect to ${walletName}:`, error);
+    } finally {
+      setIsConnecting(false);
+      setSelectedWallet(null);
+    }
+  };
+  
+  const sortedWallets = useMemo(() => {
+    return wallets
+      .filter(wallet => wallet.readyState !== 'Unsupported')
+      .sort((a, b) => {
+        const aRec = walletRecommendations[a.adapter.name.toLowerCase() as keyof typeof walletRecommendations];
+        const bRec = walletRecommendations[b.adapter.name.toLowerCase() as keyof typeof walletRecommendations];
+        
+        if (aRec && bRec) {
+          return aRec.priority - bRec.priority;
+        }
+        
+        if (aRec) return -1;
+        if (bRec) return 1;
+        
+        return a.adapter.name.localeCompare(b.adapter.name);
+      });
+  }, [wallets, walletRecommendations]);
+  
+  return (
+    <AnimatedModal isOpen={isOpen} onClose={onClose} size="md">
+      <div className="wallet-selection">
+        <div className="wallet-selection__header">
+          <h2 className="text-xl font-semibold">Connect Your Wallet</h2>
+          <p className="text-muted-foreground mt-1">
+            Choose a wallet to connect to ANUBIS Chat
+          </p>
+        </div>
+        
+        <div className="wallet-selection__content">
+          {/* Recommended wallets */}
+          <div className="wallet-list">
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">
+              Recommended
+            </h3>
+            
+            {sortedWallets
+              .filter(wallet => 
+                walletRecommendations[wallet.adapter.name.toLowerCase() as keyof typeof walletRecommendations]?.recommended
+              )
+              .map((wallet) => (
+                <WalletOption
+                  key={wallet.adapter.name}
+                  wallet={wallet}
+                  recommendation={walletRecommendations[wallet.adapter.name.toLowerCase() as keyof typeof walletRecommendations]}
+                  isSelected={selectedWallet === wallet.adapter.name}
+                  isConnecting={isConnecting && selectedWallet === wallet.adapter.name}
+                  onClick={() => handleWalletSelect(wallet.adapter.name)}
+                />
+              ))
+            }
+          </div>
+          
+          {/* Other wallets */}
+          {sortedWallets.some(wallet => 
+            !walletRecommendations[wallet.adapter.name.toLowerCase() as keyof typeof walletRecommendations]?.recommended
+          ) && (
+            <div className="wallet-list">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
+                Other Wallets
+              </h3>
+              
+              {sortedWallets
+                .filter(wallet => 
+                  !walletRecommendations[wallet.adapter.name.toLowerCase() as keyof typeof walletRecommendations]?.recommended
+                )
+                .map((wallet) => (
+                  <WalletOption
+                    key={wallet.adapter.name}
+                    wallet={wallet}
+                    recommendation={walletRecommendations[wallet.adapter.name.toLowerCase() as keyof typeof walletRecommendations]}
+                    isSelected={selectedWallet === wallet.adapter.name}
+                    isConnecting={isConnecting && selectedWallet === wallet.adapter.name}
+                    onClick={() => handleWalletSelect(wallet.adapter.name)}
+                  />
+                ))
+              }
+            </div>
+          )}
+        </div>
+        
+        {/* Help section */}
+        <div className="wallet-selection__footer">
+          <div className="text-xs text-muted-foreground">
+            <p className="mb-2">New to Solana wallets?</p>
+            <div className="flex gap-4">
+              <a
+                href="https://phantom.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Get Phantom
+              </a>
+              <a
+                href="https://backpack.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Get Backpack
+              </a>
+              <a
+                href="https://solflare.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Get Solflare
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AnimatedModal>
+  );
+}
+
+// Individual wallet option component
+interface WalletOptionProps {
+  wallet: Wallet;
+  recommendation?: {
+    recommended: boolean;
+    reasons: string[];
+    features: string[];
+    platforms: string[];
+  };
+  isSelected: boolean;
+  isConnecting: boolean;
+  onClick: () => void;
+}
+
+function WalletOption({
+  wallet,
+  recommendation,
+  isSelected,
+  isConnecting,
+  onClick,
+}: WalletOptionProps) {
+  const isInstalled = wallet.readyState === 'Installed';
+  const isLoadable = wallet.readyState === 'Loadable';
+  
+  return (
+    <motion.button
+      className={cn(
+        'wallet-option',
+        isSelected && 'wallet-option--selected',
+        !isInstalled && !isLoadable && 'wallet-option--disabled'
+      )}
+      onClick={onClick}
+      disabled={(!isInstalled && !isLoadable) || isConnecting}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+    >
+      <div className="wallet-option__content">
+        <div className="wallet-option__main">
+          <div className="wallet-option__icon">
+            <img
+              src={wallet.adapter.icon}
+              alt={wallet.adapter.name}
+              className="w-8 h-8"
+            />
+          </div>
+          
+          <div className="wallet-option__info">
+            <div className="wallet-option__name">
+              {wallet.adapter.name}
+              {recommendation?.recommended && (
+                <Badge variant="secondary" className="ml-2">
+                  Recommended
+                </Badge>
+              )}
+            </div>
+            
+            <div className="wallet-option__status">
+              {isConnecting && isSelected ? (
+                <span className="text-primary">Connecting...</span>
+              ) : isInstalled ? (
+                <span className="text-green-600">Installed</span>
+              ) : isLoadable ? (
+                <span className="text-blue-600">Available</span>
+              ) : (
+                <span className="text-muted-foreground">Not Available</span>
+              )}
+            </div>
+            
+            {recommendation && (
+              <div className="wallet-option__features">
+                {recommendation.reasons.slice(0, 2).map((reason, index) => (
+                  <span key={index} className="wallet-feature-tag">
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="wallet-option__action">
+          {isConnecting && isSelected ? (
+            <Spinner size="sm" />
+          ) : (
+            <ChevronRightIcon className="w-4 h-4" />
+          )}
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+```
+
+## Transaction UX Patterns
+
+### Transaction Status Component
+
+```typescript
+// Comprehensive transaction status tracking
+interface TransactionStatusProps {
+  signature?: string;
+  status: 'pending' | 'confirming' | 'confirmed' | 'failed';
+  error?: string;
+  onRetry?: () => void;
+  showDetails?: boolean;
+}
+
+export function TransactionStatus({
+  signature,
+  status,
+  error,
+  onRetry,
+  showDetails = false,
+}: TransactionStatusProps) {
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [showRetry, setShowRetry] = useState(false);
+  
+  // Track elapsed time for pending transactions
+  useEffect(() => {
+    if (status !== 'pending' && status !== 'confirming') return;
+    
+    const startTime = Date.now();
+    const timer = setInterval(() => {
+      setElapsedTime(Date.now() - startTime);
+      
+      // Show retry option after 30 seconds
+      if (Date.now() - startTime > 30000) {
+        setShowRetry(true);
+      }
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [status]);
+  
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'pending':
+        return <Spinner size="sm" />;
+      case 'confirming':
+        return <Spinner size="sm" />;
+      case 'confirmed':
+        return <CheckCircleIcon className="w-4 h-4 text-green-500" />;
+      case 'failed':
+        return <XCircleIcon className="w-4 h-4 text-red-500" />;
+    }
+  };
+  
+  const getStatusMessage = () => {
+    switch (status) {
+      case 'pending':
+        return 'Submitting transaction...';
+      case 'confirming':
+        return 'Waiting for confirmation...';
+      case 'confirmed':
+        return 'Transaction confirmed!';
+      case 'failed':
+        return error || 'Transaction failed';
+    }
+  };
+  
+  const formatElapsedTime = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    return `${seconds}s`;
+  };
+  
+  return (
+    <motion.div
+      className="transaction-status"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+    >
+      <div className="transaction-status__main">
+        <div className="transaction-status__icon">
+          {getStatusIcon()}
+        </div>
+        
+        <div className="transaction-status__info">
+          <div className="transaction-status__message">
+            {getStatusMessage()}
+          </div>
+          
+          {(status === 'pending' || status === 'confirming') && (
+            <div className="transaction-status__time">
+              {formatElapsedTime(elapsedTime)}
+            </div>
+          )}
+          
+          {showDetails && signature && (
+            <div className="transaction-status__details">
+              <a
+                href={`https://solscan.io/tx/${signature}?cluster=${
+                  process.env.NODE_ENV === 'production' ? 'mainnet-beta' : 'devnet'
+                }`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline text-sm"
+              >
+                View on Solscan
+              </a>
+            </div>
+          )}
+        </div>
+        
+        {(showRetry && onRetry) && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+          >
+            Retry
+          </Button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+```
+
+### Transaction Confirmation Dialog
+
+```typescript
+// Transaction preview and confirmation
+interface TransactionConfirmationProps {
+  transaction: {
+    type: string;
+    amount?: number;
+    recipient?: string;
+    token?: string;
+    fee?: number;
+    description?: string;
+  };
+  isOpen: boolean;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+  isLoading?: boolean;
+}
+
+export function TransactionConfirmation({
+  transaction,
+  isOpen,
+  onConfirm,
+  onCancel,
+  isLoading = false,
+}: TransactionConfirmationProps) {
+  const { balance, formatAddress } = useWallet();
+  const [confirming, setConfirming] = useState(false);
+  
+  const handleConfirm = async () => {
+    if (confirming || isLoading) return;
+    
+    setConfirming(true);
+    try {
+      await onConfirm();
+    } catch (error) {
+      console.error('Transaction confirmation failed:', error);
+    } finally {
+      setConfirming(false);
+    }
+  };
+  
+  const insufficientBalance = transaction.amount && balance && 
+    (transaction.amount + (transaction.fee || 0)) > balance.sol;
+  
+  return (
+    <AnimatedModal isOpen={isOpen} onClose={onCancel} size="sm">
+      <div className="transaction-confirmation">
+        <div className="transaction-confirmation__header">
+          <h2 className="text-lg font-semibold">Confirm Transaction</h2>
+          <p className="text-muted-foreground text-sm">
+            {transaction.description || `Confirm this ${transaction.type.toLowerCase()} transaction`}
+          </p>
+        </div>
+        
+        <div className="transaction-confirmation__details">
+          {transaction.amount && (
+            <div className="transaction-detail">
+              <label>Amount</label>
+              <div className="transaction-detail__value">
+                {transaction.amount} {transaction.token || 'SOL'}
+              </div>
+            </div>
+          )}
+          
+          {transaction.recipient && (
+            <div className="transaction-detail">
+              <label>To</label>
+              <div className="transaction-detail__value font-mono">
+                {formatAddress(transaction.recipient, 8)}
+              </div>
+            </div>
+          )}
+          
+          {transaction.fee && (
+            <div className="transaction-detail">
+              <label>Network Fee</label>
+              <div className="transaction-detail__value">
+                {transaction.fee} SOL
+              </div>
+            </div>
+          )}
+          
+          <div className="transaction-detail transaction-detail--total">
+            <label>Total</label>
+            <div className="transaction-detail__value">
+              {(transaction.amount || 0) + (transaction.fee || 0)} {transaction.token || 'SOL'}
+            </div>
+          </div>
+        </div>
+        
+        {/* Balance warning */}
+        {insufficientBalance && (
+          <div className="transaction-confirmation__warning">
+            <AlertTriangleIcon className="w-4 h-4" />
+            <span>Insufficient balance</span>
+          </div>
+        )}
+        
+        {/* Current balance */}
+        <div className="transaction-confirmation__balance">
+          <span className="text-sm text-muted-foreground">
+            Current balance: {balance?.sol.toFixed(4) || '—'} SOL
+          </span>
+        </div>
+        
+        <div className="transaction-confirmation__actions">
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            disabled={confirming}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          
+          <Button
+            onClick={handleConfirm}
+            disabled={confirming || insufficientBalance}
+            className="flex-1"
+          >
+            {confirming ? (
+              <>
+                <Spinner size="sm" />
+                <span>Confirming...</span>
+              </>
+            ) : (
+              'Confirm'
+            )}
+          </Button>
+        </div>
+      </div>
+    </AnimatedModal>
+  );
+}
+```
+
+## Web3 Onboarding Flow
+
+### Progressive Wallet Onboarding
+
+```typescript
+// Step-by-step wallet onboarding for new users
+interface OnboardingStep {
+  id: string;
+  title: string;
+  description: string;
+  action: string;
+  completed: boolean;
+}
+
+export function WalletOnboarding() {
+  const { connected } = useWallet();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [steps, setSteps] = useState<OnboardingStep[]>([
+    {
+      id: 'install',
+      title: 'Install a Wallet',
+      description: 'Choose and install a Solana wallet extension',
+      action: 'Choose Wallet',
+      completed: false,
+    },
+    {
+      id: 'connect',
+      title: 'Connect Your Wallet',
+      description: 'Connect your wallet to ANUBIS Chat',
+      action: 'Connect',
+      completed: false,
+    },
+    {
+      id: 'fund',
+      title: 'Add SOL to Your Wallet',
+      description: 'Get some SOL to interact with the app',
+      action: 'Get SOL',
+      completed: false,
+    },
+    {
+      id: 'verify',
+      title: 'Verify Your Setup',
+      description: 'Make sure everything is working correctly',
+      action: 'Verify',
+      completed: false,
+    },
+  ]);
+  
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  
+  // Update steps based on wallet connection
+  useEffect(() => {
+    if (connected) {
+      setSteps(prev => prev.map(step => ({
+        ...step,
+        completed: step.id === 'install' || step.id === 'connect' ? true : step.completed,
+      })));
+      
+      if (currentStep <= 1) {
+        setCurrentStep(2);
+      }
+    }
+  }, [connected, currentStep]);
+  
+  const handleStepAction = (stepId: string) => {
+    switch (stepId) {
+      case 'install':
+      case 'connect':
+        setShowWalletModal(true);
+        break;
+      case 'fund':
+        // Open funding options
+        break;
+      case 'verify':
+        // Run verification checks
+        break;
+    }
+  };
+  
+  return (
+    <>
+      <div className="wallet-onboarding">
+        <div className="wallet-onboarding__header">
+          <h2 className="text-2xl font-semibold">Welcome to Web3</h2>
+          <p className="text-muted-foreground">
+            Let's set up your wallet to get started with ANUBIS Chat
+          </p>
+        </div>
+        
+        <div className="wallet-onboarding__steps">
+          {steps.map((step, index) => (
+            <OnboardingStepCard
+              key={step.id}
+              step={step}
+              isActive={index === currentStep}
+              isCompleted={step.completed}
+              onClick={() => handleStepAction(step.id)}
+            />
+          ))}
+        </div>
+        
+        <div className="wallet-onboarding__help">
+          <h3 className="font-medium mb-2">Need Help?</h3>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              <strong>What is a wallet?</strong> A wallet stores your digital assets 
+              and allows you to interact with blockchain applications.
+            </p>
+            <p>
+              <strong>Is it safe?</strong> Yes, reputable wallets use encryption to 
+              keep your assets secure. Never share your seed phrase.
+            </p>
+            <p>
+              <strong>Which wallet should I choose?</strong> We recommend Phantom 
+              for beginners, or Backpack for advanced features.
+            </p>
+          </div>
+        </div>
+      </div>
+      
+      <WalletSelectionModal
+        isOpen={showWalletModal}
+        onClose={() => setShowWalletModal(false)}
+      />
+    </>
+  );
+}
+
+// Individual onboarding step card
+function OnboardingStepCard({
+  step,
+  isActive,
+  isCompleted,
+  onClick,
+}: {
+  step: OnboardingStep;
+  isActive: boolean;
+  isCompleted: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <motion.div
+      className={cn(
+        'onboarding-step',
+        isActive && 'onboarding-step--active',
+        isCompleted && 'onboarding-step--completed'
+      )}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+    >
+      <div className="onboarding-step__icon">
+        {isCompleted ? (
+          <CheckCircleIcon className="w-6 h-6 text-green-500" />
+        ) : (
+          <div className={cn(
+            'w-6 h-6 rounded-full border-2',
+            isActive ? 'border-primary bg-primary' : 'border-muted-foreground'
+          )}>
+            {isActive && <div className="w-2 h-2 bg-white rounded-full m-1" />}
+          </div>
+        )}
+      </div>
+      
+      <div className="onboarding-step__content">
+        <h3 className="onboarding-step__title">{step.title}</h3>
+        <p className="onboarding-step__description">{step.description}</p>
+      </div>
+      
+      <div className="onboarding-step__action">
+        <Button
+          variant={isActive ? 'default' : 'outline'}
+          size="sm"
+          onClick={onClick}
+          disabled={isCompleted}
+        >
+          {isCompleted ? 'Completed' : step.action}
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+```
+
+## Wallet State Management
+
+### Persistent Wallet Preferences
+
+```typescript
+// Wallet preferences and settings persistence
+interface WalletPreferences {
+  autoConnect: boolean;
+  preferredWallet: string | null;
+  showBalance: boolean;
+  showAddress: boolean;
+  confirmTransactions: boolean;
+  networkPreference: 'mainnet' | 'devnet' | 'auto';
+}
+
+const defaultPreferences: WalletPreferences = {
+  autoConnect: true,
+  preferredWallet: null,
+  showBalance: true,
+  showAddress: true,
+  confirmTransactions: true,
+  networkPreference: 'auto',
+};
+
+export function useWalletPreferences() {
+  const [preferences, setPreferences] = useLocalStorage<WalletPreferences>(
+    'wallet-preferences',
+    defaultPreferences
+  );
+  
+  const updatePreference = useCallback(
+    <K extends keyof WalletPreferences>(
+      key: K,
+      value: WalletPreferences[K]
+    ) => {
+      setPreferences(prev => ({
+        ...prev,
+        [key]: value,
+      }));
+    },
+    [setPreferences]
+  );
+  
+  const resetPreferences = useCallback(() => {
+    setPreferences(defaultPreferences);
+  }, [setPreferences]);
+  
+  return {
+    preferences,
+    updatePreference,
+    resetPreferences,
+  };
+}
+
+// Wallet settings component
+export function WalletSettings() {
+  const { preferences, updatePreference } = useWalletPreferences();
+  const { connected, wallet, disconnect } = useWallet();
+  
+  return (
+    <div className="wallet-settings">
+      <div className="wallet-settings__header">
+        <h3 className="text-lg font-semibold">Wallet Settings</h3>
+        <p className="text-muted-foreground text-sm">
+          Configure your wallet preferences and security settings
+        </p>
+      </div>
+      
+      <div className="wallet-settings__content">
+        <div className="setting-group">
+          <h4 className="setting-group__title">Connection</h4>
+          
+          <div className="setting-item">
+            <div className="setting-item__info">
+              <label>Auto-connect wallet</label>
+              <p className="text-sm text-muted-foreground">
+                Automatically connect your preferred wallet when you visit
+              </p>
+            </div>
+            <Switch
+              checked={preferences.autoConnect}
+              onCheckedChange={(checked) => updatePreference('autoConnect', checked)}
+            />
+          </div>
+          
+          {connected && (
+            <div className="setting-item">
+              <div className="setting-item__info">
+                <label>Preferred wallet</label>
+                <p className="text-sm text-muted-foreground">
+                  {wallet?.adapter.name || 'None selected'}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => updatePreference('preferredWallet', wallet?.adapter.name || null)}
+              >
+                Set as Preferred
+              </Button>
+            </div>
+          )}
+        </div>
+        
+        <div className="setting-group">
+          <h4 className="setting-group__title">Display</h4>
+          
+          <div className="setting-item">
+            <div className="setting-item__info">
+              <label>Show balance</label>
+              <p className="text-sm text-muted-foreground">
+                Display your SOL balance in the wallet button
+              </p>
+            </div>
+            <Switch
+              checked={preferences.showBalance}
+              onCheckedChange={(checked) => updatePreference('showBalance', checked)}
+            />
+          </div>
+          
+          <div className="setting-item">
+            <div className="setting-item__info">
+              <label>Show address</label>
+              <p className="text-sm text-muted-foreground">
+                Display a shortened version of your wallet address
+              </p>
+            </div>
+            <Switch
+              checked={preferences.showAddress}
+              onCheckedChange={(checked) => updatePreference('showAddress', checked)}
+            />
+          </div>
+        </div>
+        
+        <div className="setting-group">
+          <h4 className="setting-group__title">Security</h4>
+          
+          <div className="setting-item">
+            <div className="setting-item__info">
+              <label>Confirm all transactions</label>
+              <p className="text-sm text-muted-foreground">
+                Show confirmation dialog before sending transactions
+              </p>
+            </div>
+            <Switch
+              checked={preferences.confirmTransactions}
+              onCheckedChange={(checked) => updatePreference('confirmTransactions', checked)}
+            />
+          </div>
+        </div>
+        
+        {connected && (
+          <div className="setting-group">
+            <h4 className="setting-group__title">Account Actions</h4>
+            
+            <div className="setting-actions">
+              <Button variant="outline" onClick={disconnect}>
+                Disconnect Wallet
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## Error Handling and Recovery
+
+### Wallet Error Boundary
+
+```typescript
+// Comprehensive wallet error handling
+interface WalletError {
+  code: string;
+  message: string;
+  details?: unknown;
+  recoverable: boolean;
+  retryAction?: () => void;
+}
+
+export function useWalletErrorHandler() {
+  const [error, setError] = useState<WalletError | null>(null);
+  const { toast } = useToast();
+  
+  const handleWalletError = useCallback((error: unknown, context: string) => {
+    console.error(`Wallet error in ${context}:`, error);
+    
+    let walletError: WalletError;
+    
+    if (error instanceof Error) {
+      switch (error.name) {
+        case 'WalletNotFoundError':
+          walletError = {
+            code: 'WALLET_NOT_FOUND',
+            message: 'Wallet extension not found. Please install a Solana wallet.',
+            recoverable: true,
+            retryAction: () => window.location.reload(),
+          };
+          break;
+          
+        case 'WalletConnectionError':
+          walletError = {
+            code: 'CONNECTION_FAILED',
+            message: 'Failed to connect to wallet. Please try again.',
+            recoverable: true,
+            retryAction: () => window.location.reload(),
+          };
+          break;
+          
+        case 'WalletDisconnectedError':
+          walletError = {
+            code: 'WALLET_DISCONNECTED',
+            message: 'Wallet was disconnected unexpectedly.',
+            recoverable: true,
+          };
+          break;
+          
+        case 'WalletSignTransactionError':
+          walletError = {
+            code: 'TRANSACTION_REJECTED',
+            message: 'Transaction was rejected by the user.',
+            recoverable: true,
+          };
+          break;
+          
+        case 'WalletTimeoutError':
+          walletError = {
+            code: 'TIMEOUT',
+            message: 'Wallet connection timed out. Please try again.',
+            recoverable: true,
+          };
+          break;
+          
+        default:
+          walletError = {
+            code: 'UNKNOWN_ERROR',
+            message: error.message || 'An unknown wallet error occurred.',
+            details: error,
+            recoverable: false,
+          };
+      }
+    } else {
+      walletError = {
+        code: 'UNKNOWN_ERROR',
+        message: 'An unknown error occurred.',
+        details: error,
+        recoverable: false,
+      };
+    }
+    
+    setError(walletError);
+    
+    // Show toast notification
+    toast({
+      title: 'Wallet Error',
+      description: walletError.message,
+      variant: 'destructive',
+      action: walletError.retryAction ? (
+        <Button variant="outline" size="sm" onClick={walletError.retryAction}>
+          Retry
+        </Button>
+      ) : undefined,
+    });
+    
+    return walletError;
+  }, [toast]);
+  
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+  
+  return {
+    error,
+    handleWalletError,
+    clearError,
+  };
+}
+```
+
+## Related Files
+
+- [Component Architecture](./components.mdc) - Wallet component patterns
+- [State Management](./state-management.mdc) - Wallet state patterns
+- [Accessibility Guidelines](./accessibility.mdc) - Accessible wallet UX
+- [Animations](./animations.mdc) - Wallet interaction animations
+- [Solana Integration](../web3/solana-patterns.mdc) - Backend Solana patterns

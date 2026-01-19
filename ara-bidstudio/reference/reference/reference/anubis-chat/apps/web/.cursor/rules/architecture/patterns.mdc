@@ -1,0 +1,1301 @@
+---
+category: architecture
+subcategory: patterns
+tags: [design-patterns, solid-principles, architectural-patterns, best-practices]
+cursor:
+  context_window: 8192
+  temperature: 0.7
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../frontend/components.mdc", "../backend/services.mdc"]
+  exports: ["design-patterns", "solid-principles", "architectural-patterns"]
+  references: ["system-design.mdc", "data-flow.mdc"]
+---
+
+# Design Patterns & Architecture Principles for abubis.chat
+
+## SOLID Principles Implementation
+
+::alert{type="success"}
+**Foundation**: All abubis.chat code must adhere to SOLID principles for maintainable, testable, and scalable architecture.
+::
+
+### 1. Single Responsibility Principle (SRP)
+
+::card{title="Service Layer Separation"}
+Each service class has a single, well-defined responsibility with clear boundaries.
+
+```typescript
+// ✅ CORRECT: Each service has single responsibility
+export class MessageService {
+  constructor(
+    private db: ConvexClient,
+    private validator: MessageValidator
+  ) {}
+  
+  async sendMessage(roomId: string, content: string, authorId: string): Promise<Id<"messages">> {
+    const message = await this.validator.validate({ roomId, content, authorId })
+    return await this.db.mutation(api.chat.sendMessage, message)
+  }
+  
+  async getMessage(messageId: Id<"messages">): Promise<Message | null> {
+    return await this.db.query(api.chat.getMessage, { messageId })
+  }
+}
+
+export class NotificationService {
+  constructor(private emailClient: EmailClient, private pushClient: PushClient) {}
+  
+  async notifyMention(userId: string, message: Message): Promise<void> {
+    const user = await this.getUser(userId)
+    
+    if (user.preferences.email) {
+      await this.emailClient.sendMentionNotification(user.email, message)
+    }
+    
+    if (user.preferences.push) {
+      await this.pushClient.sendMentionNotification(user.pushToken, message)
+    }
+  }
+}
+
+// ❌ INCORRECT: Violates SRP - mixed responsibilities
+export class ChatServiceBad {
+  async sendMessage(content: string): Promise<void> {
+    // Message validation
+    if (!content || content.length > 1000) throw new Error('Invalid content')
+    
+    // Database operation  
+    await db.insert('messages', { content })
+    
+    // Email notification
+    await sendEmail('New message', content)
+    
+    // Push notification
+    await sendPushNotification('New message')
+    
+    // Analytics tracking
+    await trackEvent('message_sent', { length: content.length })
+  }
+}
+```
+::
+
+### 2. Open/Closed Principle (OCP)
+
+::tabs
+::div{label="AI Provider Strategy"}
+```typescript
+// Base abstraction open for extension, closed for modification
+export abstract class AIProvider {
+  abstract generateResponse(prompt: string, options?: AIOptions): Promise<string>
+  abstract generateEmbedding(text: string): Promise<number[]>
+  abstract estimateTokens(text: string): number
+  
+  // Template method - open for extension via hooks
+  async generateResponseWithRetry(
+    prompt: string, 
+    maxRetries = 3
+  ): Promise<string> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await this.beforeGeneration?.(prompt, attempt)
+        const response = await this.generateResponse(prompt)
+        await this.afterGeneration?.(response, attempt)
+        return response
+      } catch (error) {
+        if (attempt === maxRetries - 1) throw error
+        await this.onRetry?.(error, attempt)
+      }
+    }
+    throw new Error('Max retries exceeded')
+  }
+  
+  // Extension hooks
+  protected beforeGeneration?(prompt: string, attempt: number): Promise<void>
+  protected afterGeneration?(response: string, attempt: number): Promise<void>
+  protected onRetry?(error: Error, attempt: number): Promise<void>
+}
+
+// Extensions without modifying base class
+export class OpenAIProvider extends AIProvider {
+  constructor(private client: OpenAI, private config: OpenAIConfig) {
+    super()
+  }
+  
+  async generateResponse(prompt: string, options?: AIOptions): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: options?.model || 'gpt-4-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: options?.maxTokens || 2000
+    })
+    
+    return response.choices[0].message.content || ''
+  }
+  
+  async generateEmbedding(text: string): Promise<number[]> {
+    const response = await this.client.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: text
+    })
+    
+    return response.data[0].embedding
+  }
+  
+  estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4) // Rough estimation
+  }
+  
+  // Extension hooks implementation
+  protected async beforeGeneration(prompt: string, attempt: number): Promise<void> {
+    if (attempt > 0) {
+      console.log(`Retrying OpenAI request (attempt ${attempt + 1})`)
+    }
+  }
+  
+  protected async onRetry(error: Error, attempt: number): Promise<void> {
+    const delay = Math.pow(2, attempt) * 1000
+    await new Promise(resolve => setTimeout(resolve, delay))
+  }
+}
+
+export class AnthropicProvider extends AIProvider {
+  constructor(private client: Anthropic) {
+    super()
+  }
+  
+  async generateResponse(prompt: string, options?: AIOptions): Promise<string> {
+    const response = await this.client.messages.create({
+      model: options?.model || 'claude-3-5-sonnet-20241022',
+      max_tokens: options?.maxTokens || 2000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+    
+    return response.content[0].type === 'text' ? response.content[0].text : ''
+  }
+  
+  // Different implementation details while maintaining interface
+  estimateTokens(text: string): number {
+    return Math.ceil(text.length / 3.5) // Anthropic's tokenization
+  }
+}
+```
+::
+
+::div{label="Plugin Architecture"}
+```typescript
+// Plugin system for extensible functionality
+export interface ChatPlugin {
+  name: string
+  version: string
+  hooks: ChatHooks
+}
+
+export interface ChatHooks {
+  beforeMessage?(message: Message): Promise<Message>
+  afterMessage?(message: Message): Promise<void>
+  onMention?(mention: Mention): Promise<void>
+  onCommand?(command: Command): Promise<void>
+}
+
+export class ChatPluginManager {
+  private plugins = new Map<string, ChatPlugin>()
+  
+  registerPlugin(plugin: ChatPlugin): void {
+    this.plugins.set(plugin.name, plugin)
+  }
+  
+  async executeHook<K extends keyof ChatHooks>(
+    hookName: K,
+    ...args: Parameters<NonNullable<ChatHooks[K]>>
+  ): Promise<any[]> {
+    const results = []
+    
+    for (const plugin of this.plugins.values()) {
+      const hook = plugin.hooks[hookName]
+      if (hook) {
+        try {
+          const result = await (hook as any)(...args)
+          results.push(result)
+        } catch (error) {
+          console.error(`Plugin ${plugin.name} hook ${hookName} failed:`, error)
+        }
+      }
+    }
+    
+    return results
+  }
+}
+
+// Example plugins
+export const profanityFilterPlugin: ChatPlugin = {
+  name: 'profanity-filter',
+  version: '1.0.0',
+  hooks: {
+    beforeMessage: async (message) => ({
+      ...message,
+      content: await filterProfanity(message.content)
+    })
+  }
+}
+
+export const mentionNotificationPlugin: ChatPlugin = {
+  name: 'mention-notifications',  
+  version: '1.0.0',
+  hooks: {
+    onMention: async (mention) => {
+      await notificationService.notifyMention(mention.userId, mention.message)
+    }
+  }
+}
+```
+::
+::
+
+### 3. Liskov Substitution Principle (LSP)
+
+::code-group
+```typescript [Database Repository Pattern]
+// Base repository contract that all implementations must honor
+export abstract class Repository<T, K> {
+  abstract create(item: Omit<T, 'id' | 'createdAt' | 'updatedAt'>): Promise<T>
+  abstract findById(id: K): Promise<T | null>
+  abstract findMany(filter: Partial<T>): Promise<T[]>
+  abstract update(id: K, updates: Partial<T>): Promise<T>
+  abstract delete(id: K): Promise<boolean>
+  
+  // Template method that works with any implementation
+  async findOrCreate(
+    filter: Partial<T>, 
+    defaults: Omit<T, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<T> {
+    const existing = await this.findMany(filter)
+    
+    if (existing.length > 0) {
+      return existing[0]
+    }
+    
+    return await this.create({ ...defaults, ...filter } as any)
+  }
+}
+
+// Convex implementation
+export class ConvexMessageRepository extends Repository<Message, Id<"messages">> {
+  constructor(private ctx: QueryCtx | MutationCtx) {
+    super()
+  }
+  
+  async create(item: Omit<Message, 'id' | 'createdAt' | 'updatedAt'>): Promise<Message> {
+    const id = await this.ctx.db.insert('messages', {
+      ...item,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    })
+    
+    return await this.ctx.db.get(id) as Message
+  }
+  
+  async findById(id: Id<"messages">): Promise<Message | null> {
+    return await this.ctx.db.get(id) as Message | null
+  }
+  
+  async findMany(filter: Partial<Message>): Promise<Message[]> {
+    let query = this.ctx.db.query('messages')
+    
+    // Apply filters dynamically
+    Object.entries(filter).forEach(([key, value]) => {
+      if (value !== undefined) {
+        query = query.filter(q => q.eq(q.field(key as any), value))
+      }
+    })
+    
+    return await query.collect() as Message[]
+  }
+  
+  async update(id: Id<"messages">, updates: Partial<Message>): Promise<Message> {
+    await this.ctx.db.patch(id, {
+      ...updates,
+      updatedAt: Date.now()
+    })
+    
+    return await this.ctx.db.get(id) as Message
+  }
+  
+  async delete(id: Id<"messages">): Promise<boolean> {
+    await this.ctx.db.delete(id)
+    return true
+  }
+}
+
+// In-memory implementation for testing (substitutable)
+export class InMemoryMessageRepository extends Repository<Message, string> {
+  private messages = new Map<string, Message>()
+  
+  async create(item: Omit<Message, 'id' | 'createdAt' | 'updatedAt'>): Promise<Message> {
+    const id = generateId()
+    const message: Message = {
+      ...item,
+      id,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    } as Message
+    
+    this.messages.set(id, message)
+    return message
+  }
+  
+  async findById(id: string): Promise<Message | null> {
+    return this.messages.get(id) || null
+  }
+  
+  async findMany(filter: Partial<Message>): Promise<Message[]> {
+    return Array.from(this.messages.values()).filter(message =>
+      Object.entries(filter).every(([key, value]) =>
+        value === undefined || (message as any)[key] === value
+      )
+    )
+  }
+  
+  async update(id: string, updates: Partial<Message>): Promise<Message> {
+    const existing = this.messages.get(id)
+    if (!existing) throw new Error('Message not found')
+    
+    const updated = {
+      ...existing,
+      ...updates,
+      updatedAt: Date.now()
+    }
+    
+    this.messages.set(id, updated)
+    return updated
+  }
+  
+  async delete(id: string): Promise<boolean> {
+    return this.messages.delete(id)
+  }
+}
+```
+
+```typescript [Service Layer Using Repositories]
+// Service layer can work with any repository implementation
+export class MessageService {
+  constructor(
+    private messageRepo: Repository<Message, any>,
+    private userRepo: Repository<User, any>
+  ) {}
+  
+  async sendMessage(
+    roomId: string, 
+    content: string, 
+    authorId: string
+  ): Promise<Message> {
+    // Works with any repository implementation
+    const author = await this.userRepo.findById(authorId)
+    if (!author) {
+      throw new Error('Author not found')
+    }
+    
+    return await this.messageRepo.create({
+      roomId,
+      content,
+      authorId,
+      type: 'text'
+    })
+  }
+  
+  async getMessagesInRoom(roomId: string): Promise<Message[]> {
+    return await this.messageRepo.findMany({ roomId })
+  }
+}
+
+// Can be instantiated with any repository implementation
+const prodService = new MessageService(
+  new ConvexMessageRepository(ctx),
+  new ConvexUserRepository(ctx)
+)
+
+const testService = new MessageService(
+  new InMemoryMessageRepository(),
+  new InMemoryUserRepository()
+)
+```
+::
+
+### 4. Interface Segregation Principle (ISP)
+
+::code-group
+```typescript [Segregated Interfaces]
+// ❌ BAD: Fat interface forcing implementations to depend on unused methods
+interface BadChatServiceInterface {
+  sendMessage(content: string): Promise<void>
+  deleteMessage(id: string): Promise<void>
+  editMessage(id: string, content: string): Promise<void>
+  banUser(userId: string): Promise<void>
+  muteUser(userId: string): Promise<void>
+  createRoom(name: string): Promise<void>
+  deleteRoom(roomId: string): Promise<void>
+  generateAIResponse(prompt: string): Promise<string>
+  uploadFile(file: File): Promise<string>
+  downloadFile(fileId: string): Promise<Blob>
+}
+
+// ✅ GOOD: Segregated interfaces for specific capabilities
+interface MessageOperations {
+  sendMessage(roomId: string, content: string): Promise<void>
+  getMessage(messageId: string): Promise<Message | null>
+}
+
+interface MessageModeration {
+  deleteMessage(messageId: string): Promise<void>
+  editMessage(messageId: string, content: string): Promise<void>
+  flagMessage(messageId: string, reason: string): Promise<void>
+}
+
+interface UserModeration {
+  banUser(userId: string, reason: string): Promise<void>
+  muteUser(userId: string, duration: number): Promise<void>
+  unbanUser(userId: string): Promise<void>
+}
+
+interface RoomManagement {
+  createRoom(name: string, settings: RoomSettings): Promise<string>
+  deleteRoom(roomId: string): Promise<void>
+  updateRoomSettings(roomId: string, settings: Partial<RoomSettings>): Promise<void>
+}
+
+interface AIIntegration {
+  generateResponse(prompt: string, context?: AIContext): Promise<string>
+  generateEmbedding(text: string): Promise<number[]>
+  moderateContent(content: string): Promise<ModerationResult>
+}
+
+interface FileOperations {
+  uploadFile(file: File, roomId: string): Promise<string>
+  downloadFile(fileId: string): Promise<Blob>
+  deleteFile(fileId: string): Promise<void>
+}
+
+// Implementations only depend on interfaces they actually use
+export class BasicChatService implements MessageOperations {
+  async sendMessage(roomId: string, content: string): Promise<void> {
+    // Implementation
+  }
+  
+  async getMessage(messageId: string): Promise<Message | null> {
+    // Implementation  
+  }
+}
+
+export class ModeratorChatService 
+  implements MessageOperations, MessageModeration, UserModeration {
+  
+  async sendMessage(roomId: string, content: string): Promise<void> {
+    // Implementation
+  }
+  
+  async getMessage(messageId: string): Promise<Message | null> {
+    // Implementation
+  }
+  
+  async deleteMessage(messageId: string): Promise<void> {
+    // Implementation
+  }
+  
+  async editMessage(messageId: string, content: string): Promise<void> {
+    // Implementation
+  }
+  
+  async flagMessage(messageId: string, reason: string): Promise<void> {
+    // Implementation
+  }
+  
+  async banUser(userId: string, reason: string): Promise<void> {
+    // Implementation
+  }
+  
+  async muteUser(userId: string, duration: number): Promise<void> {
+    // Implementation
+  }
+  
+  async unbanUser(userId: string): Promise<void> {
+    // Implementation
+  }
+}
+```
+
+```typescript [Composable Services]
+// Services can be composed from multiple interfaces
+export class ComprehensiveChatService {
+  constructor(
+    private messageOps: MessageOperations,
+    private messageMod: MessageModeration,
+    private userMod: UserModeration,
+    private roomMgmt: RoomManagement,
+    private aiService: AIIntegration,
+    private fileOps: FileOperations
+  ) {}
+  
+  // Delegate to appropriate service
+  async sendMessage(roomId: string, content: string): Promise<void> {
+    return this.messageOps.sendMessage(roomId, content)
+  }
+  
+  async moderateMessage(messageId: string): Promise<void> {
+    const message = await this.messageOps.getMessage(messageId)
+    if (!message) return
+    
+    const moderation = await this.aiService.moderateContent(message.content)
+    
+    if (moderation.flagged) {
+      await this.messageMod.flagMessage(messageId, moderation.reason)
+      
+      if (moderation.severity === 'high') {
+        await this.messageMod.deleteMessage(messageId)
+        await this.userMod.muteUser(message.authorId, 3600000) // 1 hour
+      }
+    }
+  }
+}
+```
+::
+
+### 5. Dependency Inversion Principle (DIP)
+
+::code-group
+```typescript [Dependency Injection Container]
+// High-level modules depend on abstractions, not concretions
+export interface Container {
+  register<T>(token: symbol, factory: () => T): void
+  get<T>(token: symbol): T
+}
+
+export class DIContainer implements Container {
+  private services = new Map<symbol, () => any>()
+  private instances = new Map<symbol, any>()
+  
+  register<T>(token: symbol, factory: () => T): void {
+    this.services.set(token, factory)
+  }
+  
+  get<T>(token: symbol): T {
+    if (this.instances.has(token)) {
+      return this.instances.get(token)
+    }
+    
+    const factory = this.services.get(token)
+    if (!factory) {
+      throw new Error(`Service ${token.toString()} not registered`)
+    }
+    
+    const instance = factory()
+    this.instances.set(token, instance)
+    return instance
+  }
+}
+
+// Service tokens (symbols for type safety)
+export const TOKENS = {
+  MessageRepository: Symbol('MessageRepository'),
+  UserRepository: Symbol('UserRepository'),
+  NotificationService: Symbol('NotificationService'),
+  AIProvider: Symbol('AIProvider'),
+  CacheService: Symbol('CacheService'),
+  Logger: Symbol('Logger')
+} as const
+
+// Container configuration
+export function configureContainer(): Container {
+  const container = new DIContainer()
+  
+  // Register abstractions with concrete implementations
+  container.register(TOKENS.MessageRepository, () => 
+    new ConvexMessageRepository(getConvexContext())
+  )
+  
+  container.register(TOKENS.UserRepository, () =>
+    new ConvexUserRepository(getConvexContext())
+  )
+  
+  container.register(TOKENS.NotificationService, () =>
+    new EmailNotificationService(
+      container.get(TOKENS.Logger)
+    )
+  )
+  
+  container.register(TOKENS.AIProvider, () =>
+    new OpenAIProvider(getOpenAIClient())
+  )
+  
+  container.register(TOKENS.CacheService, () =>
+    new RedisCacheService(getRedisClient())
+  )
+  
+  container.register(TOKENS.Logger, () =>
+    new StructuredLogger({ level: 'info' })
+  )
+  
+  return container
+}
+```
+
+```typescript [Service Using DI]
+// High-level service depends only on abstractions
+export class ChatOrchestrator {
+  private messageRepo: Repository<Message, any>
+  private userRepo: Repository<User, any>
+  private notificationService: NotificationService
+  private aiProvider: AIProvider
+  private cache: CacheService
+  private logger: Logger
+  
+  constructor(container: Container) {
+    // Depend on abstractions injected via container
+    this.messageRepo = container.get(TOKENS.MessageRepository)
+    this.userRepo = container.get(TOKENS.UserRepository) 
+    this.notificationService = container.get(TOKENS.NotificationService)
+    this.aiProvider = container.get(TOKENS.AIProvider)
+    this.cache = container.get(TOKENS.CacheService)
+    this.logger = container.get(TOKENS.Logger)
+  }
+  
+  async processMessage(
+    roomId: string, 
+    content: string, 
+    authorId: string
+  ): Promise<Message> {
+    try {
+      this.logger.info('Processing message', { roomId, authorId })
+      
+      // Validate author exists
+      const author = await this.userRepo.findById(authorId)
+      if (!author) {
+        throw new Error('Author not found')
+      }
+      
+      // Check cache for similar messages
+      const cacheKey = `message:${roomId}:${authorId}:${hashContent(content)}`
+      const cached = await this.cache.get(cacheKey)
+      if (cached) {
+        this.logger.info('Returning cached message', { cacheKey })
+        return cached
+      }
+      
+      // Create message
+      const message = await this.messageRepo.create({
+        roomId,
+        content,
+        authorId,
+        type: 'text'
+      })
+      
+      // Cache result
+      await this.cache.set(cacheKey, message, 300) // 5 minutes
+      
+      // Send notifications for mentions
+      const mentions = extractMentions(content)
+      if (mentions.length > 0) {
+        await Promise.all(
+          mentions.map(userId => 
+            this.notificationService.notifyMention(userId, message)
+          )
+        )
+      }
+      
+      this.logger.info('Message processed successfully', { messageId: message.id })
+      return message
+      
+    } catch (error) {
+      this.logger.error('Failed to process message', { error, roomId, authorId })
+      throw error
+    }
+  }
+  
+  async generateAIResponse(prompt: string, roomId: string): Promise<string> {
+    try {
+      // Get conversation context
+      const recentMessages = await this.messageRepo.findMany({ 
+        roomId,
+        createdAt: { $gte: Date.now() - 3600000 } // Last hour
+      })
+      
+      const context = recentMessages
+        .map(m => `${m.authorId}: ${m.content}`)
+        .join('\n')
+      
+      const fullPrompt = `Context:\n${context}\n\nUser: ${prompt}`
+      
+      return await this.aiProvider.generateResponse(fullPrompt)
+      
+    } catch (error) {
+      this.logger.error('AI response generation failed', { error, prompt })
+      throw error
+    }
+  }
+}
+```
+::
+
+## Architectural Patterns
+
+### 1. Command Query Responsibility Segregation (CQRS)
+
+::code-group
+```typescript [CQRS Implementation]
+// Separate read and write models
+export interface Command {
+  type: string
+  payload: any
+  metadata: {
+    userId: string
+    timestamp: number
+    traceId: string
+  }
+}
+
+export interface Query {
+  type: string
+  parameters: any
+  metadata: {
+    userId?: string
+    timestamp: number
+    traceId: string
+  }
+}
+
+// Command handlers (writes)
+export abstract class CommandHandler<T extends Command> {
+  abstract handle(command: T): Promise<void>
+}
+
+export class SendMessageCommand implements Command {
+  type = 'SEND_MESSAGE'
+  
+  constructor(
+    public payload: {
+      roomId: string
+      content: string
+      authorId: string
+    },
+    public metadata: Command['metadata']
+  ) {}
+}
+
+export class SendMessageCommandHandler extends CommandHandler<SendMessageCommand> {
+  constructor(
+    private messageRepo: Repository<Message, any>,
+    private eventBus: EventBus
+  ) {
+    super()
+  }
+  
+  async handle(command: SendMessageCommand): Promise<void> {
+    const { roomId, content, authorId } = command.payload
+    
+    // Create message (write model)
+    const message = await this.messageRepo.create({
+      roomId,
+      content,
+      authorId,
+      type: 'text'
+    })
+    
+    // Publish event for read model updates
+    await this.eventBus.publish({
+      type: 'MessageSent',
+      payload: { message },
+      metadata: command.metadata
+    })
+  }
+}
+
+// Query handlers (reads)
+export abstract class QueryHandler<T extends Query, R> {
+  abstract handle(query: T): Promise<R>
+}
+
+export class GetRoomMessagesQuery implements Query {
+  type = 'GET_ROOM_MESSAGES'
+  
+  constructor(
+    public parameters: {
+      roomId: string
+      limit?: number
+      before?: string
+    },
+    public metadata: Query['metadata']
+  ) {}
+}
+
+export class GetRoomMessagesQueryHandler extends QueryHandler<
+  GetRoomMessagesQuery, 
+  Message[]
+> {
+  constructor(
+    private readModel: MessageReadModel
+  ) {
+    super()
+  }
+  
+  async handle(query: GetRoomMessagesQuery): Promise<Message[]> {
+    const { roomId, limit = 50, before } = query.parameters
+    
+    // Use optimized read model
+    return await this.readModel.getMessages(roomId, { limit, before })
+  }
+}
+
+// CQRS Bus
+export class CQRSBus {
+  private commandHandlers = new Map<string, CommandHandler<any>>()
+  private queryHandlers = new Map<string, QueryHandler<any, any>>()
+  
+  registerCommandHandler<T extends Command>(
+    commandType: string,
+    handler: CommandHandler<T>
+  ): void {
+    this.commandHandlers.set(commandType, handler)
+  }
+  
+  registerQueryHandler<T extends Query, R>(
+    queryType: string,
+    handler: QueryHandler<T, R>
+  ): void {
+    this.queryHandlers.set(queryType, handler)
+  }
+  
+  async execute<T extends Command>(command: T): Promise<void> {
+    const handler = this.commandHandlers.get(command.type)
+    if (!handler) {
+      throw new Error(`No handler for command ${command.type}`)
+    }
+    
+    await handler.handle(command)
+  }
+  
+  async query<T extends Query, R>(query: T): Promise<R> {
+    const handler = this.queryHandlers.get(query.type)
+    if (!handler) {
+      throw new Error(`No handler for query ${query.type}`)
+    }
+    
+    return await handler.handle(query)
+  }
+}
+```
+
+```typescript [Read Model Optimization]
+// Optimized read models for queries
+export class MessageReadModel {
+  constructor(
+    private cache: CacheService,
+    private db: ConvexClient
+  ) {}
+  
+  async getMessages(
+    roomId: string, 
+    options: { limit?: number; before?: string } = {}
+  ): Promise<Message[]> {
+    const cacheKey = `messages:${roomId}:${JSON.stringify(options)}`
+    
+    // Try cache first
+    const cached = await this.cache.get(cacheKey)
+    if (cached) return cached
+    
+    // Fallback to database with optimized query
+    let query = this.db
+      .query('messages')
+      .withIndex('by_room_time', q => q.eq('roomId', roomId))
+      .order('desc')
+    
+    if (options.before) {
+      query = query.filter(q => q.lt(q.field('createdAt'), 
+        new Date(options.before!).getTime()))
+    }
+    
+    const messages = await query.take(options.limit || 50)
+    
+    // Cache for future requests
+    await this.cache.set(cacheKey, messages, 60) // 1 minute
+    
+    return messages
+  }
+  
+  async getMessageStats(roomId: string): Promise<MessageStats> {
+    const cacheKey = `message-stats:${roomId}`
+    const cached = await this.cache.get(cacheKey)
+    if (cached) return cached
+    
+    // Aggregate statistics
+    const messages = await this.db
+      .query('messages')
+      .withIndex('by_room', q => q.eq('roomId', roomId))
+      .collect()
+    
+    const stats = {
+      totalMessages: messages.length,
+      uniqueAuthors: new Set(messages.map(m => m.authorId)).size,
+      averageLength: messages.reduce((sum, m) => sum + m.content.length, 0) / messages.length,
+      messagesByDay: this.groupMessagesByDay(messages)
+    }
+    
+    await this.cache.set(cacheKey, stats, 300) // 5 minutes
+    return stats
+  }
+}
+```
+::
+
+### 2. Event Sourcing Pattern
+
+::code-group
+```typescript [Event Store]
+// Event sourcing for audit trail and temporal queries
+export interface DomainEvent {
+  id: string
+  aggregateId: string
+  aggregateType: string
+  eventType: string
+  eventData: any
+  metadata: {
+    userId: string
+    timestamp: number
+    version: number
+  }
+}
+
+export class EventStore {
+  constructor(private db: ConvexClient) {}
+  
+  async appendEvents(
+    aggregateId: string,
+    expectedVersion: number,
+    events: Omit<DomainEvent, 'id' | 'metadata.version'>[]
+  ): Promise<void> {
+    // Get current version
+    const currentVersion = await this.getCurrentVersion(aggregateId)
+    
+    if (currentVersion !== expectedVersion) {
+      throw new Error(`Concurrency conflict. Expected ${expectedVersion}, got ${currentVersion}`)
+    }
+    
+    // Append events atomically
+    await this.db.mutation(api.eventStore.appendEvents, {
+      aggregateId,
+      events: events.map((event, index) => ({
+        ...event,
+        id: generateEventId(),
+        metadata: {
+          ...event.metadata,
+          version: currentVersion + index + 1
+        }
+      }))
+    })
+  }
+  
+  async getEvents(
+    aggregateId: string,
+    fromVersion?: number
+  ): Promise<DomainEvent[]> {
+    return await this.db.query(api.eventStore.getEvents, {
+      aggregateId,
+      fromVersion: fromVersion || 0
+    })
+  }
+  
+  async getCurrentVersion(aggregateId: string): Promise<number> {
+    const lastEvent = await this.db.query(api.eventStore.getLastEvent, {
+      aggregateId
+    })
+    
+    return lastEvent?.metadata.version || 0
+  }
+}
+
+// Aggregate root using event sourcing
+export abstract class AggregateRoot {
+  private uncommittedEvents: DomainEvent[] = []
+  protected version = 0
+  
+  protected applyEvent(event: Omit<DomainEvent, 'id' | 'metadata'>): void {
+    // Apply event to aggregate state
+    this.when(event)
+    
+    // Track uncommitted event
+    this.uncommittedEvents.push({
+      ...event,
+      id: generateEventId(),
+      metadata: {
+        ...event.metadata,
+        version: this.version + 1
+      }
+    })
+    
+    this.version++
+  }
+  
+  protected abstract when(event: Omit<DomainEvent, 'id' | 'metadata'>): void
+  
+  getUncommittedEvents(): DomainEvent[] {
+    return [...this.uncommittedEvents]
+  }
+  
+  markEventsAsCommitted(): void {
+    this.uncommittedEvents = []
+  }
+  
+  loadFromHistory(events: DomainEvent[]): void {
+    events.forEach(event => {
+      this.when(event)
+      this.version = event.metadata.version
+    })
+  }
+}
+
+// Example aggregate
+export class ChatRoom extends AggregateRoot {
+  private id!: string
+  private name!: string
+  private participants: string[] = []
+  private messageCount = 0
+  
+  constructor(id?: string) {
+    super()
+    if (id) {
+      this.id = id
+    }
+  }
+  
+  static create(id: string, name: string, creatorId: string): ChatRoom {
+    const room = new ChatRoom()
+    
+    room.applyEvent({
+      aggregateId: id,
+      aggregateType: 'ChatRoom',
+      eventType: 'RoomCreated',
+      eventData: { id, name, creatorId },
+      metadata: {
+        userId: creatorId,
+        timestamp: Date.now(),
+        version: 0
+      }
+    })
+    
+    return room
+  }
+  
+  addParticipant(userId: string, addedBy: string): void {
+    if (this.participants.includes(userId)) {
+      throw new Error('User already in room')
+    }
+    
+    this.applyEvent({
+      aggregateId: this.id,
+      aggregateType: 'ChatRoom',
+      eventType: 'ParticipantAdded',
+      eventData: { userId, addedBy },
+      metadata: {
+        userId: addedBy,
+        timestamp: Date.now(),
+        version: 0 // Will be set by applyEvent
+      }
+    })
+  }
+  
+  sendMessage(content: string, authorId: string): void {
+    if (!this.participants.includes(authorId)) {
+      throw new Error('User not in room')
+    }
+    
+    this.applyEvent({
+      aggregateId: this.id,
+      aggregateType: 'ChatRoom',
+      eventType: 'MessageSent',
+      eventData: { content, authorId, messageNumber: this.messageCount + 1 },
+      metadata: {
+        userId: authorId,
+        timestamp: Date.now(),
+        version: 0
+      }
+    })
+  }
+  
+  protected when(event: Omit<DomainEvent, 'id' | 'metadata'>): void {
+    switch (event.eventType) {
+      case 'RoomCreated':
+        this.id = event.eventData.id
+        this.name = event.eventData.name
+        this.participants.push(event.eventData.creatorId)
+        break
+        
+      case 'ParticipantAdded':
+        this.participants.push(event.eventData.userId)
+        break
+        
+      case 'MessageSent':
+        this.messageCount = event.eventData.messageNumber
+        break
+        
+      default:
+        throw new Error(`Unknown event type: ${event.eventType}`)
+    }
+  }
+}
+```
+::
+
+### 3. Hexagonal Architecture (Ports and Adapters)
+
+::code-group
+```typescript [Ports (Interfaces)]
+// Domain ports (interfaces)
+export interface MessagePort {
+  sendMessage(message: Message): Promise<string>
+  getMessage(id: string): Promise<Message | null>
+  getMessagesInRoom(roomId: string): Promise<Message[]>
+}
+
+export interface NotificationPort {
+  sendNotification(userId: string, notification: Notification): Promise<void>
+  getUserPreferences(userId: string): Promise<NotificationPreferences>
+}
+
+export interface AIPort {
+  generateResponse(prompt: string, context: AIContext): Promise<string>
+  moderateContent(content: string): Promise<ModerationResult>
+}
+
+// Domain service using ports
+export class ChatDomainService {
+  constructor(
+    private messagePort: MessagePort,
+    private notificationPort: NotificationPort,
+    private aiPort: AIPort
+  ) {}
+  
+  async sendMessage(
+    roomId: string,
+    content: string,
+    authorId: string
+  ): Promise<string> {
+    // Domain logic
+    const message: Message = {
+      id: generateId(),
+      roomId,
+      content,
+      authorId,
+      timestamp: Date.now(),
+      type: 'text'
+    }
+    
+    // Moderate content
+    const moderation = await this.aiPort.moderateContent(content)
+    if (moderation.flagged) {
+      throw new Error('Content violates community guidelines')
+    }
+    
+    // Store message
+    const messageId = await this.messagePort.sendMessage(message)
+    
+    // Send notifications for mentions
+    const mentions = extractMentions(content)
+    await Promise.all(
+      mentions.map(async (userId) => {
+        const preferences = await this.notificationPort.getUserPreferences(userId)
+        if (preferences.mentionNotifications) {
+          await this.notificationPort.sendNotification(userId, {
+            type: 'mention',
+            message: `You were mentioned in ${roomId}`,
+            data: { messageId, roomId }
+          })
+        }
+      })
+    )
+    
+    return messageId
+  }
+}
+```
+
+```typescript [Adapters (Implementations)]
+// Convex adapter
+export class ConvexMessageAdapter implements MessagePort {
+  constructor(private ctx: MutationCtx | QueryCtx) {}
+  
+  async sendMessage(message: Message): Promise<string> {
+    return await this.ctx.db.insert('messages', message)
+  }
+  
+  async getMessage(id: string): Promise<Message | null> {
+    return await this.ctx.db.get(id as Id<'messages'>)
+  }
+  
+  async getMessagesInRoom(roomId: string): Promise<Message[]> {
+    return await this.ctx.db
+      .query('messages')
+      .withIndex('by_room', q => q.eq('roomId', roomId))
+      .order('desc')
+      .take(50)
+  }
+}
+
+// Email notification adapter
+export class EmailNotificationAdapter implements NotificationPort {
+  constructor(private emailService: EmailService) {}
+  
+  async sendNotification(
+    userId: string, 
+    notification: Notification
+  ): Promise<void> {
+    const user = await this.getUserById(userId)
+    
+    await this.emailService.send({
+      to: user.email,
+      subject: `abubis.chat - ${notification.type}`,
+      body: notification.message,
+      data: notification.data
+    })
+  }
+  
+  async getUserPreferences(userId: string): Promise<NotificationPreferences> {
+    // Implementation
+    return await this.getPreferencesFromDb(userId)
+  }
+}
+
+// OpenAI adapter
+export class OpenAIAdapter implements AIPort {
+  constructor(private client: OpenAI) {}
+  
+  async generateResponse(prompt: string, context: AIContext): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: 'gpt-4-turbo',
+      messages: [
+        { role: 'system', content: context.systemPrompt },
+        { role: 'user', content: prompt }
+      ]
+    })
+    
+    return response.choices[0].message.content || ''
+  }
+  
+  async moderateContent(content: string): Promise<ModerationResult> {
+    const response = await this.client.moderations.create({
+      input: content
+    })
+    
+    const result = response.results[0]
+    
+    return {
+      flagged: result.flagged,
+      reason: Object.keys(result.categories)
+        .filter(key => result.categories[key as keyof typeof result.categories])
+        .join(', '),
+      severity: result.category_scores.hate > 0.8 ? 'high' : 'low'
+    }
+  }
+}
+```
+::
+
+This comprehensive pattern implementation ensures abubis.chat follows proven architectural principles for maintainability, testability, and scalability.

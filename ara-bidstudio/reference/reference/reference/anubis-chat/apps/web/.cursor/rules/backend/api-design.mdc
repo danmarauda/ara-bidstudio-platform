@@ -1,0 +1,696 @@
+---
+category: backend
+subcategory: api-design
+tags: [api, rest, rpc, error-handling, validation, security]
+cursor:
+  context_window: 8192
+  temperature: 0.5
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./convex-patterns.mdc", "./database-schema.mdc"]
+  exports: ["api-patterns", "error-schemas", "validation-middleware"]
+  references: ["../security/authentication.mdc", "./edge-functions.mdc"]
+---
+
+# API Design Patterns - 2025 Best Practices
+
+## Core API Design Principles
+
+**Wallet-First Authentication**: Every endpoint validates Solana wallet ownership
+**Consistent Error Handling**: Standardized error responses across all endpoints
+**Type-Safe Contracts**: Full TypeScript integration with runtime validation
+**Performance by Default**: Built-in caching, pagination, and rate limiting
+
+## RESTful API Patterns
+
+### Resource-Based URL Structure
+```typescript
+// ✅ Wallet-scoped resource endpoints
+GET    /api/v1/wallets/{walletAddress}/chats
+POST   /api/v1/wallets/{walletAddress}/chats
+GET    /api/v1/wallets/{walletAddress}/chats/{chatId}
+PUT    /api/v1/wallets/{walletAddress}/chats/{chatId}
+DELETE /api/v1/wallets/{walletAddress}/chats/{chatId}
+
+// ✅ Nested resource patterns
+GET    /api/v1/wallets/{walletAddress}/chats/{chatId}/messages
+POST   /api/v1/wallets/{walletAddress}/chats/{chatId}/messages
+GET    /api/v1/wallets/{walletAddress}/chats/{chatId}/messages/{messageId}
+
+// ✅ Action-based endpoints for complex operations
+POST   /api/v1/wallets/{walletAddress}/chats/{chatId}/messages/{messageId}/regenerate
+POST   /api/v1/wallets/{walletAddress}/documents/upload
+POST   /api/v1/wallets/{walletAddress}/embeddings/search
+```
+
+### Standard HTTP Status Codes
+```typescript
+// Success responses
+200 OK          // Successful GET, PUT
+201 Created     // Successful POST with resource creation
+202 Accepted    // Async operation started
+204 No Content  // Successful DELETE or PUT with no response body
+
+// Client errors
+400 Bad Request      // Invalid request format/validation errors
+401 Unauthorized     // Missing/invalid authentication
+403 Forbidden        // Valid auth but insufficient permissions
+404 Not Found        // Resource doesn't exist or no access
+409 Conflict         // Resource conflict (duplicate, constraint violation)
+422 Unprocessable    // Valid JSON but semantic errors
+429 Too Many Requests // Rate limit exceeded
+
+// Server errors
+500 Internal Server Error  // Unexpected server error
+502 Bad Gateway           // Upstream service error
+503 Service Unavailable   // Temporary overload
+504 Gateway Timeout       // Upstream timeout
+```
+
+## Request/Response Patterns
+
+### Standard Request Format
+```typescript
+// ✅ Consistent request structure
+interface APIRequest<T = any> {
+  data: T;
+  metadata?: {
+    requestId: string;
+    timestamp: number;
+    version: string;
+  };
+}
+
+// Example: Create chat request
+interface CreateChatRequest {
+  data: {
+    title: string;
+    model: string;
+    systemPrompt?: string;
+    initialMessage?: string;
+  };
+  metadata: {
+    requestId: string;
+    timestamp: number;
+    version: "1.0";
+  };
+}
+```
+
+### Standard Response Format
+```typescript
+// ✅ Consistent response envelope
+interface APIResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: APIError;
+  metadata: {
+    requestId: string;
+    timestamp: number;
+    version: string;
+    processingTime: number;
+  };
+  pagination?: PaginationMetadata;
+}
+
+// Success response example
+{
+  "success": true,
+  "data": {
+    "chatId": "chat_123",
+    "title": "My New Chat",
+    "createdAt": 1641234567890
+  },
+  "metadata": {
+    "requestId": "req_abc123",
+    "timestamp": 1641234567890,
+    "version": "1.0",
+    "processingTime": 45
+  }
+}
+```
+
+### Error Response Schema
+```typescript
+interface APIError {
+  code: string;
+  message: string;
+  details?: Record<string, any>;
+  field?: string; // For validation errors
+  retryAfter?: number; // For rate limiting
+}
+
+// Error response examples
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Chat title is required",
+    "field": "title"
+  },
+  "metadata": {
+    "requestId": "req_abc123",
+    "timestamp": 1641234567890,
+    "version": "1.0",
+    "processingTime": 12
+  }
+}
+
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many requests. Please try again later.",
+    "retryAfter": 60
+  }
+}
+```
+
+## Convex RPC Integration
+
+### Query Function Patterns
+```typescript
+// ✅ Wallet-validated query with pagination
+export const getUserChats = query({
+  args: {
+    walletAddress: v.string(),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+    archived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { walletAddress, limit = 20, cursor, archived = false }) => {
+    // Validate wallet authentication (implement in middleware)
+    await validateWalletAuth(ctx, walletAddress);
+    
+    let query = ctx.db
+      .query("chats")
+      .withIndex("by_wallet_updated", (q) => 
+        q.eq("walletAddress", walletAddress)
+      )
+      .filter((q) => q.eq("isArchived", archived));
+    
+    if (cursor) {
+      const cursorDoc = await ctx.db.get(cursor as Id<"chats">);
+      if (cursorDoc) {
+        query = query.filter((q) => q.lt("updatedAt", cursorDoc.updatedAt));
+      }
+    }
+    
+    const chats = await query
+      .order("desc")
+      .take(limit + 1);
+    
+    const hasMore = chats.length > limit;
+    const result = hasMore ? chats.slice(0, limit) : chats;
+    const nextCursor = hasMore ? result[result.length - 1]._id : null;
+    
+    return {
+      chats: result,
+      pagination: {
+        hasMore,
+        nextCursor,
+        totalCount: result.length,
+      },
+    };
+  },
+});
+```
+
+### Mutation Function Patterns
+```typescript
+// ✅ Comprehensive mutation with validation and error handling
+export const createChat = mutation({
+  args: {
+    walletAddress: v.string(),
+    title: v.string(),
+    model: v.string(),
+    systemPrompt: v.optional(v.string()),
+    initialMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      // 1. Authentication & authorization
+      await validateWalletAuth(ctx, args.walletAddress);
+      
+      // 2. Input validation
+      const validation = validateChatCreation(args);
+      if (!validation.valid) {
+        throw new ConvexError({
+          code: "VALIDATION_ERROR",
+          message: validation.error,
+          field: validation.field,
+        });
+      }
+      
+      // 3. Business logic validation
+      const userChats = await ctx.db
+        .query("chats")
+        .withIndex("by_wallet", (q) => q.eq("walletAddress", args.walletAddress))
+        .collect();
+      
+      if (userChats.length >= 100) {
+        throw new ConvexError({
+          code: "LIMIT_EXCEEDED",
+          message: "Maximum chat limit reached (100)",
+        });
+      }
+      
+      // 4. Rate limiting check
+      await checkRateLimit(ctx, args.walletAddress, "create_chat");
+      
+      // 5. Create chat
+      const chatId = await ctx.db.insert("chats", {
+        walletAddress: args.walletAddress,
+        title: args.title.trim(),
+        model: args.model,
+        systemPrompt: args.systemPrompt,
+        isArchived: false,
+        isPinned: false,
+        messageCount: 0,
+        tokensUsed: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      
+      // 6. Create initial message if provided
+      if (args.initialMessage?.trim()) {
+        const messageId = await ctx.db.insert("messages", {
+          chatId,
+          walletAddress: args.walletAddress,
+          role: "user",
+          content: args.initialMessage.trim(),
+          status: "sent",
+          timestamp: Date.now(),
+        });
+        
+        // Update chat metadata
+        await ctx.db.patch(chatId, {
+          messageCount: 1,
+          lastMessageAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        
+        // Schedule AI response generation
+        await ctx.scheduler.runAfter(0, internal.ai.generateResponse, {
+          messageId,
+          walletAddress: args.walletAddress,
+        });
+      }
+      
+      // 7. Track usage
+      await ctx.db.insert("usage", {
+        walletAddress: args.walletAddress,
+        action: "chat_created",
+        resourceId: chatId,
+        timestamp: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+      });
+      
+      return { chatId };
+      
+    } catch (error) {
+      // Structured error handling
+      if (error instanceof ConvexError) {
+        throw error; // Re-throw structured errors
+      }
+      
+      console.error("Chat creation failed:", error);
+      throw new ConvexError({
+        code: "INTERNAL_ERROR",
+        message: "Failed to create chat. Please try again.",
+      });
+    }
+  },
+});
+```
+
+### Action Function Patterns
+```typescript
+// ✅ External API integration with retry logic
+export const generateAIResponse = action({
+  args: {
+    messageId: v.id("messages"),
+    walletAddress: v.string(),
+    retryCount: v.optional(v.number()),
+  },
+  handler: async (ctx, { messageId, walletAddress, retryCount = 0 }) => {
+    try {
+      // 1. Get message and validate ownership
+      const message = await ctx.runQuery(api.messages.getMessage, {
+        messageId,
+        walletAddress,
+      });
+      
+      if (!message) {
+        throw new Error("Message not found or access denied");
+      }
+      
+      // 2. Check subscription limits
+      const usage = await ctx.runQuery(api.usage.getDailyUsage, {
+        walletAddress,
+        date: new Date().toISOString().split('T')[0],
+      });
+      
+      if (usage.tokensUsed >= usage.tokensLimit) {
+        throw new ConvexError({
+          code: "QUOTA_EXCEEDED",
+          message: "Daily token limit exceeded",
+        });
+      }
+      
+      // 3. Get conversation context
+      const context = await ctx.runQuery(api.messages.getConversationContext, {
+        chatId: message.chatId,
+        walletAddress,
+        limit: 10,
+      });
+      
+      // 4. Call AI service with retry logic
+      const aiResponse = await callAIServiceWithRetry({
+        messages: context,
+        model: message.metadata?.model || "gpt-4",
+        maxRetries: 3,
+        retryDelay: 1000 * Math.pow(2, retryCount), // Exponential backoff
+      });
+      
+      // 5. Save AI response
+      const responseId = await ctx.runMutation(api.messages.createAIResponse, {
+        chatId: message.chatId,
+        walletAddress,
+        content: aiResponse.content,
+        metadata: {
+          model: aiResponse.model,
+          usage: aiResponse.usage,
+          finishReason: aiResponse.finishReason,
+        },
+      });
+      
+      // 6. Update usage statistics
+      await ctx.runMutation(api.usage.trackUsage, {
+        walletAddress,
+        action: "message_sent",
+        resourceId: responseId,
+        tokens: aiResponse.usage.totalTokens,
+        cost: calculateTokenCost(aiResponse.usage.totalTokens, aiResponse.model),
+      });
+      
+      return { responseId };
+      
+    } catch (error) {
+      // Retry logic for transient errors
+      if (retryCount < 3 && isRetryableError(error)) {
+        const delay = 1000 * Math.pow(2, retryCount);
+        await ctx.scheduler.runAfter(delay, internal.ai.generateAIResponse, {
+          messageId,
+          walletAddress,
+          retryCount: retryCount + 1,
+        });
+        return { retrying: true };
+      }
+      
+      // Update message with error status
+      await ctx.runMutation(api.messages.updateMessageStatus, {
+        messageId,
+        status: "failed",
+        error: error.message,
+      });
+      
+      throw error;
+    }
+  },
+});
+```
+
+## Input Validation Middleware
+
+### Comprehensive Validation Helper
+```typescript
+// ✅ Reusable validation utilities
+export const validators = {
+  walletAddress: (addr: string) => {
+    if (!addr || typeof addr !== 'string') {
+      return { valid: false, error: "Wallet address is required" };
+    }
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr)) {
+      return { valid: false, error: "Invalid Solana wallet address format" };
+    }
+    return { valid: true };
+  },
+  
+  chatTitle: (title: string) => {
+    if (!title || typeof title !== 'string') {
+      return { valid: false, error: "Chat title is required", field: "title" };
+    }
+    const trimmed = title.trim();
+    if (trimmed.length === 0) {
+      return { valid: false, error: "Chat title cannot be empty", field: "title" };
+    }
+    if (trimmed.length > 100) {
+      return { valid: false, error: "Chat title must be less than 100 characters", field: "title" };
+    }
+    return { valid: true };
+  },
+  
+  messageContent: (content: string) => {
+    if (!content || typeof content !== 'string') {
+      return { valid: false, error: "Message content is required", field: "content" };
+    }
+    const trimmed = content.trim();
+    if (trimmed.length === 0) {
+      return { valid: false, error: "Message cannot be empty", field: "content" };
+    }
+    if (trimmed.length > 10000) {
+      return { valid: false, error: "Message must be less than 10,000 characters", field: "content" };
+    }
+    return { valid: true };
+  },
+  
+  aiModel: (model: string) => {
+    const validModels = ['gpt-4', 'gpt-3.5-turbo', 'claude-3', 'claude-2'];
+    if (!validModels.includes(model)) {
+      return { valid: false, error: "Invalid AI model", field: "model" };
+    }
+    return { valid: true };
+  },
+};
+
+// Composite validation
+export const validateChatCreation = (args: any) => {
+  const walletCheck = validators.walletAddress(args.walletAddress);
+  if (!walletCheck.valid) return walletCheck;
+  
+  const titleCheck = validators.chatTitle(args.title);
+  if (!titleCheck.valid) return titleCheck;
+  
+  const modelCheck = validators.aiModel(args.model);
+  if (!modelCheck.valid) return modelCheck;
+  
+  return { valid: true };
+};
+```
+
+## Rate Limiting Patterns
+
+### Token Bucket Implementation
+```typescript
+// ✅ Per-wallet rate limiting
+export const checkRateLimit = async (
+  ctx: any,
+  walletAddress: string,
+  action: string
+) => {
+  const limits = {
+    create_chat: { requests: 10, window: 3600 }, // 10 per hour
+    send_message: { requests: 100, window: 3600 }, // 100 per hour
+    upload_document: { requests: 5, window: 3600 }, // 5 per hour
+  };
+  
+  const limit = limits[action as keyof typeof limits];
+  if (!limit) return; // No limit configured
+  
+  const now = Date.now();
+  const windowStart = Math.floor(now / (limit.window * 1000)) * (limit.window * 1000);
+  
+  const rateLimitRecord = await ctx.db
+    .query("rateLimits")
+    .withIndex("by_wallet_endpoint", (q) => 
+      q.eq("walletAddress", walletAddress).eq("endpoint", action)
+    )
+    .first();
+  
+  if (!rateLimitRecord) {
+    // Create new rate limit record
+    await ctx.db.insert("rateLimits", {
+      walletAddress,
+      endpoint: action,
+      windowStart,
+      requestCount: 1,
+      lastRequest: now,
+    });
+    return;
+  }
+  
+  if (rateLimitRecord.windowStart === windowStart) {
+    // Same window - check limit
+    if (rateLimitRecord.requestCount >= limit.requests) {
+      const resetTime = windowStart + (limit.window * 1000);
+      throw new ConvexError({
+        code: "RATE_LIMIT_EXCEEDED",
+        message: `Rate limit exceeded for ${action}. Try again later.`,
+        retryAfter: Math.ceil((resetTime - now) / 1000),
+      });
+    }
+    
+    // Increment counter
+    await ctx.db.patch(rateLimitRecord._id, {
+      requestCount: rateLimitRecord.requestCount + 1,
+      lastRequest: now,
+    });
+  } else {
+    // New window - reset counter
+    await ctx.db.patch(rateLimitRecord._id, {
+      windowStart,
+      requestCount: 1,
+      lastRequest: now,
+    });
+  }
+};
+```
+
+## Authentication Patterns
+
+::alert{type="error"}
+**Security Critical**: Always validate wallet ownership before accessing any user data.
+::
+
+### Wallet Authentication Middleware
+```typescript
+// ✅ Wallet signature validation
+export const validateWalletAuth = async (ctx: any, walletAddress: string) => {
+  // Get signature from request headers (implement in Edge Functions)
+  const signature = ctx.auth?.signature;
+  const timestamp = ctx.auth?.timestamp;
+  const nonce = ctx.auth?.nonce;
+  
+  if (!signature || !timestamp || !nonce) {
+    throw new ConvexError({
+      code: "UNAUTHORIZED",
+      message: "Missing authentication parameters",
+    });
+  }
+  
+  // Verify signature timestamp (prevent replay attacks)
+  if (Date.now() - timestamp > 300000) { // 5 minutes
+    throw new ConvexError({
+      code: "UNAUTHORIZED", 
+      message: "Authentication expired",
+    });
+  }
+  
+  // Verify wallet signature (pseudo-code)
+  const message = `${walletAddress}:${timestamp}:${nonce}`;
+  const isValid = await verifyWalletSignature(message, signature, walletAddress);
+  
+  if (!isValid) {
+    throw new ConvexError({
+      code: "UNAUTHORIZED",
+      message: "Invalid wallet signature",
+    });
+  }
+  
+  return true;
+};
+```
+
+## Error Handling Standards
+
+### Centralized Error Types
+```typescript
+// ✅ Standardized error codes
+export enum APIErrorCode {
+  // Client errors (4xx)
+  VALIDATION_ERROR = "VALIDATION_ERROR",
+  UNAUTHORIZED = "UNAUTHORIZED", 
+  FORBIDDEN = "FORBIDDEN",
+  NOT_FOUND = "NOT_FOUND",
+  CONFLICT = "CONFLICT",
+  RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED",
+  QUOTA_EXCEEDED = "QUOTA_EXCEEDED",
+  
+  // Server errors (5xx)
+  INTERNAL_ERROR = "INTERNAL_ERROR",
+  SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE",
+  TIMEOUT = "TIMEOUT",
+  
+  // Business logic errors
+  INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE",
+  SUBSCRIPTION_REQUIRED = "SUBSCRIPTION_REQUIRED",
+  FEATURE_NOT_AVAILABLE = "FEATURE_NOT_AVAILABLE",
+}
+
+// Custom error class
+export class APIError extends Error {
+  constructor(
+    public code: APIErrorCode,
+    message: string,
+    public statusCode: number = 400,
+    public field?: string,
+    public retryAfter?: number
+  ) {
+    super(message);
+    this.name = "APIError";
+  }
+}
+```
+
+## Pagination Standards
+
+### Cursor-Based Pagination
+```typescript
+// ✅ Efficient pagination interface
+interface PaginationParams {
+  cursor?: string;
+  limit?: number;
+  direction?: 'asc' | 'desc';
+}
+
+interface PaginatedResponse<T> {
+  items: T[];
+  pagination: {
+    hasMore: boolean;
+    nextCursor: string | null;
+    previousCursor: string | null;
+    totalCount?: number;
+  };
+}
+
+// Implementation helper
+export const paginateQuery = async <T extends { _id: string; timestamp: number }>(
+  query: any,
+  params: PaginationParams
+): Promise<PaginatedResponse<T>> => {
+  const { cursor, limit = 20, direction = 'desc' } = params;
+  
+  if (cursor) {
+    const cursorDoc = await query.db.get(cursor);
+    if (cursorDoc) {
+      const operator = direction === 'desc' ? 'lt' : 'gt';
+      query = query.filter((q: any) => q[operator]("timestamp", cursorDoc.timestamp));
+    }
+  }
+  
+  const items = await query.order(direction).take(limit + 1);
+  const hasMore = items.length > limit;
+  const result = hasMore ? items.slice(0, limit) : items;
+  
+  return {
+    items: result,
+    pagination: {
+      hasMore,
+      nextCursor: hasMore ? result[result.length - 1]._id : null,
+      previousCursor: result.length > 0 ? result[0]._id : null,
+    },
+  };
+};
+```

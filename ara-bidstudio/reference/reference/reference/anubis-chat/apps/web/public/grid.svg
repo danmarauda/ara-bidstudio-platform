@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <style>
+      .g { stroke: rgba(255, 255, 255, 0.07); }
+      @media (prefers-color-scheme: light) {
+        .g { stroke: rgba(0, 0, 0, 0.06); }
+      }
+    </style>
+  </defs>
+  <rect width="32" height="32" fill="none"/>
+  <!-- Draw top and left borders so the SVG can tile as a subtle grid -->
+  <path class="g" d="M0 0.5 H32" stroke-width="1"/>
+  <path class="g" d="M0.5 0 V32" stroke-width="1"/>
+</svg>
+
+

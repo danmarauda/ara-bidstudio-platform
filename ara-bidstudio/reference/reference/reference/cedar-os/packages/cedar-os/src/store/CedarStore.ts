@@ -1,0 +1,279 @@
+import { create } from 'zustand';
+import { createAgentContextSlice } from '@/store/agentContext/agentContextSlice';
+import { createStylingSlice } from '@/store/stylingSlice';
+import { CedarStore } from '@/store/CedarOSTypes';
+import { createStateSlice } from '@/store/stateSlice/stateSlice';
+import { createMessagesSlice } from '@/store/messages/messagesSlice';
+import { createAgentConnectionSlice } from '@/store/agentConnection/agentConnectionSlice';
+import { createVoiceSlice } from '@/store/voice/voiceSlice';
+import { createDebuggerSlice } from '@/store/debugger/debuggerSlice';
+import { createSpellSlice } from '@/store/spellSlice/spellSlice';
+import { createDiffHistorySlice } from '@/store/diffHistoryStateSlice';
+import { createToolsSlice } from '@/store/toolsSlice/toolsSlice';
+import type { Message, MessageInput } from '@/store/messages/MessageTypes';
+import { useMemo } from 'react';
+
+// Create the combined store (default for backwards compatibility)
+export const useCedarStore = create<CedarStore>()((...a) => ({
+	...createStylingSlice(...a),
+	...createAgentContextSlice(...a),
+	...createStateSlice(...a),
+	...createMessagesSlice(...a),
+	...createAgentConnectionSlice(...a),
+	...createVoiceSlice(...a),
+	...createDebuggerSlice(...a),
+	...createSpellSlice(...a),
+	...createDiffHistorySlice(...a),
+	...createToolsSlice(...a),
+}));
+
+export const useMessages = () => ({
+	messages: useCedarStore((state) => state.messages),
+	isProcessing: useCedarStore((state) => state.isProcessing),
+	showChat: useCedarStore((state) => state.showChat),
+
+	setMessages: useCedarStore((state) => state.setMessages),
+	addMessage: useCedarStore((state) => state.addMessage),
+	clearMessages: useCedarStore((state) => state.clearMessages),
+	setIsProcessing: useCedarStore((state) => state.setIsProcessing),
+	setShowChat: useCedarStore((state) => state.setShowChat),
+});
+
+// Thread-aware hook for components that need thread control
+export const useThreadMessages = (threadId?: string) => {
+	const mainThreadId = useCedarStore((state) => state.mainThreadId);
+	const targetThreadId = threadId || mainThreadId;
+
+	// Optimized selector that only re-renders when specific thread changes
+	const threadData = useCedarStore((state) => state.threadMap[targetThreadId]);
+
+	return {
+		messages: threadData?.messages || [],
+		threadId: targetThreadId,
+		lastLoaded: threadData?.lastLoaded,
+		isCurrentThread: targetThreadId === mainThreadId,
+
+		// Thread-specific actions
+		setMessages: (messages: Message[]) =>
+			useCedarStore.getState().setMessages(messages, targetThreadId),
+		addMessage: (message: MessageInput, isComplete?: boolean) =>
+			useCedarStore.getState().addMessage(message, isComplete, targetThreadId),
+		clearMessages: () => useCedarStore.getState().clearMessages(targetThreadId),
+		switchToThread: () => useCedarStore.getState().switchThread(targetThreadId),
+	};
+};
+
+// Hook for thread management
+export const useThreadController = () => {
+	const mainThreadId = useCedarStore((state) => state.mainThreadId);
+	// Get threadMap and memoize the thread IDs to prevent infinite re-renders
+	const threadMap = useCedarStore((state) => state.threadMap);
+	const threadIds = useMemo(() => Object.keys(threadMap), [threadMap]);
+
+	return {
+		currentThreadId: mainThreadId,
+		threadIds,
+
+		setMainThreadId: useCedarStore((state) => state.setMainThreadId),
+		createThread: useCedarStore((state) => state.createThread),
+		deleteThread: useCedarStore((state) => state.deleteThread),
+		switchThread: useCedarStore((state) => state.switchThread),
+		updateThreadName: useCedarStore((state) => state.updateThreadName),
+		getAllThreadIds: useCedarStore((state) => state.getAllThreadIds),
+	};
+};
+
+// Export the set function directly
+export const setCedarStore = useCedarStore.setState;
+
+// Export a hook for styling config
+export const useStyling = () => ({
+	styling: useCedarStore((state) => state.styling),
+	setStyling: useCedarStore((state) => state.setStyling),
+	toggleDarkMode: useCedarStore((state) => state.toggleDarkMode),
+});
+
+// Export a hook for chat input
+export const useChatInput = () => ({
+	chatInputContent: useCedarStore((state) => state.chatInputContent),
+	setChatInputContent: useCedarStore((state) => state.setChatInputContent),
+	overrideInputContent: useCedarStore((state) => state.overrideInputContent),
+	setOverrideInputContent: useCedarStore(
+		(state) => state.setOverrideInputContent
+	),
+});
+
+// Export registerState function to allow dynamic state registration
+export const registerState: CedarStore['registerState'] = (config) =>
+	useCedarStore.getState().registerState(config);
+
+// Export getCedarState function for reading state values
+export const getCedarState: CedarStore['getCedarState'] = (key) =>
+	useCedarStore.getState().getCedarState(key);
+
+// Export setCedarState function for updating state values
+export const setCedarState: CedarStore['setCedarState'] = (key, value) =>
+	useCedarStore.getState().setCedarState(key, value);
+
+// Export the extensible store creator
+export { createCedarStore } from '@/store/createCedarStore';
+export type { CreateCedarStoreOptions } from '@/store/createCedarStore';
+
+// Export diff state types and hooks
+export type {
+	DiffMode,
+	DiffState,
+	DiffHistoryState,
+	DiffHistorySlice,
+} from '@/store/diffHistoryStateSlice';
+export {
+	useCedarDiffState,
+	createDiffHistorySlice,
+} from '@/store/diffHistoryStateSlice';
+
+// Export the typed messages slice creator
+export { createTypedMessagesSlice } from '@/store/messages/createTypedMessagesSlice';
+export type { TypedMessagesSlice } from '@/store/messages/createTypedMessagesSlice';
+
+// Export message types
+export type {
+	BaseMessage,
+	DefaultMessage,
+	TypedMessage,
+	MessageByType,
+	MessageRenderer,
+} from '@/store/messages/MessageTypes';
+
+// Export voice slice and utilities
+export { createVoiceSlice } from '@/store/voice/voiceSlice';
+export type {
+	VoiceSlice,
+	VoiceState,
+	VoiceActions,
+} from '@/store/voice/voiceSlice';
+
+// Export a hook for voice functionality
+export const useVoice = () => ({
+	isVoiceEnabled: useCedarStore((state) => state.isVoiceEnabled),
+	isListening: useCedarStore((state) => state.isListening),
+	isSpeaking: useCedarStore((state) => state.isSpeaking),
+	voicePermissionStatus: useCedarStore((state) => state.voicePermissionStatus),
+	voiceError: useCedarStore((state) => state.voiceError),
+	voiceSettings: useCedarStore((state) => state.voiceSettings),
+
+	requestVoicePermission: useCedarStore(
+		(state) => state.requestVoicePermission
+	),
+	checkVoiceSupport: useCedarStore((state) => state.checkVoiceSupport),
+	startListening: useCedarStore((state) => state.startListening),
+	stopListening: useCedarStore((state) => state.stopListening),
+	toggleVoice: useCedarStore((state) => state.toggleVoice),
+	updateVoiceSettings: useCedarStore((state) => state.updateVoiceSettings),
+	setVoiceError: useCedarStore((state) => state.setVoiceError),
+	resetVoiceState: useCedarStore((state) => state.resetVoiceState),
+});
+
+// Export a hook for debugger functionality
+export const useDebugger = () => ({
+	agentConnectionLogs: useCedarStore((state) => state.agentConnectionLogs),
+	maxLogs: useCedarStore((state) => state.maxLogs),
+	isDebugEnabled: useCedarStore((state) => state.isDebugEnabled),
+
+	logAgentRequest: useCedarStore((state) => state.logAgentRequest),
+	logAgentResponse: useCedarStore((state) => state.logAgentResponse),
+	logAgentError: useCedarStore((state) => state.logAgentError),
+	logStreamStart: useCedarStore((state) => state.logStreamStart),
+	logStreamChunk: useCedarStore((state) => state.logStreamChunk),
+	logStreamEnd: useCedarStore((state) => state.logStreamEnd),
+	clearDebugLogs: useCedarStore((state) => state.clearDebugLogs),
+	setDebugEnabled: useCedarStore((state) => state.setDebugEnabled),
+	setMaxLogs: useCedarStore((state) => state.setMaxLogs),
+});
+
+// Export spell slice and utilities
+export { createSpellSlice } from '@/store/spellSlice/spellSlice';
+export type {
+	SpellSlice,
+	SpellMap,
+	SpellState,
+	SpellRegistration,
+} from '@/store/spellSlice/spellSlice';
+
+// Export the spell hooks
+export { useSpell } from '@/store/spellSlice/useSpell';
+export { useMultipleSpells } from '@/store/spellSlice/useMultipleSpells';
+
+export type {
+	UseSpellOptions,
+	UseSpellReturn,
+} from '@/store/spellSlice/useSpell';
+
+// Export activation condition types
+export {
+	Hotkey,
+	MouseEvent,
+	SelectionEvent,
+	ActivationMode,
+	type ActivationConditions,
+	type ActivationState,
+	type ActivationEvent,
+	type HotkeyCombo,
+	type CommonHotkeyCombo,
+} from '@/store/spellSlice/SpellTypes';
+
+// Export a hook for spell functionality
+export const useSpells = () => ({
+	spells: useCedarStore((state) => state.spells),
+
+	// Unified API
+	registerSpell: useCedarStore((state) => state.registerSpell),
+	unregisterSpell: useCedarStore((state) => state.unregisterSpell),
+
+	// Programmatic control
+	activateSpell: useCedarStore((state) => state.activateSpell),
+	deactivateSpell: useCedarStore((state) => state.deactivateSpell),
+	toggleSpell: useCedarStore((state) => state.toggleSpell),
+	clearSpells: useCedarStore((state) => state.clearSpells),
+});
+
+// Export a hook for diff history functionality
+export const useDiffHistory = () => ({
+	diffHistoryStates: useCedarStore((state) => state.diffHistoryStates),
+
+	getDiffHistoryState: useCedarStore((state) => state.getDiffHistoryState),
+	getCleanState: useCedarStore((state) => state.getCleanState),
+	setDiffState: useCedarStore((state) => state.setDiffState),
+	newDiffState: useCedarStore((state) => state.newDiffState),
+	acceptAllDiffs: useCedarStore((state) => state.acceptAllDiffs),
+	rejectAllDiffs: useCedarStore((state) => state.rejectAllDiffs),
+	undo: useCedarStore((state) => state.undo),
+	redo: useCedarStore((state) => state.redo),
+});
+
+// Export tools slice and utilities
+export { createToolsSlice } from '@/store/toolsSlice/toolsSlice';
+export type {
+	ToolsSlice,
+	ToolsState,
+	ToolsActions,
+	ToolFunction,
+	RegisteredTool,
+	RegisteredToolBase,
+	ToolRegistrationConfig,
+	ToolsMap,
+} from '@/store/toolsSlice/ToolsTypes';
+
+// Export the useRegisterFrontendTool hook
+export { useRegisterFrontendTool } from '@/store/toolsSlice/useRegisterFrontendTool';
+export type { UseRegisterFrontendToolOptions } from '@/store/toolsSlice/useRegisterFrontendTool';
+
+// Export a hook for tools functionality
+export const useTools = () => ({
+	registeredTools: useCedarStore((state) => state.registeredTools),
+
+	registerTool: useCedarStore((state) => state.registerTool),
+	unregisterTool: useCedarStore((state) => state.unregisterTool),
+	executeTool: useCedarStore((state) => state.executeTool),
+	getRegisteredTools: useCedarStore((state) => state.getRegisteredTools),
+	clearTools: useCedarStore((state) => state.clearTools),
+});

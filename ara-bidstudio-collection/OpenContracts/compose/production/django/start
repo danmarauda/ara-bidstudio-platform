@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+python /app/manage.py collectstatic --noinput
+
+daphne -b 0.0.0.0 -p 5000 --websocket_timeout $DJANGO_WORKER_TIMEOUT config.asgi:application

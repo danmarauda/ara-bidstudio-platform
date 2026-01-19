@@ -1,0 +1,33 @@
+/* Legacy Semantic UI styles */
+.ui.menu .dropdown.item .menu .uninvert_me {
+  background: black !important;
+}
+
+/* Override for custom dropdown component - removed overly specific * selector */
+div.uninvert_me {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+div.uninvert_me a {
+  color: rgba(255, 255, 255, 0.9) !important;
+  text-decoration: none;
+}
+
+div.active.item.uninvert_me {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 1) !important;
+}
+
+div.active.item.uninvert_me a {
+  color: rgba(255, 255, 255, 1) !important;
+}
+
+div.uninvert_me:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 1) !important;
+}
+
+div.uninvert_me:hover a {
+  color: rgba(255, 255, 255, 1) !important;
+}

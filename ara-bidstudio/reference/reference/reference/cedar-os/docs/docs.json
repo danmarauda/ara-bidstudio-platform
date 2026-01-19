@@ -1,0 +1,213 @@
+{
+	"$schema": "https://mintlify.com/docs.json",
+	"theme": "mint",
+	"name": "Cedar-OS Documentation",
+	"colors": {
+		"primary": "#16A34A",
+		"light": "#07C983",
+		"dark": "#15803D"
+	},
+	"favicon": "/CedarLogoTransparent.png",
+	"navigation": {
+		"groups": [
+			{
+				"group": "Introduction to Cedar-OS",
+				"icon": "house",
+				"pages": [
+					"introduction/overview",
+					"introduction/philosophy",
+					"introduction/architecture",
+					"introduction/understanding-cedar-architecture-advanced",
+					"examples/demo-showcases"
+				]
+			},
+			{
+				"group": "Getting Started",
+				"icon": "play",
+				"pages": [
+					{
+						"group": "Getting Started",
+						"pages": [
+							"getting-started/getting-started",
+							"getting-started/cli",
+							"getting-started/organizing-a-cedar-project",
+							"mcp-integration/mcp-server",
+							"components/debugger-panel"
+						]
+					}
+				]
+			},
+			{
+				"group": "Connecting to an Agent",
+				"icon": "plug",
+				"pages": [
+					"agent-backend-connection/agent-backend-connection",
+					"agent-backend-connection/custom-request",
+					"agent-backend-connection/custom-response-processing",
+					{
+						"group": "Mastra & custom backends",
+						"pages": [
+							"agent-backend-connection/mastra",
+							"agent-backend-connection/custom"
+						]
+					},
+					{
+						"group": "End-to-end type safety",
+						"pages": [
+							"type-safety/typing-agent-requests",
+							"type-safety/typing-agent-responses"
+						]
+					}
+				]
+			},
+			{
+				"group": "Chat",
+				"icon": "message",
+				"pages": [
+					"chat/chat-overview",
+					"chat/custom-message-rendering",
+					{
+						"group": "Chat (Advanced)",
+						"pages": [
+							"chat/streaming",
+							"chat/thread-management",
+							"chat/configuring-cedar-editor",
+							"chat/message-storage-configuration",
+							"chat/chat-components",
+							{
+								"group": "Components",
+								"pages": [
+									"components/command-bar",
+									"components/chat-input",
+									"components/chat-bubbles"
+								]
+							}
+						]
+					}
+				]
+			},
+			{
+				"group": "Agentic State",
+				"icon": "database",
+				"pages": [
+					"state-access/agentic-state-access",
+					"state-access/agentic-actions"
+				]
+			},
+			{
+				"group": "State Diff Management (Beta)",
+				"icon": "code-compare",
+				"pages": [
+					"state-diff/using-state-diff",
+					"state-diff/state-diff-internals"
+				]
+			},
+			{
+				"group": "Agent Context",
+				"icon": "at",
+				"pages": [
+					"agent-context/agent-context",
+					"agent-context/mentions",
+					"agent-context/subscribing-state",
+					{
+						"group": "Advanced Context Management",
+						"pages": ["agent-context/advanced-context-management"]
+					}
+				]
+			},
+
+			{
+				"group": "Voice (Beta)",
+				"icon": "microphone",
+				"pages": [
+					"voice/voice-integration",
+					"voice/components",
+					"voice/agentic-backend",
+					"voice/voice-endpoint-format"
+				]
+			},
+			{
+				"group": "Spells",
+				"icon": "wand-magic-sparkles",
+				"pages": [
+					"spells/spells",
+					"spells/creating-custom-spells",
+					"spells/spell-architecture",
+					{
+						"group": "Existing Spells",
+						"pages": [
+							"spells/radial-menu",
+							"spells/slider-spell",
+							"spells/questioning-spell",
+							"spells/tooltip-menu"
+						]
+					}
+				]
+			},
+			{
+				"group": "Advanced Workflows",
+				"icon": "brain-circuit",
+				"pages": ["workflows/human-in-the-loop"]
+			},
+			{
+				"group": "External Integrations (Coming Soon)",
+				"icon": "puzzle-piece",
+				"pages": [
+					"external-integrations/external-integrations",
+					"external-integrations/text",
+					"external-integrations/email",
+					"external-integrations/application-triggers"
+				]
+			},
+			{
+				"group": "Customising Cedar",
+				"icon": "palette",
+				"pages": ["customising/styling", "customising/customising-cedar"]
+			},
+			{
+				"group": "Learn more about Cedar ❤️🌳",
+				"icon": "pen",
+				"pages": ["blog/index"]
+			},
+			{
+				"group": "Components",
+				"icon": "puzzle-piece",
+				"pages": [
+					"components/typewriter-text",
+					"components/markdown-renderer",
+					"components/command-bar",
+					"components/chat-input",
+					"components/chat-bubbles"
+				]
+			},
+			{
+				"group": "Changelog",
+				"icon": "rocket",
+				"pages": ["changelog"]
+			}
+		]
+	},
+	"logo": {
+		"light": "/logo/light.png",
+		"dark": "/logo/dark.png"
+	},
+	"navbar": {
+		"links": [
+			{
+				"label": "GitHub",
+				"href": "https://github.com/CedarCopilot/cedar-OS",
+				"icon": "github"
+			},
+			{
+				"label": "Discord",
+				"href": "https://discord.gg/4AWawRjNdZ",
+				"icon": "discord"
+			}
+		]
+	},
+	"footer": {
+		"socials": {
+			"github": "https://github.com/CedarCopilot/cedar-OS"
+		}
+	}
+}

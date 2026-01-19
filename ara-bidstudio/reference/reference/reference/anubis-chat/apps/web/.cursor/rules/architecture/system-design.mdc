@@ -1,0 +1,421 @@
+---
+category: architecture
+subcategory: system-design
+tags: [architecture, system-boundaries, microservices, nextjs, convex, solana]
+cursor:
+  context_window: 8192
+  temperature: 0.7
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../frontend/components.mdc", "../backend/convex.mdc"]
+  exports: ["system-boundaries", "component-patterns", "service-boundaries"]
+  references: ["data-flow.mdc", "scalability.mdc"]
+---
+
+# abubis.chat System Design Architecture
+
+## Core System Overview
+
+abubis.chat is a Solana-native AI chat SaaS built on modern edge computing principles with real-time capabilities.
+
+::alert{type="info"}
+**System Philosophy**: Edge-first, real-time, blockchain-native architecture optimizing for sub-100ms response times and global scalability.
+::
+
+## System Architecture Layers
+
+### 1. Presentation Layer (Edge-Optimized)
+
+::card{title="Next.js 15 App Router Frontend"}
+- **Location**: Vercel Edge Network
+- **Components**: React Server Components (default), selective Client Components
+- **Routing**: App Router with route groups for organization
+- **Rendering**: Server-side first, hydration minimization
+- **Caching**: Uncached by default (Next.js 15), selective opt-in caching
+
+**Structure Pattern**:
+```
+src/
+├── app/                  # App Router (RSC-first)
+│   ├── (marketing)/     # Route group
+│   ├── (dashboard)/     # Route group
+│   └── (admin)/         # Route group
+├── components/          # Shared components
+│   ├── ui/              # Base UI components
+│   └── features/        # Business logic components
+└── lib/                 # Utilities and configurations
+```
+::
+
+### 2. API Layer (Edge Functions)
+
+::card{title="Serverless Functions & API Routes"}
+- **Platform**: Vercel Edge Functions
+- **Runtime**: Edge Runtime (V8 isolates)
+- **Pattern**: Function-per-endpoint microservices
+- **Authentication**: JWT with Solana wallet integration
+- **Rate Limiting**: Per-function with Upstash Redis
+
+**API Boundaries**:
+```typescript
+/api/
+├── auth/           # Authentication & authorization
+├── chat/           # Chat operations
+├── ai/             # AI model interactions
+├── solana/         # Blockchain operations
+└── webhooks/       # External service callbacks
+```
+::
+
+### 3. Data Layer (Real-time Database)
+
+::card{title="Convex Reactive Database"}
+- **Architecture**: Document-relational hybrid
+- **Real-time**: Reactive queries with automatic subscriptions
+- **Language**: TypeScript-native (no SQL/ORM)
+- **Consistency**: ACID transactions with optimistic updates
+- **Caching**: Built-in reactive caching
+
+**Schema Organization**:
+```typescript
+convex/
+├── schema.ts           # Database schema
+├── functions/          # Server functions
+│   ├── queries/       # Read operations
+│   ├── mutations/     # Write operations
+│   └── actions/       # External API calls
+└── components/        # Reusable logic modules
+```
+::
+
+### 4. AI Processing Layer
+
+::card{title="Vercel AI SDK v5.2 Integration"}
+- **Models**: Multi-provider (OpenAI, Anthropic, local)
+- **Streaming**: Real-time response streaming
+- **Caching**: Response caching with semantic similarity
+- **Context**: Conversation memory with vector embeddings
+
+**AI Architecture**:
+```typescript
+ai/
+├── providers/         # Model providers
+├── prompts/          # Prompt templates
+├── embeddings/       # Vector operations
+└── memory/           # Conversation context
+```
+::
+
+### 5. Blockchain Layer
+
+::card{title="Solana Integration"}
+- **Framework**: Anchor 0.29 for smart contracts
+- **Wallet**: Universal wallet adapter
+- **Programs**: On-chain logic for payments/governance
+- **RPC**: Multiple endpoint failover
+
+**Solana Integration**:
+```typescript
+solana/
+├── programs/         # Anchor smart contracts
+├── clients/          # Program clients
+├── wallets/          # Wallet management
+└── utils/            # Blockchain utilities
+```
+::
+
+### 6. Vector Search Layer
+
+::card{title="Qdrant Vector Database"}
+- **Version**: v1.9+
+- **Usage**: Semantic search, RAG, embeddings
+- **Clustering**: Multi-node for high availability
+- **Performance**: Sub-10ms vector queries
+
+**Vector Operations**:
+```typescript
+vector/
+├── embeddings/       # Text to vector conversion
+├── search/           # Semantic search
+├── clustering/       # Vector clustering
+└── collections/      # Qdrant collections
+```
+::
+
+## Component Boundaries and Responsibilities
+
+### Microservice Boundaries
+
+::tabs
+::div{label="Authentication Service"}
+**Responsibilities**:
+- Solana wallet authentication
+- JWT token management
+- User session handling
+- Permission validation
+
+**API Contract**:
+```typescript
+interface AuthService {
+  authenticate(walletAddress: string): Promise<AuthToken>
+  validate(token: string): Promise<User>
+  refresh(token: string): Promise<AuthToken>
+}
+```
+::
+
+::div{label="Chat Service"}
+**Responsibilities**:
+- Message persistence
+- Real-time message delivery
+- Chat room management
+- Message history
+
+**API Contract**:
+```typescript
+interface ChatService {
+  sendMessage(roomId: string, message: Message): Promise<void>
+  getHistory(roomId: string, limit: number): Promise<Message[]>
+  subscribeToRoom(roomId: string): Subscription<Message>
+}
+```
+::
+
+::div{label="AI Service"}
+**Responsibilities**:
+- AI model orchestration
+- Response generation
+- Context management
+- Model switching
+
+**API Contract**:
+```typescript
+interface AIService {
+  generateResponse(prompt: string, context: Context): Stream<string>
+  embedText(text: string): Promise<Vector>
+  summarizeConversation(messages: Message[]): Promise<Summary>
+}
+```
+::
+
+::div{label="Blockchain Service"}
+**Responsibilities**:
+- Transaction processing
+- Wallet interactions
+- Smart contract calls
+- Payment processing
+
+**API Contract**:
+```typescript
+interface BlockchainService {
+  processPayment(amount: number, recipient: string): Promise<Transaction>
+  callProgram(programId: string, instruction: Instruction): Promise<Result>
+  getBalance(walletAddress: string): Promise<number>
+}
+```
+::
+::
+
+## System Integration Patterns
+
+### 1. Event-Driven Architecture
+
+::code-group
+```typescript [Event Bus]
+// Global event system using Convex reactive queries
+export const eventBus = {
+  publish: (event: SystemEvent) => ctx.db.insert("events", event),
+  subscribe: (eventType: string) => ctx.db.query("events")
+    .withIndex("by_type", q => q.eq("type", eventType))
+    .order("desc")
+}
+```
+
+```typescript [Event Types]
+type SystemEvent = 
+  | { type: "message.sent", data: MessageSentData }
+  | { type: "user.authenticated", data: UserAuthData }
+  | { type: "payment.processed", data: PaymentData }
+  | { type: "ai.response.complete", data: AIResponseData }
+```
+::
+
+### 2. Circuit Breaker Pattern
+
+::code-group
+```typescript [Circuit Breaker]
+class CircuitBreaker {
+  private failures = 0
+  private lastFailure?: Date
+  private state: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED'
+  
+  async call<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.state === 'OPEN') {
+      if (this.shouldAttemptReset()) {
+        this.state = 'HALF_OPEN'
+      } else {
+        throw new Error('Circuit breaker is OPEN')
+      }
+    }
+    
+    try {
+      const result = await operation()
+      this.onSuccess()
+      return result
+    } catch (error) {
+      this.onFailure()
+      throw error
+    }
+  }
+}
+```
+
+```typescript [Usage Example]
+const aiServiceBreaker = new CircuitBreaker()
+
+export async function generateAIResponse(prompt: string) {
+  return aiServiceBreaker.call(async () => {
+    return await openai.chat.completions.create({
+      model: "gpt-4-turbo",
+      messages: [{ role: "user", content: prompt }]
+    })
+  })
+}
+```
+::
+
+## Security Architecture
+
+### 1. Authentication & Authorization
+
+::alert{type="warning"}
+**Security Principle**: Zero-trust architecture with wallet-based authentication and role-based access control.
+::
+
+```typescript
+// Wallet-based authentication flow
+interface SecurityLayer {
+  // Multi-signature wallet support
+  authenticateWallet(signature: string, message: string): Promise<User>
+  
+  // Role-based permissions
+  authorizeAction(user: User, action: string, resource: string): boolean
+  
+  // Rate limiting per wallet
+  rateLimitCheck(walletAddress: string, endpoint: string): boolean
+}
+```
+
+### 2. Data Encryption
+
+```typescript
+// End-to-end encryption for sensitive data
+interface EncryptionLayer {
+  encryptMessage(message: string, publicKey: string): string
+  decryptMessage(encryptedMessage: string, privateKey: string): string
+  hashSensitiveData(data: string): string
+}
+```
+
+## Error Handling & Resilience
+
+### 1. Graceful Degradation
+
+::code-group
+```typescript [Service Fallbacks]
+class ResilientAIService {
+  private providers = ['openai', 'anthropic', 'local']
+  
+  async generateResponse(prompt: string): Promise<string> {
+    for (const provider of this.providers) {
+      try {
+        return await this.callProvider(provider, prompt)
+      } catch (error) {
+        console.warn(`Provider ${provider} failed:`, error)
+        continue
+      }
+    }
+    
+    // Final fallback
+    return "I'm experiencing technical difficulties. Please try again."
+  }
+}
+```
+
+```typescript [Database Resilience]
+// Convex automatic retry with exponential backoff
+export async function resilientMutation<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3
+): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      if (attempt === maxRetries - 1) throw error
+      
+      const delay = Math.pow(2, attempt) * 1000
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  
+  throw new Error('Max retries exceeded')
+}
+```
+::
+
+## Monitoring & Observability
+
+### 1. Health Checks
+
+```typescript
+// System health monitoring
+export interface SystemHealth {
+  database: 'healthy' | 'degraded' | 'down'
+  ai_services: 'healthy' | 'degraded' | 'down'  
+  blockchain: 'healthy' | 'degraded' | 'down'
+  vector_db: 'healthy' | 'degraded' | 'down'
+}
+
+export async function checkSystemHealth(): Promise<SystemHealth> {
+  return {
+    database: await checkConvexHealth(),
+    ai_services: await checkAIProvidersHealth(),
+    blockchain: await checkSolanaHealth(),
+    vector_db: await checkQdrantHealth()
+  }
+}
+```
+
+### 2. Performance Metrics
+
+```typescript
+// Key performance indicators
+interface PerformanceMetrics {
+  response_time_p95: number    // < 200ms
+  ai_generation_time: number   // < 2s
+  database_query_time: number  // < 50ms
+  error_rate: number           // < 0.1%
+  concurrent_users: number
+  throughput_rps: number
+}
+```
+
+## Architecture Decision Records (ADRs)
+
+::alert{type="success"}
+**ADR-001**: Choose Convex over traditional database for real-time requirements
+**ADR-002**: Implement edge-first architecture for global latency optimization
+**ADR-003**: Use Solana for native blockchain integration over multi-chain complexity
+**ADR-004**: Adopt Next.js 15 App Router for improved performance and developer experience
+::
+
+## Next Steps & Evolution
+
+1. **Phase 1**: Core chat functionality with AI integration
+2. **Phase 2**: Advanced AI features (RAG, multi-model)
+3. **Phase 3**: Blockchain features (payments, governance)
+4. **Phase 4**: Enterprise features (teams, analytics)
+
+This system design provides a robust foundation for a scalable, real-time AI chat platform with blockchain integration.

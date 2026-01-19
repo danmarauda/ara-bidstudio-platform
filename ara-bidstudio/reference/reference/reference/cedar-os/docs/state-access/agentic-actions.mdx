@@ -1,0 +1,496 @@
+---
+title: 'Agentic Actions'
+description: 'Set up structured responses and interpret them as actions'
+---
+
+Cedar enables your agent to not only read state but also execute actions through structured responses. This guide shows you how to set up an end-to-end flow where your agent can understand your application state and perform actions on it.
+
+## Overview
+
+The agentic actions flow consists of four main parts:
+
+1. **Register State Setters** - Define what state manipulation actions can be performed
+2. **Register Frontend Tools** - Define what other actions can be executed
+3. **Configure Structured Responses** - Set up your agent to return structured data
+4. **Handle LLM Results** - Process the structured responses and execute actions
+
+## Complete Example: Product Roadmap
+
+Let's walk through a complete example using a product roadmap application where the agent can add features, remove nodes, and manage diffs.
+
+### Step 1: Register State with Custom State Setters
+
+First, register your state with custom state setters that define the available actions:
+
+```tsx
+import { useRegisterState } from 'cedar-os';
+import { Node } from 'reactflow';
+import { z } from 'zod';
+
+// Register nodes state with state setters
+useRegisterState({
+	key: 'nodes',
+	value: nodes,
+	setValue: setNodes,
+	description: 'Product roadmap nodes',
+	stateSetters: {
+		addNode: {
+			name: 'addNode',
+			description: 'Add a new node to the roadmap',
+			argsSchema: z.object({
+				node: z.object({
+					data: z.object({
+						title: z.string(),
+						description: z.string(),
+						status: z.enum(['done', 'planned', 'backlog', 'in progress']),
+						nodeType: z.literal('feature').default('feature'),
+					}),
+				}),
+			}),
+				const newNode = {
+					...node,
+					id: node.id || uuidv4(),
+					type: 'featureNode',
+					position: { x: Math.random() * 400, y: Math.random() * 400 },
+					data: {
+						...node.data,
+						nodeType: node.data.nodeType || 'feature',
+						status: node.data.status || 'planned',
+						upvotes: node.data.upvotes || 0,
+						comments: node.data.comments || [],
+						diff: 'added' as const,
+					},
+				};
+				setNodes([...currentNodes, newNode]);
+			},
+		},
+		removeNode: {
+			name: 'removeNode',
+			description: 'Remove a node from the roadmap',
+			argsSchema: z.object({
+				id: z.string().describe('The ID of the node to remove'),
+			}),
+				// Mark as removed with diff instead of immediate deletion
+				setNodes(
+					currentNodes.map((node) =>
+						node.id === id
+							? { ...node, data: { ...node.data, diff: 'removed' } }
+							: node
+					)
+				);
+			},
+		},
+		acceptAllDiffs: {
+			name: 'acceptAllDiffs',
+			description: 'Accept all pending diffs',
+			argsSchema: z.object({}),
+				const nodesWithDiffs = currentNodes.filter((n) => n.data.diff);
+
+				// Process removals
+				const removedNodeIds = nodesWithDiffs
+					.filter((n) => n.data.diff === 'removed')
+					.map((n) => n.id);
+
+				for (const nodeId of removedNodeIds) {
+					await deleteNode(nodeId);
+				}
+
+				// Update remaining nodes
+				const remainingNodes = currentNodes.filter(
+					(n) => !removedNodeIds.includes(n.id)
+				);
+				setNodes(
+					remainingNodes.map((n) => ({
+						...n,
+						data: { ...n.data, diff: undefined },
+					}))
+				);
+			},
+		},
+	},
+});
+```
+
+### Step 2: Register Frontend Tools
+
+In addition to state setters, you can register frontend tools that agents can execute directly. These tools handle UI actions, notifications, talking to external systems, and other operations that don't directly manipulate Cedar state:
+
+```tsx
+import { useRegisterFrontendTool } from 'cedar-os';
+import { z } from 'zod';
+import { toast } from 'react-hot-toast';
+
+function ProductRoadmapTools() {
+	// Register a notification tool
+	useRegisterFrontendTool({
+		name: 'showNotification',
+		description: 'Show a notification to the user',
+		execute: ({ message, type }) => {
+			toast[type](message);
+		},
+		argsSchema: z.object({
+			message: z.string().describe('The notification message'),
+			type: z.enum(['success', 'error', 'info']).describe('Notification type'),
+		}),
+	});
+
+	// Register a navigation tool
+	useRegisterFrontendTool({
+		name: 'navigateToNode',
+		description: 'Navigate to and highlight a specific node',
+		execute: ({ nodeId }) => {
+			const nodeElement = document.querySelector(`[data-node-id="${nodeId}"]`);
+			if (nodeElement) {
+				nodeElement.scrollIntoView({ behavior: 'smooth' });
+				nodeElement.classList.add('highlighted');
+			}
+		},
+		argsSchema: z.object({
+			nodeId: z.string().describe('The ID of the node to navigate to'),
+		}),
+	});
+
+	return null; // This component only registers tools
+}
+```
+
+### Step 3: Configure Your Agent for Structured Responses
+
+Configure your agent backend to return structured responses. For state setters, your agent should return `setState` type responses. For frontend tools, your agent should return `frontendTool` type responses.
+
+```json
+{
+	"type": "setState",
+	"stateKey": "nodes",
+	"setterKey": "addNode",
+	"args": {
+		/* node data */
+	}
+}
+```
+
+```json
+{
+	"type": "frontendTool",
+	"toolName": "showNotification",
+	"args": {
+		"message": "Feature added successfully!",
+		"type": "success"
+	}
+}
+```
+
+**Example:**
+
+```typescript
+// In your Mastra agent configuration
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+export const addFeatureTool = createTool({
+	id: 'add-feature',
+	description: 'Add a new feature to the product roadmap',
+	inputSchema: z.object({
+		title: z.string().describe('Title of the feature'),
+		description: z.string().describe('Description of the feature'),
+		status: z.enum(['done', 'planned', 'backlog', 'in progress']),
+		nodeType: z.literal('feature').default('feature'),
+	}),
+	outputSchema: z.object({
+		type: z.literal('setState'),
+		stateKey: z.literal('nodes'),
+		setterKey: z.literal('addNode'),
+		args: z.any(),
+	}),
+	execute: async ({ context }) => {
+		// Return structured response for Cedar to interpret
+		return {
+			type: 'setState',
+			stateKey: 'nodes',
+			setterKey: 'addNode',
+			args: {
+				node: {
+					data: {
+						title: context.title,
+						description: context.description,
+						status: context.status,
+						nodeType: context.nodeType,
+					},
+				},
+			},
+		};
+	},
+});
+
+export const showNotificationTool = createTool({
+	id: 'show-notification',
+	description: 'Show a notification to the user',
+	inputSchema: z.object({
+		message: z.string(),
+		type: z.enum(['success', 'error', 'info']),
+	}),
+	outputSchema: z.object({
+		type: z.literal('frontendTool'),
+		toolName: z.literal('showNotification'),
+		args: z.any(),
+	}),
+	execute: async ({ context }) => {
+		return {
+			type: 'frontendTool',
+			toolName: 'showNotification',
+			args: {
+				message: context.message,
+				type: context.type,
+			},
+		};
+	},
+});
+```
+
+### Step 4: Handle LLM Results
+
+Cedar's `handleLLMResult` function automatically processes both `setState` and `frontendTool` responses. It will:
+
+1. Find the relevant state setter or frontend tool
+2. Validate provided args against the `argsSchema` (if provided)
+3. Execute the function if args are valid
+4. Add the message to the chat
+
+> **Note**: This default handling can be customized using [Custom Response Processing](/agent-backend-connection/custom-response-processing#setstate-type). You can also customize how setState completion is displayed with [Custom Message Rendering](/chat/custom-message-rendering#setstate-type).
+
+## Using Actions in Your UI
+
+You can trigger actions directly from your UI components:
+
+```tsx
+import { useCedarStore } from 'cedar-os';
+
+function ActionButtons() {
+	const executeStateSetter = useCedarStore((state) => state.executeStateSetter);
+
+	const handleAddFeature = () => {
+		executeStateSetter('nodes', 'addNode', {
+			node: {
+				data: {
+					title: 'New Feature',
+					description: 'Describe your feature here',
+					status: 'planned',
+					nodeType: 'feature',
+				},
+			},
+		});
+	};
+
+	const handleAcceptAllDiffs = () => {
+		executeStateSetter('nodes', 'acceptAllDiffs', {});
+	};
+
+	return (
+		<div className='flex gap-2'>
+			<button onClick={handleAddFeature}>Add Feature</button>
+			<button onClick={handleAcceptAllDiffs}>Accept All Changes</button>
+		</div>
+	);
+}
+```
+
+## Best Practices
+
+### 1. Use Descriptive Action Names
+
+Make your setter names clear and action-oriented:
+
+```tsx
+// Good
+stateSetters: {
+  addTodo: { /* ... */ },
+  toggleTodoComplete: { /* ... */ },
+  deleteTodo: { /* ... */ }
+}
+
+// Avoid
+stateSetters: {
+  setter1: { /* ... */ },
+  update: { /* ... */ },
+  change: { /* ... */ }
+}
+```
+
+### 2. Use Descriptive Schema Fields
+
+Help your agent understand what parameters to provide using Zod's describe method for both state setters and frontend tools:
+
+```tsx
+argsSchema: z.object({
+	priority: z
+		.enum(['low', 'medium', 'high', 'critical'])
+		.describe('Priority level: low, medium, high, or critical'),
+});
+
+// Frontend tool example
+useRegisterFrontendTool({
+	name: 'highlightElement',
+	argsSchema: z.object({
+		selector: z.string().describe('CSS selector for element to highlight'),
+		duration: z
+			.number()
+			.optional()
+			.describe('Highlight duration in milliseconds (default: 2000)'),
+	}),
+	execute: ({ selector, duration = 2000 }) => {
+		// Implementation
+	},
+});
+```
+
+### 3. Use Conditional Tool Registration
+
+Register tools only when they're relevant to the current state:
+
+```tsx
+function ConditionalTools({ userRole, isEditMode }) {
+	// Only register admin tools for admin users
+	useRegisterFrontendTool({
+		name: 'deleteAllNodes',
+		enabled: userRole === 'admin',
+		description: 'Delete all nodes (admin only)',
+		execute: () => {
+			// Admin-only functionality
+		},
+		argsSchema: z.object({}),
+	});
+
+	// Only register edit tools in edit mode
+	useRegisterFrontendTool({
+		name: 'enableBulkEdit',
+		enabled: isEditMode,
+		description: 'Enable bulk editing interface',
+		execute: () => {
+			// Edit mode functionality
+		},
+		argsSchema: z.object({}),
+	});
+
+	return <EditInterface />;
+}
+```
+
+### 4. Handle Errors Gracefully
+
+Add error handling in both state setters and frontend tools:
+
+```tsx
+execute: async (currentState, args) => {
+	try {
+		const { id } = args;
+		const item = currentState.find((item) => item.id === id);
+		if (!item) {
+			console.error(`Item with id ${id} not found`);
+			return;
+		}
+		// Perform action
+	} catch (error) {
+		console.error('Failed to execute action:', error);
+	}
+};
+
+// Frontend tool error handling
+useRegisterFrontendTool({
+	name: 'exportData',
+	execute: async ({ format }) => {
+		try {
+			const data = await fetchData();
+			if (format === 'csv') {
+				downloadCSV(data);
+			} else if (format === 'json') {
+				downloadJSON(data);
+			}
+		} catch (error) {
+			console.error('Export failed:', error);
+			toast.error('Failed to export data. Please try again.');
+		}
+	},
+	argsSchema: z.object({
+		format: z.enum(['csv', 'json']),
+	}),
+});
+```
+
+## Automatic Schema Distribution
+
+Cedar automatically includes the schemas of all registered state setters and frontend tools in the context sent to your agent. This enables your agent to understand both the data structure and what actions are available.
+
+### Schema Structure
+
+The schemas are included in top-level fields alongside your subscribed state data:
+
+```json
+{
+	"nodes": [
+		// Your subscribed state data
+	],
+	"stateSetters": {
+		"addNode": {
+			"name": "addNode",
+			"stateKey": "nodes",
+			"description": "Add a new node to the roadmap",
+			"argsSchema": {
+				/* Zod schema is transformed to a JSON schema */
+			}
+		}
+	},
+	"frontendTools": {
+		"showNotification": {
+			"name": "showNotification",
+			"description": "Show a notification to the user",
+			"argsSchema": {
+				/* Zod schema is transformed to a JSON schema */
+			}
+		}
+	}
+}
+```
+
+### Zod Schema Integration
+
+Both state setters and frontend tools use Zod schemas to define parameter validation and provide rich type information to your agent. Cedar automatically converts Zod schemas to JSON Schema format using `zod-to-json-schema` and includes them in the context sent to your agent.
+
+To take advantage of this, just register an `argsSchema` with any state setter or frontend tool.
+
+```tsx
+// In your useRegisterState hook call
+stateSetters: {
+  addNode: {
+    name: 'addNode',
+    description: 'Add a new node to the roadmap',
+    argsSchema: z.object({
+      node: z.object({
+        data: z.object({
+          title: z.string().describe('Feature title'),
+          description: z.string().describe('Detailed feature description'),
+          status: z.enum(['done', 'planned', 'backlog', 'in progress']).describe('Current development status'),
+          nodeType: z.literal('feature').default('feature').describe('Type of node')
+        })
+      })
+    }),
+    execute: (currentNodes, args) => {
+      // Implementation with full type safety
+      const { node } = args;
+    }
+  }
+}
+
+```
+
+This schema-based approach provides several benefits:
+
+- **Type Safety**: Runtime validation of parameters
+- **Rich Documentation**: Descriptive field information for agents
+- **Automatic JSON Schema**: Converted format perfect for LLM understanding
+- **Consistent API**: Single source of truth for parameter definitions
+
+## Next Steps
+
+- Learn about [State Access](/state-access/agentic-state-access) for more state management patterns
+- Explore [Agent Input Context](/agent-context/agent-context) to provide context for actions
+- See [Custom Message Rendering](/chat/custom-message-rendering) to display action results

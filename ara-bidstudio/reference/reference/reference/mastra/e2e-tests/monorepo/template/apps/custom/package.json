@@ -1,0 +1,28 @@
+{
+  "name": "@inner/app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.23",
+    "@mastra/core": "monorepo-test",
+    "@inner/inner-tools": "workspace:*",
+    "@inner/hello-world": "workspace:*",
+    "date-fns": "^4.1.0",
+    "lodash": "^4.17.21",
+    "hono": "^4.9.6",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "mastra": "monorepo-test"
+  }
+}

@@ -1,0 +1,418 @@
+---
+category: architecture
+subcategory: overview
+tags: [architecture-overview, navigation, system-overview, documentation]
+cursor:
+  context_window: 8192
+  temperature: 0.7
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./system-design.mdc", "./data-flow.mdc", "./performance.mdc", "./scalability.mdc", "./patterns.mdc", "./dependencies.mdc"]
+  exports: ["architecture-overview", "navigation-guide", "decision-summary"]
+  references: ["../frontend/", "../backend/", "../infrastructure/"]
+---
+
+# abubis.chat Architecture Overview
+
+## Project Vision
+
+::alert{type="success"}
+**abubis.chat** is a Solana-native AI chat SaaS platform built for the future of decentralized communication with real-time AI integration, edge computing, and blockchain-native features.
+::
+
+### Technology Stack Summary
+
+::card{title="Core Technologies (2025)"}
+- **Frontend**: Next.js 15 App Router with React 19 & Server Components
+- **Backend**: Convex v1.7+ reactive database with TypeScript-first development
+- **AI Integration**: Vercel AI SDK v5.2 with multi-provider support
+- **Blockchain**: Solana Web3.js with Anchor 0.29 smart contracts
+- **Vector Search**: Qdrant v1.9+ for semantic search and RAG
+- **Deployment**: Vercel Edge Functions with global CDN distribution
+- **Package Management**: Bun with monorepo architecture via Turbo
+::
+
+## Architecture Documentation Navigation
+
+### 📋 Core Architecture Documents
+
+::tabs
+::div{label="System Design"}
+**[system-design.mdc](./system-design.mdc)**
+
+Complete system architecture overview including:
+- 🏗️ **System layers**: Presentation, API, Data, AI, Blockchain, Vector Search
+- 🧩 **Component boundaries**: Service separation and responsibility mapping
+- 🔗 **Integration patterns**: Event-driven architecture and circuit breakers
+- 🛡️ **Security architecture**: Zero-trust authentication and encryption
+- 📊 **Monitoring**: Health checks, performance metrics, and observability
+- 📈 **Evolution roadmap**: 4-phase growth plan from MVP to Enterprise
+
+**Key Decisions**:
+- Edge-first architecture for <100ms global response times
+- Microservices with clear boundaries and individual scaling
+- Real-time reactive database with automatic subscriptions
+- Multi-provider AI integration with intelligent fallbacks
+::
+
+::div{label="Data Flow"}
+**[data-flow.mdc](./data-flow.mdc)**
+
+Comprehensive data flow and state management patterns:
+- ⚡ **Reactive patterns**: Real-time synchronization with Convex reactivity
+- 🔄 **State management**: Multi-layer hierarchy with conflict resolution
+- 📡 **Real-time sync**: WebSocket-like automatic updates and presence
+- 🤖 **AI data flow**: Streaming responses and vector embeddings
+- ✅ **Validation**: Input sanitization and transformation pipelines
+- 🚨 **Error handling**: Graceful recovery and retry mechanisms
+
+**Key Patterns**:
+- Optimistic updates with automatic rollback on conflicts
+- Event sourcing for audit trails and temporal queries
+- Reactive query invalidation and cache management
+- Streaming AI responses with backpressure handling
+::
+
+::div{label="Performance"}
+**[performance.mdc](./performance.mdc)**
+
+Performance optimization rules and budgets:
+- 🎯 **Performance budgets**: <100ms API, <800ms page load, <300KB bundles
+- 🌐 **Edge computing**: Global distribution with intelligent region selection
+- 🗄️ **Caching strategy**: Multi-layer with semantic AI response caching
+- ⚛️ **React optimization**: Server Components, virtual scrolling, memory management
+- 📦 **Bundle optimization**: Code splitting, tree shaking, dynamic imports
+- 📈 **Monitoring**: Core Web Vitals, real-time alerts, performance budgets
+
+**Key Strategies**:
+- Edge-first deployment with automatic region selection
+- Intelligent caching with semantic similarity for AI responses
+- React Server Components as default with selective Client Components
+- Bundle analysis and optimization with automated performance budgets
+::
+
+::div{label="Scalability"}
+**[scalability.mdc](./scalability.mdc)**
+
+Horizontal scaling patterns for 1M+ concurrent users:
+- 🌍 **Global scaling**: 15+ edge regions with intelligent load balancing
+- 📈 **Auto-scaling**: Predictive scaling with machine learning models
+- 🔧 **Microservices**: Independent service scaling with health monitoring
+- 🤖 **AI scaling**: Multi-provider load balancing with semantic caching
+- 📊 **Metrics**: Real-time monitoring with automated scaling decisions
+- 🎯 **Targets**: 100K msg/sec, 1M+ WebSocket connections, 99.99% uptime
+
+**Key Features**:
+- Predictive scaling using historical data and ML models
+- Circuit breaker patterns for service resilience
+- Multi-provider AI orchestration with intelligent routing
+- Real-time capacity planning and automated resource allocation
+::
+
+::div{label="Design Patterns"}
+**[patterns.mdc](./patterns.mdc)**
+
+SOLID principles and architectural patterns implementation:
+- 🏛️ **SOLID principles**: Complete implementation with TypeScript examples
+- 🔧 **Design patterns**: Repository, Factory, Observer, Command patterns
+- 🏗️ **Architectural patterns**: CQRS, Event Sourcing, Hexagonal Architecture
+- 💉 **Dependency injection**: Container-based DI with interface segregation
+- 🔌 **Plugin architecture**: Extensible chat plugins with hook system
+- 🧪 **Testing patterns**: Mocking strategies and test doubles
+
+**Key Implementations**:
+- Complete SOLID adherence with practical TypeScript examples
+- CQRS with separate read/write models for optimal performance
+- Event sourcing for audit trails and temporal data queries
+- Hexagonal architecture with ports and adapters for testability
+::
+
+::div{label="Dependencies"}
+**[dependencies.mdc](./dependencies.mdc)**
+
+Comprehensive dependency management and security:
+- 📦 **Package management**: Bun-first with monorepo workspace management
+- 🔒 **Security scanning**: Automated vulnerability detection and patching
+- 📜 **License compliance**: Automated license checking with policy enforcement
+- 🔄 **Update automation**: Intelligent dependency updates with rollback safety
+- 🛡️ **Supply chain**: Package integrity verification and maintainer reputation
+- 🎯 **Version policies**: Semantic versioning with environment-specific strategies
+
+**Key Features**:
+- Zero-vulnerability tolerance with automated security patching
+- License compliance automation with legal team integration
+- Supply chain security with maintainer reputation scoring
+- Intelligent update pipelines with comprehensive validation testing
+::
+::
+
+## Architecture Decision Records (ADRs)
+
+### Core Technology Decisions
+
+::card{title="ADR-001: Next.js 15 App Router"}
+**Decision**: Use Next.js 15 App Router over Pages Router
+
+**Reasoning**:
+- Server Components by default reduce client-side JavaScript
+- Improved performance with React 19 integration
+- Better SEO and Core Web Vitals scores
+- Simplified data fetching with server-side rendering
+- Future-proof architecture aligned with React's direction
+
+**Trade-offs**: Learning curve for team, some third-party library compatibility issues
+
+**Status**: ✅ Approved - Implemented across all applications
+::
+
+::card{title="ADR-002: Convex Reactive Database"}
+**Decision**: Use Convex over traditional databases (PostgreSQL, MongoDB)
+
+**Reasoning**:
+- Real-time reactivity without WebSocket complexity
+- TypeScript-first development with no SQL/ORM layer
+- Automatic caching and subscription management
+- Built-in optimistic updates and conflict resolution
+- Serverless scalability with zero infrastructure management
+
+**Trade-offs**: Vendor lock-in, newer ecosystem with fewer integrations
+
+**Status**: ✅ Approved - Core database for all real-time features
+::
+
+::card{title="ADR-003: Edge-First Architecture"}
+**Decision**: Deploy on Vercel Edge Functions globally
+
+**Reasoning**:
+- Sub-100ms response times globally
+- Automatic scaling without infrastructure management
+- Built-in CDN and caching optimization
+- Seamless integration with Next.js 15
+- Cost-effective pay-per-use pricing model
+
+**Trade-offs**: Cold start latency, vendor dependency, limited runtime capabilities
+
+**Status**: ✅ Approved - Primary deployment strategy
+::
+
+::card{title="ADR-004: Multi-Provider AI Strategy"}
+**Decision**: Implement multi-provider AI with intelligent routing
+
+**Reasoning**:
+- Avoid vendor lock-in with single AI provider
+- Cost optimization through provider competition
+- Improved reliability with automatic failover
+- Performance optimization with regional providers
+- Feature specialization (different models for different tasks)
+
+**Trade-offs**: Increased complexity, API normalization overhead
+
+**Status**: ✅ Approved - Core to AI service resilience
+::
+
+::card{title="ADR-005: Solana Blockchain Integration"}
+**Decision**: Use Solana over Ethereum for blockchain features
+
+**Reasoning**:
+- Lower transaction costs for micropayments
+- Higher throughput for real-time interactions
+- Better environmental sustainability
+- Growing ecosystem for consumer applications
+- Native support for high-frequency transactions
+
+**Trade-offs**: Smaller ecosystem than Ethereum, network stability concerns
+
+**Status**: ✅ Approved - Native blockchain integration
+::
+
+## System Quality Attributes
+
+### 🚀 Performance Requirements
+
+::alert{type="info"}
+**Target Metrics** (95th percentile):
+- API Response Time: <100ms
+- Page Load Time: <800ms (3G), <300ms (WiFi)  
+- Time to Interactive: <2.5s (3G), <1.2s (WiFi)
+- AI Response Latency: <2s first token, <50ms/token
+- Real-time Message Delivery: <50ms end-to-end
+::
+
+### 📈 Scalability Requirements
+
+::alert{type="info"}
+**Scale Targets**:
+- **Phase 1**: 10K concurrent users (MVP)
+- **Phase 2**: 100K concurrent users (Growth)
+- **Phase 3**: 1M+ concurrent users (Enterprise)
+- **Geographic**: 15+ global edge locations
+- **Throughput**: 100K messages/second peak
+::
+
+### 🛡️ Security Requirements
+
+::alert{type="warning"}
+**Security Standards**:
+- Zero-trust architecture with wallet-based authentication
+- End-to-end encryption for sensitive communications
+- Automated vulnerability scanning with zero critical/high CVEs
+- OWASP compliance with regular security audits
+- Supply chain security with package integrity verification
+::
+
+### 🔧 Maintainability Requirements
+
+::alert{type="info"}
+**Code Quality Standards**:
+- 100% TypeScript with strict mode enabled
+- 90%+ test coverage (unit + integration)
+- SOLID principles adherence in all new code
+- Automated code formatting and linting
+- Comprehensive API documentation with examples
+::
+
+## Development Workflow
+
+### 🏗️ Build and Deployment Pipeline
+
+```mermaid
+graph LR
+    A[Local Development] --> B[Type Check]
+    B --> C[Lint & Format]
+    C --> D[Unit Tests]
+    D --> E[Build]
+    E --> F[E2E Tests]
+    F --> G[Security Scan]
+    G --> H[Deploy to Preview]
+    H --> I[Manual QA]
+    I --> J[Deploy to Production]
+    
+    G --> K[Vulnerability Check]
+    G --> L[License Compliance]
+    G --> M[Bundle Analysis]
+```
+
+### 🧪 Testing Strategy
+
+::tabs
+::div{label="Unit Tests"}
+- **Coverage Target**: 90%+
+- **Framework**: Vitest with React Testing Library
+- **Focus**: Pure functions, React components, business logic
+- **Mocking**: Service dependencies, external APIs, database calls
+- **Performance**: Sub-100ms per test, parallel execution
+::
+
+::div{label="Integration Tests"}
+- **Coverage Target**: 70%+  
+- **Framework**: Playwright with Convex test environment
+- **Focus**: API endpoints, database operations, service integration
+- **Data**: Test fixtures with realistic data sets
+- **Environment**: Isolated test environment per test suite
+::
+
+::div{label="E2E Tests"}
+- **Coverage**: Critical user journeys (20+ scenarios)
+- **Framework**: Playwright with cross-browser testing
+- **Focus**: Complete user workflows, real-time features
+- **Performance**: Core Web Vitals validation
+- **Visual**: Screenshot testing for UI consistency
+::
+::
+
+## Monitoring and Observability
+
+### 📊 Key Performance Indicators
+
+::code-group
+```typescript [System Health Metrics]
+interface SystemHealthMetrics {
+  // Performance
+  responseTime: { p50: number; p95: number; p99: number }
+  throughput: number // requests per second
+  errorRate: number  // percentage
+  
+  // Business
+  activeUsers: number
+  messagesPerSecond: number
+  aiRequestsPerSecond: number
+  
+  // Infrastructure  
+  cpuUsage: number      // percentage
+  memoryUsage: number   // percentage
+  networkLatency: number // milliseconds
+}
+```
+
+```typescript [Alerting Thresholds]
+const alertThresholds = {
+  responseTime: {
+    warning: 150,   // milliseconds
+    critical: 300   // milliseconds
+  },
+  errorRate: {
+    warning: 1,     // percentage  
+    critical: 5     // percentage
+  },
+  cpuUsage: {
+    warning: 70,    // percentage
+    critical: 90    // percentage
+  }
+}
+```
+::
+
+## Getting Started
+
+### 🏃‍♂️ Quick Start for Developers
+
+1. **Clone and Setup**:
+   ```bash
+   git clone https://github.com/anubis-chat/anubis-chat
+   cd anubis-chat
+   bun install
+   ```
+
+2. **Environment Configuration**:
+   ```bash
+   cp .env.example .env.local
+   # Configure Convex, OpenAI, Solana endpoints
+   ```
+
+3. **Development Commands**:
+   ```bash
+   bun dev          # Start development server
+   bun test         # Run test suite
+   bun lint         # Lint and format code
+   bun build        # Production build
+   ```
+
+### 📚 Learning Resources
+
+- **[Next.js 15 Documentation](https://nextjs.org/docs)** - App Router patterns and Server Components
+- **[Convex Developer Hub](https://docs.convex.dev/)** - Reactive database and real-time patterns  
+- **[Vercel AI SDK](https://sdk.vercel.ai/docs)** - AI integration and streaming responses
+- **[Solana Documentation](https://docs.solana.com/)** - Blockchain integration and smart contracts
+- **[Architecture Decision Records](./adrs/)** - Detailed decision documentation
+
+## Support and Contributing
+
+### 🤝 Contributing Guidelines
+
+1. **Code Style**: Follow TypeScript strict mode and ESLint configuration
+2. **Testing**: Maintain 90%+ test coverage for new features
+3. **Documentation**: Update relevant .mdc files for architecture changes
+4. **Security**: Run security scans before submitting PRs
+5. **Performance**: Validate against performance budgets
+
+### 🆘 Getting Help
+
+- **Architecture Questions**: Review relevant .mdc files first
+- **Implementation Help**: Check examples in existing codebase
+- **Performance Issues**: Use built-in monitoring and profiling tools
+- **Security Concerns**: Run automated security scans and review dependency policies
+
+---
+
+This architecture overview provides a comprehensive guide to abubis.chat's system design, enabling developers to understand, contribute to, and extend the platform effectively while maintaining high standards of performance, security, and scalability.

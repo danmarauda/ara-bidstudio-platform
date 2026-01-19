@@ -1,0 +1,92 @@
+---
+category: backend
+subcategory: overview
+tags: [backend, convex, prisma, real-time, serverless, overview, navigation]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["../architecture/index.mdc"]
+  exports: ["backend-overview", "convex-patterns", "database-architecture"]
+  references: [
+    "./api-design.mdc",
+    "./database-schema.mdc",
+    "./convex-patterns.mdc",
+    "./caching.mdc",
+    "./vector-search.mdc",
+    "./queues.mdc",
+    "./edge-functions.mdc"
+  ]
+---
+
+# Backend Architecture - ANUBIS Chat
+
+## Stack Overview
+
+**Core Backend Stack:**
+- **Convex**: Real-time database and serverless functions
+- **PostgreSQL**: Persistent data storage via Prisma
+- **Prisma**: Database ORM and schema management
+- **TypeScript**: Full-stack type safety
+
+## Directory Structure
+
+```
+convex/
+├── _generated/          # Auto-generated Convex types
+├── auth.ts             # Authentication logic
+├── chat.ts             # Chat mutations and queries
+├── documents.ts        # Document management
+├── users.ts            # User management
+├── schema.ts           # Database schema definitions
+└── vector.ts           # Vector search functionality
+
+lib/
+├── convex/             # Convex client configuration
+├── prisma/             # Prisma setup and utilities
+└── types/              # Shared type definitions
+```
+
+## Key Patterns
+
+### Real-time Architecture
+- **Queries**: Read operations with automatic subscriptions
+- **Mutations**: Write operations with optimistic updates
+- **Actions**: External API calls and complex business logic
+- **Cron Jobs**: Scheduled tasks and maintenance
+
+### Data Flow
+1. **Client** → Convex Query/Mutation → **Real-time Updates**
+2. **Convex** → PostgreSQL via Prisma → **Persistent Storage**
+3. **Vector Search** → OpenAI Embeddings → **Semantic Similarity**
+
+### Authentication
+- Convex Auth with custom identity providers
+- JWT tokens with role-based access control
+- Session management with automatic renewal
+
+### Performance Optimization
+- Query subscription optimization
+- Efficient pagination patterns
+- Caching strategies for computed data
+- Background job processing
+
+## File Navigation
+
+- `api-design.mdc` - Convex functions and API patterns
+- `database-schema.mdc` - Schema design for chat and documents
+- `convex-patterns.mdc` - Convex-specific implementation patterns  
+- `caching.mdc` - Real-time caching and optimization
+- `vector-search.mdc` - Semantic search implementation
+- `queues.mdc` - Background job processing
+- `edge-functions.mdc` - Convex actions and external integrations
+
+## Development Workflow
+
+1. **Schema First**: Define tables in `schema.ts`
+2. **Type Generation**: Run `npx convex dev` for type generation
+3. **Function Development**: Create queries, mutations, actions
+4. **Real-time Testing**: Use Convex dashboard for debugging
+5. **Deployment**: Automatic with Convex cloud platform

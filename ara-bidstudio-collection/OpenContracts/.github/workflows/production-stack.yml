@@ -1,0 +1,192 @@
+name: Production Stack Test
+
+# Enable Buildkit and let compose use it to speed up image building
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+defaults:
+ run:
+  working-directory: ./
+
+on:
+  pull_request:
+    branches: [ "master", "main" ]
+    paths:
+      - "compose/production/**"
+      - "production.yml"
+      - ".github/workflows/production-stack.yml"
+
+  push:
+    branches: [ "master", "main" ]
+    paths:
+      - "compose/production/**"
+      - "production.yml"
+      - ".github/workflows/production-stack.yml"
+
+concurrency:
+  group: production-stack-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  production-stack:
+    runs-on: larger
+    timeout-minutes: 50
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v5.0.0
+
+      - name: Create Required Environment Files
+        run: |
+          mkdir -p .envs/.production
+
+          # Create minimal Django env file based on sample
+          cat > .envs/.production/.django << 'EOF'
+          # Core Django Security Settings
+          DJANGO_SETTINGS_MODULE=config.settings.production
+          DJANGO_SECRET_KEY=test-secret-key-for-ci-only-not-secure
+          DJANGO_ADMIN_URL=admin/
+          DJANGO_SECURE_SSL_REDIRECT=false
+
+          # Django Username and Password for Initial Admin Login
+          DJANGO_SUPERUSER_PASSWORD=Openc0ntracts_test
+          DJANGO_SUPERUSER_EMAIL=test@opensource.legal
+          DJANGO_SUPERUSER_USERNAME=admin
+
+          # General
+          USE_DOCKER=yes
+          WEB_CONCURRENCY=4
+          IPYTHONDIR=/app/.ipython
+          DJANGO_ALLOWED_HOSTS=django,127.0.0.1,localhost,0.0.0.0,opencontracts.opensource.legal
+          DJANGO_WORKER_TIMEOUT=3600
+
+          # Application Configuration
+          USE_ANALYZER=false
+          CALLBACK_ROOT_URL_FOR_ANALYZER=http://django:8000
+
+          # AWS - disabled for testing
+          USE_AWS=false
+          AWS_ACCESS_KEY_ID=test-key
+          AWS_SECRET_ACCESS_KEY=test-secret
+          AWS_STORAGE_BUCKET_NAME=test-bucket
+          AWS_S3_REGION_NAME=us-east-1
+
+          # Redis
+          REDIS_URL=redis://redis:6379/0
+
+          # Celery
+
+          # Flower
+          CELERY_FLOWER_USER=test
+          CELERY_FLOWER_PASSWORD=test
+
+          # NLM Parser
+          NLM_INGESTOR_ACTIVE=false
+
+          # LLM SETTINGS
+          OPENAI_API_KEY=test-api-key-not-real
+          OPENAI_MODEL=gpt-4o
+
+          # AUTH0 - disabled for testing
+          USE_AUTH0=false
+          AUTH0_CLIENT_ID=test-client-id
+          AUTH0_API_AUDIENCE=https://opensource.legal/contracts
+          AUTH0_DOMAIN=test.auth0.com
+          AUTH0_M2M_MANAGEMENT_API_SECRET=test-secret
+          AUTH0_M2M_MANAGEMENT_API_ID=test-id
+          AUTH0_M2M_MANAGEMENT_GRANT_TYPE=client_credentials
+
+          EMBEDDINGS_MICROSERVICE_URL=http://vector-embedder:8000
+          DOCLING_PARSER_SERVICE_URL=http://docling-parser:8000/parse/
+
+          # Docling
+          DOCLING_MODELS_PATH=/models/docling
+          SENTENCE_TRANSFORMER_MODELS_PATH=/models/sentence-transformers
+          EOF
+
+          # Create minimal Postgres env file
+          cat > .envs/.production/.postgres << 'EOF'
+          POSTGRES_HOST=postgres
+          POSTGRES_PORT=5432
+          POSTGRES_DB=opencontracts
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          DATABASE_SSL_MODE=disable
+          EOF
+
+          # Create minimal Frontend env file based on sample
+          cat > .envs/.production/.frontend << 'EOF'
+          OPEN_CONTRACTS_REACT_APP_APPLICATION_DOMAIN=opencontracts.opensource.legal
+          OPEN_CONTRACTS_REACT_APP_APPLICATION_CLIENT_ID=test-client-id
+          OPEN_CONTRACTS_REACT_APP_AUDIENCE=http://localhost:3000
+          OPEN_CONTRACTS_REACT_APP_API_ROOT_URL=http://django:8000
+
+          # Disabled for testing
+          OPEN_CONTRACTS_REACT_APP_USE_AUTH0=false
+          OPEN_CONTRACTS_REACT_APP_USE_ANALYZERS=false
+          OPEN_CONTRACTS_REACT_APP_ALLOW_IMPORTS=false
+          EOF
+
+      - name: Build Production Stack (CI Mode)
+        run: docker compose -f production.yml -f compose/test-production-ci.yml build
+
+      - name: Run Database Migrations
+        run: |
+          echo "Running database migrations before starting services..."
+          docker compose -f production.yml -f compose/test-production-ci.yml --profile migrate up migrate
+          echo "Migrations completed successfully"
+
+      - name: Start Production Stack (CI Mode - HTTP only)
+        run: |
+          docker compose -f production.yml -f compose/test-production-ci.yml up -d
+          echo "Waiting for services to start..."
+          sleep 30  # Give services time to start
+
+          echo "Checking if required services are running..."
+          docker compose -f production.yml -f compose/test-production-ci.yml ps --services --filter status=running
+
+          # Wait for Django to be ready
+          echo "Waiting for Django to be ready..."
+          for i in {1..30}; do
+            if docker compose -f production.yml -f compose/test-production-ci.yml exec -T django python manage.py check --deploy 2>/dev/null; then
+              echo "Django is ready!"
+              break
+            fi
+            echo "Django not ready yet, waiting..."
+            sleep 2
+          done
+
+      - name: Verify Stack Health
+        run: |
+          echo "=== Docker containers status ==="
+          docker compose -f production.yml -f compose/test-production-ci.yml ps
+          echo "=== Container health checks ==="
+          for container in $(docker compose -f production.yml -f compose/test-production-ci.yml ps -q); do
+            name=$(docker inspect -f '{{.Name}}' $container | sed 's/^\/*//')
+            echo "--- Health for $name ---"
+            docker logs --tail 10 $container 2>&1 || true
+          done
+
+      - name: Test Rate Limiting (HTTP-only for CI)
+        run: |
+          ./scripts/test-ci-rate-limiting.sh --compose-files "production.yml compose/test-production-ci.yml"
+
+      - name: Capture Logs on Failure
+        if: failure()
+        run: |
+          echo "=== Capturing logs for debugging ==="
+          docker compose -f production.yml -f compose/test-production-ci.yml logs --no-color > production-stack-logs.txt
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: production-stack-logs
+          path: production-stack-logs.txt
+
+      - name: Tear Down Stack
+        if: always()
+        run: docker compose -f production.yml -f compose/test-production-ci.yml down -v

@@ -1,0 +1,1035 @@
+---
+category: testing
+subcategory: wallet-testing
+tags: [web3, solana, wallet, blockchain, testing]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./e2e-tests.mdc"]
+  exports: ["wallet-test-patterns", "blockchain-mocking"]
+  references: ["./integration-tests.mdc", "./unit-tests.mdc"]
+---
+
+# Web3/Solana Wallet Testing Patterns (2025)
+
+## Wallet Testing Framework Setup
+
+### Mock Wallet Implementation
+```typescript
+// src/test/mocks/solana-wallet.ts
+import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
+import { vi } from 'vitest';
+
+export interface MockWalletAdapter {
+  publicKey: PublicKey | null;
+  connected: boolean;
+  connecting: boolean;
+  disconnecting: boolean;
+  readyState: 'Installed' | 'NotDetected' | 'LoadError' | 'Unsupported';
+  
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  signTransaction<T extends Transaction | VersionedTransaction>(transaction: T): Promise<T>;
+  signAllTransactions<T extends Transaction | VersionedTransaction>(transactions: T[]): Promise<T[]>;
+  signMessage(message: Uint8Array): Promise<Uint8Array>;
+}
+
+export class MockSolanaWallet implements MockWalletAdapter {
+  public publicKey: PublicKey | null = null;
+  public connected = false;
+  public connecting = false;
+  public disconnecting = false;
+  public readyState: 'Installed' | 'NotDetected' | 'LoadError' | 'Unsupported' = 'Installed';
+
+  private eventListeners = new Map<string, Function[]>();
+  private shouldReject = false;
+  private rejectionReason = 'User rejected the request';
+
+  constructor(options: {
+    autoConnect?: boolean;
+    publicKey?: string;
+  } = {}) {
+    if (options.publicKey) {
+      this.publicKey = new PublicKey(options.publicKey);
+    }
+    if (options.autoConnect) {
+      setTimeout(() => this.connect(), 100);
+    }
+  }
+
+  // Event handling
+  on(event: string, listener: Function) {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, []);
+    }
+    this.eventListeners.get(event)!.push(listener);
+  }
+
+  off(event: string, listener: Function) {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      const index = listeners.indexOf(listener);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    }
+  }
+
+  emit(event: string, ...args: any[]) {
+    const listeners = this.eventListeners.get(event) || [];
+    listeners.forEach(listener => listener(...args));
+  }
+
+  // Mock control methods
+  simulateRejection(reason = 'User rejected the request') {
+    this.shouldReject = true;
+    this.rejectionReason = reason;
+  }
+
+  resetRejection() {
+    this.shouldReject = false;
+  }
+
+  simulateDisconnection() {
+    if (this.connected) {
+      this.connected = false;
+      this.publicKey = null;
+      this.emit('disconnect');
+    }
+  }
+
+  // Wallet adapter methods
+  async connect(): Promise<void> {
+    if (this.shouldReject) {
+      throw new Error(this.rejectionReason);
+    }
+
+    this.connecting = true;
+    
+    // Simulate connection delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    if (!this.publicKey) {
+      // Generate a test public key
+      this.publicKey = new PublicKey('Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
+    }
+
+    this.connected = true;
+    this.connecting = false;
+    this.emit('connect', this.publicKey);
+  }
+
+  async disconnect(): Promise<void> {
+    this.disconnecting = true;
+    
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    this.connected = false;
+    this.publicKey = null;
+    this.disconnecting = false;
+    this.emit('disconnect');
+  }
+
+  async signTransaction<T extends Transaction | VersionedTransaction>(transaction: T): Promise<T> {
+    if (this.shouldReject) {
+      throw new Error(this.rejectionReason);
+    }
+
+    if (!this.connected || !this.publicKey) {
+      throw new Error('Wallet not connected');
+    }
+
+    // Simulate signing delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Mock signing - in reality this would add actual signatures
+    const signedTx = { ...transaction } as T;
+    
+    // Add mock signature data
+    if ('signatures' in signedTx) {
+      signedTx.signatures = [{
+        signature: new Uint8Array(64).fill(1), // Mock signature
+        publicKey: this.publicKey
+      }];
+    }
+
+    return signedTx;
+  }
+
+  async signAllTransactions<T extends Transaction | VersionedTransaction>(transactions: T[]): Promise<T[]> {
+    if (this.shouldReject) {
+      throw new Error(this.rejectionReason);
+    }
+
+    const signedTransactions = [];
+    for (const transaction of transactions) {
+      signedTransactions.push(await this.signTransaction(transaction));
+    }
+    return signedTransactions;
+  }
+
+  async signMessage(message: Uint8Array): Promise<Uint8Array> {
+    if (this.shouldReject) {
+      throw new Error(this.rejectionReason);
+    }
+
+    if (!this.connected || !this.publicKey) {
+      throw new Error('Wallet not connected');
+    }
+
+    // Simulate signing delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Return mock signature
+    return new Uint8Array(64).fill(2);
+  }
+}
+```
+
+### Wallet Testing Utilities
+```typescript
+// src/test/utils/wallet-testing.ts
+import { Connection, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import { MockSolanaWallet } from '../mocks/solana-wallet';
+
+export class WalletTestUtils {
+  static createMockWallet(options: {
+    connected?: boolean;
+    publicKey?: string;
+    shouldReject?: boolean;
+  } = {}): MockSolanaWallet {
+    const wallet = new MockSolanaWallet({
+      publicKey: options.publicKey || 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS'
+    });
+
+    if (options.connected) {
+      wallet.connected = true;
+      wallet.publicKey = new PublicKey(options.publicKey || 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
+    }
+
+    if (options.shouldReject) {
+      wallet.simulateRejection();
+    }
+
+    return wallet;
+  }
+
+  static createMockTransaction(options: {
+    from?: PublicKey;
+    to?: PublicKey;
+    amount?: number;
+  } = {}): Transaction {
+    const from = options.from || new PublicKey('11111111111111111111111111111112');
+    const to = options.to || new PublicKey('22222222222222222222222222222223');
+    const amount = options.amount || 1000000; // 0.001 SOL in lamports
+
+    const transaction = new Transaction();
+    transaction.add(
+      SystemProgram.transfer({
+        fromPubkey: from,
+        toPubkey: to,
+        lamports: amount
+      })
+    );
+
+    return transaction;
+  }
+
+  static async waitForWalletEvent(
+    wallet: MockSolanaWallet, 
+    event: string, 
+    timeout = 5000
+  ): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        wallet.off(event, listener);
+        reject(new Error(`Wallet event '${event}' timeout`));
+      }, timeout);
+
+      const listener = (data: any) => {
+        clearTimeout(timeoutId);
+        wallet.off(event, listener);
+        resolve(data);
+      };
+
+      wallet.on(event, listener);
+    });
+  }
+
+  static mockGlobalSolana(wallet: MockSolanaWallet) {
+    // Mock the global solana object that wallet adapters look for
+    (global as any).solana = {
+      isPhantom: true,
+      publicKey: wallet.publicKey,
+      isConnected: wallet.connected,
+      connect: () => wallet.connect(),
+      disconnect: () => wallet.disconnect(),
+      signTransaction: (tx: Transaction) => wallet.signTransaction(tx),
+      signAllTransactions: (txs: Transaction[]) => wallet.signAllTransactions(txs),
+      signMessage: (msg: Uint8Array) => wallet.signMessage(msg),
+      on: (event: string, handler: Function) => wallet.on(event, handler),
+      removeListener: (event: string, handler: Function) => wallet.off(event, handler)
+    };
+  }
+}
+```
+
+## Wallet Connection Testing
+
+### Connection Flow Tests
+```typescript
+// src/test/wallet/connection.test.ts
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { WalletProvider } from '@/contexts/WalletContext';
+import { WalletConnectionButton } from '@/components/WalletConnectionButton';
+import { MockSolanaWallet, WalletTestUtils } from '../utils/wallet-testing';
+
+describe('Wallet Connection Tests', () => {
+  let mockWallet: MockSolanaWallet;
+
+  beforeEach(() => {
+    mockWallet = WalletTestUtils.createMockWallet();
+    WalletTestUtils.mockGlobalSolana(mockWallet);
+  });
+
+  afterEach(() => {
+    delete (global as any).solana;
+    vi.clearAllMocks();
+  });
+
+  describe('Connection Flow', () => {
+    it('should connect wallet successfully', async () => {
+      render(
+        <WalletProvider>
+          <WalletConnectionButton />
+        </WalletProvider>
+      );
+
+      const connectButton = screen.getByText('Connect Wallet');
+      fireEvent.click(connectButton);
+
+      // Wait for connection to complete
+      await waitFor(() => {
+        expect(screen.getByText(/Connected:/)).toBeInTheDocument();
+      });
+
+      // Should show wallet address
+      expect(screen.getByText(/Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS/)).toBeInTheDocument();
+    });
+
+    it('should handle connection rejection', async () => {
+      mockWallet.simulateRejection();
+
+      render(
+        <WalletProvider>
+          <WalletConnectionButton />
+        </WalletProvider>
+      );
+
+      const connectButton = screen.getByText('Connect Wallet');
+      fireEvent.click(connectButton);
+
+      // Should show error message
+      await waitFor(() => {
+        expect(screen.getByText(/Connection failed/)).toBeInTheDocument();
+      });
+
+      // Should still show connect button
+      expect(screen.getByText('Connect Wallet')).toBeInTheDocument();
+    });
+
+    it('should handle wallet not installed', async () => {
+      delete (global as any).solana;
+
+      render(
+        <WalletProvider>
+          <WalletConnectionButton />
+        </WalletProvider>
+      );
+
+      // Should show install message
+      expect(screen.getByText(/Wallet not detected/)).toBeInTheDocument();
+      expect(screen.getByText(/Install Phantom/)).toBeInTheDocument();
+    });
+
+    it('should disconnect wallet', async () => {
+      // Start with connected wallet
+      mockWallet.connected = true;
+      mockWallet.publicKey = new PublicKey('Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
+
+      render(
+        <WalletProvider>
+          <WalletConnectionButton />
+        </WalletProvider>
+      );
+
+      // Should show disconnect button
+      const disconnectButton = screen.getByText('Disconnect');
+      fireEvent.click(disconnectButton);
+
+      // Wait for disconnection
+      await waitFor(() => {
+        expect(screen.getByText('Connect Wallet')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle automatic reconnection', async () => {
+      // Mock localStorage with previous connection
+      const mockLocalStorage = {
+        getItem: vi.fn(() => 'true'),
+        setItem: vi.fn(),
+        removeItem: vi.fn()
+      };
+      Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
+
+      render(
+        <WalletProvider autoConnect={true}>
+          <WalletConnectionButton />
+        </WalletProvider>
+      );
+
+      // Should automatically attempt connection
+      await waitFor(() => {
+        expect(screen.getByText(/Connected:/)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Connection State Management', () => {
+    it('should track connecting state', async () => {
+      render(
+        <WalletProvider>
+          <WalletConnectionButton />
+        </WalletProvider>
+      );
+
+      const connectButton = screen.getByText('Connect Wallet');
+      fireEvent.click(connectButton);
+
+      // Should show connecting state
+      expect(screen.getByText('Connecting...')).toBeInTheDocument();
+
+      // Wait for completion
+      await waitFor(() => {
+        expect(screen.getByText(/Connected:/)).toBeInTheDocument();
+      });
+    });
+
+    it('should handle multiple connection attempts', async () => {
+      render(
+        <WalletProvider>
+          <WalletConnectionButton />
+        </WalletProvider>
+      );
+
+      const connectButton = screen.getByText('Connect Wallet');
+      
+      // Rapid clicks should not cause issues
+      fireEvent.click(connectButton);
+      fireEvent.click(connectButton);
+      fireEvent.click(connectButton);
+
+      // Should still connect successfully once
+      await waitFor(() => {
+        expect(screen.getByText(/Connected:/)).toBeInTheDocument();
+      });
+
+      // Connection should be called only once
+      expect(mockWallet.connected).toBe(true);
+    });
+  });
+});
+```
+
+### Transaction Signing Tests
+```typescript
+// src/test/wallet/transaction-signing.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import { MockSolanaWallet, WalletTestUtils } from '../utils/wallet-testing';
+import { TransactionService } from '@/services/transactionService';
+
+describe('Transaction Signing Tests', () => {
+  let mockWallet: MockSolanaWallet;
+  let transactionService: TransactionService;
+
+  beforeEach(() => {
+    mockWallet = WalletTestUtils.createMockWallet({ connected: true });
+    transactionService = new TransactionService(mockWallet);
+  });
+
+  describe('Single Transaction Signing', () => {
+    it('should sign transaction successfully', async () => {
+      const transaction = WalletTestUtils.createMockTransaction({
+        from: mockWallet.publicKey!,
+        to: new PublicKey('22222222222222222222222222222223'),
+        amount: 1000000
+      });
+
+      const signedTransaction = await transactionService.signTransaction(transaction);
+
+      expect(signedTransaction).toBeDefined();
+      expect(signedTransaction.signatures).toHaveLength(1);
+      expect(signedTransaction.signatures[0].publicKey).toEqual(mockWallet.publicKey);
+    });
+
+    it('should handle signing rejection', async () => {
+      mockWallet.simulateRejection('User declined transaction');
+
+      const transaction = WalletTestUtils.createMockTransaction({
+        from: mockWallet.publicKey!
+      });
+
+      await expect(transactionService.signTransaction(transaction))
+        .rejects
+        .toThrow('User declined transaction');
+    });
+
+    it('should validate transaction before signing', async () => {
+      // Create invalid transaction (negative amount)
+      const invalidTransaction = new Transaction();
+      invalidTransaction.add(
+        SystemProgram.transfer({
+          fromPubkey: mockWallet.publicKey!,
+          toPubkey: new PublicKey('22222222222222222222222222222223'),
+          lamports: -1000000 // Invalid negative amount
+        })
+      );
+
+      await expect(transactionService.signTransaction(invalidTransaction))
+        .rejects
+        .toThrow(/Invalid transaction/);
+    });
+
+    it('should handle disconnected wallet', async () => {
+      mockWallet.connected = false;
+      mockWallet.publicKey = null;
+
+      const transaction = WalletTestUtils.createMockTransaction();
+
+      await expect(transactionService.signTransaction(transaction))
+        .rejects
+        .toThrow('Wallet not connected');
+    });
+  });
+
+  describe('Multiple Transaction Signing', () => {
+    it('should sign multiple transactions', async () => {
+      const transactions = [
+        WalletTestUtils.createMockTransaction({
+          from: mockWallet.publicKey!,
+          amount: 1000000
+        }),
+        WalletTestUtils.createMockTransaction({
+          from: mockWallet.publicKey!,
+          amount: 2000000
+        })
+      ];
+
+      const signedTransactions = await transactionService.signAllTransactions(transactions);
+
+      expect(signedTransactions).toHaveLength(2);
+      signedTransactions.forEach(tx => {
+        expect(tx.signatures).toHaveLength(1);
+        expect(tx.signatures[0].publicKey).toEqual(mockWallet.publicKey);
+      });
+    });
+
+    it('should handle partial signing failure', async () => {
+      const transactions = [
+        WalletTestUtils.createMockTransaction({
+          from: mockWallet.publicKey!
+        }),
+        WalletTestUtils.createMockTransaction({
+          from: mockWallet.publicKey!
+        })
+      ];
+
+      // Simulate rejection after first transaction
+      let callCount = 0;
+      const originalSign = mockWallet.signTransaction.bind(mockWallet);
+      mockWallet.signTransaction = vi.fn(async (tx) => {
+        callCount++;
+        if (callCount > 1) {
+          throw new Error('User rejected second transaction');
+        }
+        return originalSign(tx);
+      });
+
+      await expect(transactionService.signAllTransactions(transactions))
+        .rejects
+        .toThrow('User rejected second transaction');
+    });
+  });
+
+  describe('Message Signing', () => {
+    it('should sign messages', async () => {
+      const message = new TextEncoder().encode('Test message to sign');
+      
+      const signature = await transactionService.signMessage(message);
+      
+      expect(signature).toBeInstanceOf(Uint8Array);
+      expect(signature.length).toBe(64);
+    });
+
+    it('should handle message signing rejection', async () => {
+      mockWallet.simulateRejection();
+      
+      const message = new TextEncoder().encode('Test message');
+      
+      await expect(transactionService.signMessage(message))
+        .rejects
+        .toThrow('User rejected the request');
+    });
+  });
+
+  describe('Transaction Performance', () => {
+    it('should complete signing within reasonable time', async () => {
+      const transaction = WalletTestUtils.createMockTransaction({
+        from: mockWallet.publicKey!
+      });
+
+      const startTime = Date.now();
+      await transactionService.signTransaction(transaction);
+      const duration = Date.now() - startTime;
+
+      // Should complete within 5 seconds (mock includes 1s delay)
+      expect(duration).toBeLessThan(5000);
+      expect(duration).toBeGreaterThan(500); // Should include realistic delay
+    });
+
+    it('should handle concurrent signing requests', async () => {
+      const transactions = Array(3).fill(null).map(() => 
+        WalletTestUtils.createMockTransaction({
+          from: mockWallet.publicKey!
+        })
+      );
+
+      const startTime = Date.now();
+      const promises = transactions.map(tx => transactionService.signTransaction(tx));
+      
+      const signedTransactions = await Promise.all(promises);
+      const duration = Date.now() - startTime;
+
+      expect(signedTransactions).toHaveLength(3);
+      // Should handle concurrency efficiently (not 3x sequential time)
+      expect(duration).toBeLessThan(4000);
+    });
+  });
+});
+```
+
+## Blockchain Integration Testing
+
+### Solana Program Testing
+```typescript
+// src/test/wallet/program-interaction.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { Connection, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import * as anchor from '@coral-xyz/anchor';
+import { MockSolanaWallet } from '../mocks/solana-wallet';
+
+// Mock Anchor program for testing
+const mockProgram = {
+  methods: {
+    initialize: vi.fn(() => ({
+      accounts: vi.fn(() => ({
+        rpc: vi.fn(() => Promise.resolve('mock-signature'))
+      }))
+    })),
+    updateData: vi.fn(() => ({
+      accounts: vi.fn(() => ({
+        rpc: vi.fn(() => Promise.resolve('mock-signature'))
+      }))
+    }))
+  }
+};
+
+describe('Solana Program Interaction Tests', () => {
+  let mockWallet: MockSolanaWallet;
+  let mockConnection: Connection;
+  
+  beforeEach(() => {
+    mockWallet = new MockSolanaWallet({ connected: true });
+    
+    // Mock Solana connection
+    mockConnection = {
+      getBalance: vi.fn(() => Promise.resolve(1000000000)), // 1 SOL
+      getAccountInfo: vi.fn(() => Promise.resolve({
+        lamports: 1000000,
+        owner: SystemProgram.programId,
+        data: Buffer.alloc(0)
+      })),
+      sendTransaction: vi.fn(() => Promise.resolve('mock-signature')),
+      confirmTransaction: vi.fn(() => Promise.resolve({ value: { err: null } })),
+      getRecentBlockhash: vi.fn(() => Promise.resolve({
+        blockhash: 'mock-blockhash',
+        feeCalculator: { lamportsPerSignature: 5000 }
+      }))
+    } as any;
+  });
+
+  describe('Program Method Calls', () => {
+    it('should call program initialize method', async () => {
+      const programService = new ProgramService(mockProgram, mockWallet, mockConnection);
+      
+      const signature = await programService.initialize({
+        authority: mockWallet.publicKey!,
+        data: new PublicKey('11111111111111111111111111111112')
+      });
+
+      expect(signature).toBe('mock-signature');
+      expect(mockProgram.methods.initialize).toHaveBeenCalled();
+    });
+
+    it('should handle program call with multiple accounts', async () => {
+      const programService = new ProgramService(mockProgram, mockWallet, mockConnection);
+      
+      const accounts = {
+        authority: mockWallet.publicKey!,
+        dataAccount: new PublicKey('22222222222222222222222222222223'),
+        systemProgram: SystemProgram.programId
+      };
+
+      await programService.updateData('new-data', accounts);
+
+      expect(mockProgram.methods.updateData).toHaveBeenCalledWith('new-data');
+    });
+
+    it('should handle program call errors', async () => {
+      mockProgram.methods.initialize.mockImplementation(() => ({
+        accounts: vi.fn(() => ({
+          rpc: vi.fn(() => Promise.reject(new Error('Program error')))
+        }))
+      }));
+
+      const programService = new ProgramService(mockProgram, mockWallet, mockConnection);
+
+      await expect(programService.initialize({}))
+        .rejects
+        .toThrow('Program error');
+    });
+  });
+
+  describe('Account Management', () => {
+    it('should check account balance', async () => {
+      const walletService = new WalletService(mockWallet, mockConnection);
+      
+      const balance = await walletService.getBalance();
+      
+      expect(balance).toBe(1000000000); // 1 SOL in lamports
+      expect(mockConnection.getBalance).toHaveBeenCalledWith(mockWallet.publicKey);
+    });
+
+    it('should get account info', async () => {
+      const walletService = new WalletService(mockWallet, mockConnection);
+      
+      const accountInfo = await walletService.getAccountInfo(mockWallet.publicKey!);
+      
+      expect(accountInfo).toBeDefined();
+      expect(accountInfo.lamports).toBe(1000000);
+    });
+
+    it('should handle non-existent account', async () => {
+      mockConnection.getAccountInfo.mockResolvedValue(null);
+      
+      const walletService = new WalletService(mockWallet, mockConnection);
+      const nonExistentKey = new PublicKey('33333333333333333333333333333334');
+      
+      const accountInfo = await walletService.getAccountInfo(nonExistentKey);
+      
+      expect(accountInfo).toBeNull();
+    });
+  });
+
+  describe('Transaction Building and Sending', () => {
+    it('should build and send transaction', async () => {
+      const walletService = new WalletService(mockWallet, mockConnection);
+      
+      const transaction = new Transaction();
+      transaction.add(
+        SystemProgram.transfer({
+          fromPubkey: mockWallet.publicKey!,
+          toPubkey: new PublicKey('44444444444444444444444444444445'),
+          lamports: 1000000
+        })
+      );
+
+      const signature = await walletService.sendTransaction(transaction);
+      
+      expect(signature).toBe('mock-signature');
+      expect(mockConnection.sendTransaction).toHaveBeenCalled();
+    });
+
+    it('should confirm transaction', async () => {
+      const walletService = new WalletService(mockWallet, mockConnection);
+      
+      const confirmation = await walletService.confirmTransaction('mock-signature');
+      
+      expect(confirmation.value.err).toBeNull();
+      expect(mockConnection.confirmTransaction).toHaveBeenCalledWith('mock-signature');
+    });
+
+    it('should handle transaction failure', async () => {
+      mockConnection.sendTransaction.mockRejectedValue(new Error('Insufficient funds'));
+      
+      const walletService = new WalletService(mockWallet, mockConnection);
+      const transaction = WalletTestUtils.createMockTransaction({
+        from: mockWallet.publicKey!
+      });
+
+      await expect(walletService.sendTransaction(transaction))
+        .rejects
+        .toThrow('Insufficient funds');
+    });
+  });
+});
+
+// Helper service classes for testing
+class ProgramService {
+  constructor(
+    private program: any,
+    private wallet: MockSolanaWallet,
+    private connection: Connection
+  ) {}
+
+  async initialize(accounts: Record<string, PublicKey>) {
+    return await this.program.methods
+      .initialize()
+      .accounts(accounts)
+      .rpc();
+  }
+
+  async updateData(data: string, accounts: Record<string, PublicKey>) {
+    return await this.program.methods
+      .updateData(data)
+      .accounts(accounts)
+      .rpc();
+  }
+}
+
+class WalletService {
+  constructor(
+    private wallet: MockSolanaWallet,
+    private connection: Connection
+  ) {}
+
+  async getBalance(): Promise<number> {
+    return await this.connection.getBalance(this.wallet.publicKey!);
+  }
+
+  async getAccountInfo(publicKey: PublicKey) {
+    return await this.connection.getAccountInfo(publicKey);
+  }
+
+  async sendTransaction(transaction: Transaction): Promise<string> {
+    const signedTransaction = await this.wallet.signTransaction(transaction);
+    return await this.connection.sendTransaction(signedTransaction, []);
+  }
+
+  async confirmTransaction(signature: string) {
+    return await this.connection.confirmTransaction(signature);
+  }
+}
+```
+
+## Wallet State Management Testing
+
+### Context Provider Testing
+```typescript
+// src/test/wallet/wallet-context.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { WalletProvider, useWallet } from '@/contexts/WalletContext';
+import { MockSolanaWallet, WalletTestUtils } from '../utils/wallet-testing';
+
+describe('Wallet Context Tests', () => {
+  let mockWallet: MockSolanaWallet;
+
+  beforeEach(() => {
+    mockWallet = WalletTestUtils.createMockWallet();
+    WalletTestUtils.mockGlobalSolana(mockWallet);
+  });
+
+  describe('Wallet Context Provider', () => {
+    it('should provide wallet state and actions', () => {
+      const wrapper = ({ children }) => (
+        <WalletProvider>{children}</WalletProvider>
+      );
+
+      const { result } = renderHook(() => useWallet(), { wrapper });
+
+      expect(result.current.connected).toBe(false);
+      expect(result.current.publicKey).toBeNull();
+      expect(result.current.connecting).toBe(false);
+      expect(typeof result.current.connect).toBe('function');
+      expect(typeof result.current.disconnect).toBe('function');
+    });
+
+    it('should handle wallet connection through context', async () => {
+      const wrapper = ({ children }) => (
+        <WalletProvider>{children}</WalletProvider>
+      );
+
+      const { result } = renderHook(() => useWallet(), { wrapper });
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(result.current.connected).toBe(true);
+      expect(result.current.publicKey?.toString()).toBe('Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
+    });
+
+    it('should handle wallet disconnection through context', async () => {
+      mockWallet.connected = true;
+      mockWallet.publicKey = new PublicKey('Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
+
+      const wrapper = ({ children }) => (
+        <WalletProvider>{children}</WalletProvider>
+      );
+
+      const { result } = renderHook(() => useWallet(), { wrapper });
+
+      await act(async () => {
+        await result.current.disconnect();
+      });
+
+      expect(result.current.connected).toBe(false);
+      expect(result.current.publicKey).toBeNull();
+    });
+
+    it('should handle wallet events', async () => {
+      const wrapper = ({ children }) => (
+        <WalletProvider>{children}</WalletProvider>
+      );
+
+      const { result } = renderHook(() => useWallet(), { wrapper });
+
+      // Connect wallet first
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(result.current.connected).toBe(true);
+
+      // Simulate external disconnection
+      await act(async () => {
+        mockWallet.simulateDisconnection();
+      });
+
+      expect(result.current.connected).toBe(false);
+    });
+
+    it('should persist connection state', async () => {
+      const mockLocalStorage = {
+        getItem: vi.fn(),
+        setItem: vi.fn(),
+        removeItem: vi.fn()
+      };
+      Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
+
+      const wrapper = ({ children }) => (
+        <WalletProvider autoConnect={true}>{children}</WalletProvider>
+      );
+
+      const { result } = renderHook(() => useWallet(), { wrapper });
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      // Should save connection state to localStorage
+      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('wallet-connected', 'true');
+
+      await act(async () => {
+        await result.current.disconnect();
+      });
+
+      // Should remove connection state from localStorage
+      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('wallet-connected');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle connection errors gracefully', async () => {
+      mockWallet.simulateRejection('Connection failed');
+
+      const wrapper = ({ children }) => (
+        <WalletProvider>{children}</WalletProvider>
+      );
+
+      const { result } = renderHook(() => useWallet(), { wrapper });
+
+      await act(async () => {
+        try {
+          await result.current.connect();
+        } catch (error) {
+          // Error should be caught by context
+        }
+      });
+
+      expect(result.current.connected).toBe(false);
+      expect(result.current.error).toBeTruthy();
+      expect(result.current.error?.message).toContain('Connection failed');
+    });
+
+    it('should recover from errors', async () => {
+      const wrapper = ({ children }) => (
+        <WalletProvider>{children}</WalletProvider>
+      );
+
+      const { result } = renderHook(() => useWallet(), { wrapper });
+
+      // First attempt fails
+      mockWallet.simulateRejection();
+      await act(async () => {
+        try {
+          await result.current.connect();
+        } catch {}
+      });
+
+      expect(result.current.error).toBeTruthy();
+
+      // Second attempt succeeds
+      mockWallet.resetRejection();
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(result.current.connected).toBe(true);
+      expect(result.current.error).toBeNull();
+    });
+  });
+});
+```
+
+## Web3 Testing Best Practices
+
+### Mock Strategy Guidelines
+1. **Realistic Behavior**: Mock wallets should behave like real wallet implementations
+2. **Error Simulation**: Include comprehensive error scenarios and edge cases
+3. **State Management**: Properly track wallet connection state and events
+4. **Performance Testing**: Include realistic delays and timeout scenarios
+
+### Security Testing
+1. **Transaction Validation**: Ensure proper validation before signing
+2. **User Rejection**: Test all user rejection scenarios
+3. **Connection Security**: Validate secure connection establishment
+4. **Key Management**: Test proper handling of public/private key scenarios
+
+### Integration Patterns
+1. **Context Testing**: Comprehensive testing of React context providers
+2. **Component Integration**: Test wallet integration with UI components
+3. **Program Interaction**: Test interaction with Solana programs and contracts
+4. **Network Handling**: Test different network conditions and failures
+
+### Performance Considerations
+1. **Connection Speed**: Test wallet connection performance
+2. **Transaction Throughput**: Test handling of multiple transactions
+3. **Memory Usage**: Monitor memory usage in long-running tests
+4. **Error Recovery**: Test graceful recovery from network issues

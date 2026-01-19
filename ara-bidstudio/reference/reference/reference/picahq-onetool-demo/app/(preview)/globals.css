@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer utilities {
+  .bg-gradient-radial {
+    background-image: radial-gradient(circle, var(--tw-gradient-stops));
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  /* Show scrollbar only when hovering or scrolling */
+  .custom-scrollbar:hover::-webkit-scrollbar,
+  .custom-scrollbar::-webkit-scrollbar:hover,
+  .custom-scrollbar::-webkit-scrollbar:active {
+    opacity: 1;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/10 rounded-full;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb,
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover,
+  .custom-scrollbar::-webkit-scrollbar-thumb:active {
+    opacity: 1;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/20;
+  }
+}
+
+
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+
+
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+
+@keyframes spotlight {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.spotlight-animation {
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight {
+  position: absolute;
+  /* top: 50%; */
+  /* left: 50%; */
+  width: 120%;
+  height: 120%;
+  background: radial-gradient(
+    circle,
+    rgba(0, 0, 0, 0.08) 0%,
+    transparent 70%
+  );
+  transform: translate(-50%, -50%) scale(0.8);
+  animation: spotlight 4s infinite ease-in-out;
+  pointer-events: none;
+}
+
+.dark .spotlight {
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.04) 0%,
+    transparent 70%
+  );
+}
+
+@keyframes lightSweep {
+  0% {
+    background-position: -200% 50%;
+  }
+  100% {
+    background-position: 300% 50%;
+  }
+}
+
+.animate-light-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-light-sweep::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -50%;
+  right: -50%;
+  bottom: 0;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: lightSweep 3s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes textLightSweep {
+  0% {
+    background-position: -100% 50%;
+  }
+  50% {
+    background-position: 200% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
+  }
+}
+
+.animate-text-light-sweep {
+  color: transparent;
+  background-image: linear-gradient(
+    to right,
+    #000 20%,
+    #666 40%,
+    #666 60%,
+    #000 80%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textLightSweep 4s linear infinite;
+}
+
+.dark .animate-text-light-sweep {
+  background-image: linear-gradient(
+    to right,
+    #fff 20%,
+    #999 40%,
+    #999 60%,
+    #fff 80%
+  );
+}
+
+.bn-shadcn .bn-editor, .bn-container, .bn-block, .bn-block-content, .bn-inline-content {
+  background: transparent !important;
+  font-size: 12px !important;
+}
+
+
+@keyframes scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 30s linear infinite;
+}
+

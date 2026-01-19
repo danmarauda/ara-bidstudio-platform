@@ -1,0 +1,266 @@
+# GitLab CI/CD Pipeline Configuration
+# Full coverage automated testing pipeline for NodeBench AI
+
+stages:
+  - validate
+  - test
+  - coverage
+  - report
+
+variables:
+  NODE_VERSION: "20"
+  NPM_CACHE_DIR: .npm
+  CONVEX_CACHE_DIR: .convex
+  # Coverage thresholds (can be adjusted)
+  COVERAGE_THRESHOLD: 70
+  # Test timeout for E2E tests
+  TEST_TIMEOUT: 240000
+
+# Cache configuration for faster builds
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - node_modules/
+    - .npm/
+    - .convex/
+
+# ============================================
+# VALIDATION STAGE
+# ============================================
+
+lint:typescript:
+  stage: validate
+  image: node:${NODE_VERSION}
+  script:
+    - echo "🔍 Running TypeScript type checking..."
+    - npm ci
+    - mkdir -p reports
+    - npm run lint:typescript || (echo "TypeScript errors found" && exit 1)
+  allow_failure: false
+
+lint:eslint:
+  stage: validate
+  image: node:${NODE_VERSION}
+  script:
+    - echo "🔍 Running ESLint..."
+    - npm ci
+    - mkdir -p reports
+    - npm run lint:eslint || (echo "ESLint errors found" && exit 1)
+  allow_failure: false
+
+lint:convex:
+  stage: validate
+  image: node:${NODE_VERSION}
+  script:
+    - echo "🔍 Running Convex validation..."
+    - npm ci
+    - npx convex dev --once
+  allow_failure: false
+
+# ============================================
+# TEST STAGE
+# ============================================
+
+test:unit:
+  stage: test
+  image: node:${NODE_VERSION}
+  script:
+    - echo "🧪 Running unit tests..."
+    - npm ci
+    - mkdir -p reports coverage
+    - npm run test:unit:ci
+  coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      junit: reports/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+      - reports/
+    when: always
+    expire_in: 1 week
+  allow_failure: false
+
+test:integration:
+  stage: test
+  image: node:${NODE_VERSION}
+  script:
+    - echo "🧪 Running integration tests..."
+    - npm ci
+    - mkdir -p reports coverage
+    - npm run test:integration:ci
+  coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      junit: reports/junit-integration.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+      - reports/
+    when: always
+    expire_in: 1 week
+  allow_failure: false
+
+test:convex:
+  stage: test
+  image: node:${NODE_VERSION}
+  variables:
+    CONVEX_URL: ${CONVEX_URL}
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+  script:
+    - echo "🧪 Running Convex backend tests..."
+    - npm ci
+    - mkdir -p reports
+    - npm run test:convex:ci || echo "Convex tests completed with warnings"
+  artifacts:
+    reports:
+      junit: reports/junit-convex.xml
+    paths:
+      - reports/
+    when: always
+    expire_in: 1 week
+  allow_failure: false
+  only:
+    - merge_requests
+    - main
+    - develop
+
+test:e2e:
+  stage: test
+  image: node:${NODE_VERSION}
+  variables:
+    CONVEX_URL: ${CONVEX_URL}
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+    CONVEX_DEPLOYMENT_URL: ${CONVEX_DEPLOYMENT_URL}
+  script:
+    - echo "🧪 Running E2E tests..."
+    - npm ci
+    - mkdir -p reports coverage screenshots
+    - npm run test:e2e:ci || echo "E2E tests completed with warnings"
+  artifacts:
+    reports:
+      junit: reports/junit-e2e.xml
+    paths:
+      - coverage/
+      - reports/
+      - screenshots/
+    when: always
+    expire_in: 1 week
+  allow_failure: true
+  timeout: 20 minutes
+  only:
+    - merge_requests
+    - main
+    - develop
+
+# ============================================
+# COVERAGE STAGE
+# ============================================
+
+coverage:collect:
+  stage: coverage
+  image: node:${NODE_VERSION}
+  dependencies:
+    - test:unit
+    - test:integration
+  script:
+    - echo "📊 Collecting coverage reports..."
+    - npm ci
+    - mkdir -p reports coverage
+    - npm run coverage:merge
+    - npm run coverage:report
+    - |
+      if [ -f coverage/coverage-summary.json ]; then
+        echo "✅ Coverage summary generated"
+      else
+        echo "⚠️ Coverage summary not found, generating..."
+        npm run coverage:report
+      fi
+  coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+      - coverage/lcov-report/
+    when: always
+    expire_in: 30 days
+  allow_failure: false
+
+coverage:check:
+  stage: coverage
+  image: node:${NODE_VERSION}
+  dependencies:
+    - coverage:collect
+  script:
+    - echo "📊 Checking coverage thresholds..."
+    - npm ci
+    - npm run coverage:check || (echo "Coverage threshold not met" && exit 1)
+  allow_failure: false
+
+# ============================================
+# REPORTING STAGE
+# ============================================
+
+report:test-results:
+  stage: report
+  image: node:${NODE_VERSION}
+  dependencies:
+    - test:unit
+    - test:integration
+    - test:convex
+    - test:e2e
+  script:
+    - echo "📋 Generating test summary..."
+    - npm ci
+    - mkdir -p reports
+    - npm run report:test-summary || echo "Test summary generation completed with warnings"
+  artifacts:
+    paths:
+      - reports/
+    when: always
+    expire_in: 30 days
+  allow_failure: true
+
+# ============================================
+# UTILITY JOBS
+# ============================================
+
+# Job to run on merge requests
+test:all:
+  stage: test
+  image: node:${NODE_VERSION}
+  variables:
+    CONVEX_URL: ${CONVEX_URL}
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+  script:
+    - echo "🧪 Running all tests..."
+    - npm ci
+    - mkdir -p reports coverage
+    - npm run test:all:ci
+  coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      junit: reports/junit-all.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+      - reports/
+    when: always
+    expire_in: 1 week
+  allow_failure: false
+  only:
+    - merge_requests
+    - main
+    - develop
+

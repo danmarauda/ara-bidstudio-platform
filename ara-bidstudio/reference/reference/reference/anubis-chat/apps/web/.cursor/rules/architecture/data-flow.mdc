@@ -1,0 +1,693 @@
+---
+category: architecture
+subcategory: data-flow
+tags: [data-flow, state-management, real-time, reactive, convex]
+cursor:
+  context_window: 8192
+  temperature: 0.7
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../backend/convex.mdc", "../frontend/state.mdc"]
+  exports: ["reactive-patterns", "state-flow", "data-synchronization"]
+  references: ["system-design.mdc", "performance.mdc"]
+---
+
+# Data Flow Architecture for abubis.chat
+
+## Core Data Flow Principles
+
+::alert{type="info"}
+**Reactive-First Architecture**: All data flows follow reactive patterns with real-time synchronization, optimistic updates, and automatic conflict resolution.
+::
+
+### 1. Reactive Data Flow Pattern
+
+```mermaid
+graph TD
+    A[User Action] --> B[Optimistic Update]
+    B --> C[Local State]
+    B --> D[Convex Mutation]
+    D --> E[Database Write]
+    E --> F[Reactive Query Update]
+    F --> G[All Subscribed Clients]
+    G --> H[UI Re-render]
+```
+
+## State Management Architecture
+
+### 1. Client-Side State Layers
+
+::card{title="Multi-Layer State Management"}
+**Layer Hierarchy** (Bottom to Top):
+
+1. **Database State** - Convex reactive queries (single source of truth)
+2. **Application State** - Zustand for non-persisted state
+3. **Component State** - React useState for local UI state
+4. **Form State** - React Hook Form for form management
+5. **Cache State** - Automatic via Convex subscriptions
+::
+
+::code-group
+```typescript [State Architecture]
+// Convex reactive state (primary)
+const messages = useQuery(api.chat.getMessages, { roomId })
+
+// Application state (secondary)
+const useAppStore = create<AppState>((set, get) => ({
+  currentRoom: null,
+  uiMode: 'chat',
+  sidebarOpen: true,
+  setCurrentRoom: (roomId: string) => set({ currentRoom: roomId }),
+  toggleSidebar: () => set(state => ({ sidebarOpen: !state.sidebarOpen }))
+}))
+
+// Component state (tertiary)
+const [isTyping, setIsTyping] = useState(false)
+const [draftMessage, setDraftMessage] = useState("")
+```
+
+```typescript [State Flow Pattern]
+// Unified state flow with optimistic updates
+export function useChatActions(roomId: string) {
+  const sendMessage = useMutation(api.chat.sendMessage)
+  const { mutate: optimisticAdd } = useOptimistic()
+  
+  return {
+    sendMessage: async (content: string) => {
+      // 1. Optimistic update
+      const tempId = generateTempId()
+      optimisticAdd({ 
+        id: tempId, 
+        content, 
+        author: currentUser, 
+        timestamp: Date.now(),
+        status: 'sending' 
+      })
+      
+      try {
+        // 2. Server mutation
+        const messageId = await sendMessage({ roomId, content })
+        
+        // 3. Reactive update happens automatically via Convex
+        return messageId
+      } catch (error) {
+        // 4. Rollback optimistic update
+        optimisticAdd.rollback(tempId)
+        throw error
+      }
+    }
+  }
+}
+```
+::
+
+### 2. Server-Side Data Flow
+
+::card{title="Convex Reactive Database Pattern"}
+**Query → Mutation → Action Pattern**:
+
+- **Queries**: Read-only, automatically subscribed, cached
+- **Mutations**: Transactional writes with automatic reactivity
+- **Actions**: External API calls with side effects
+
+```typescript
+// Query (reactive reads)
+export const getMessages = query({
+  args: { roomId: v.id("chatRooms") },
+  handler: async (ctx, { roomId }) => {
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_room", (q) => q.eq("roomId", roomId))
+      .order("desc")
+      .take(50)
+  }
+})
+
+// Mutation (reactive writes)
+export const sendMessage = mutation({
+  args: { roomId: v.id("chatRooms"), content: v.string() },
+  handler: async (ctx, { roomId, content }) => {
+    const user = await getCurrentUser(ctx)
+    
+    return await ctx.db.insert("messages", {
+      roomId,
+      content,
+      authorId: user._id,
+      timestamp: Date.now(),
+      edited: false
+    })
+  }
+})
+
+// Action (external integrations)
+export const generateAIResponse = action({
+  args: { prompt: v.string(), context: v.any() },
+  handler: async (ctx, { prompt, context }) => {
+    // External AI API call
+    const response = await openai.chat.completions.create({
+      model: "gpt-4-turbo",
+      messages: [{ role: "user", content: prompt }]
+    })
+    
+    // Store result via mutation
+    await ctx.runMutation(api.chat.sendMessage, {
+      roomId: context.roomId,
+      content: response.choices[0].message.content,
+      isAI: true
+    })
+    
+    return response.choices[0].message.content
+  }
+})
+```
+::
+
+## Real-Time Data Synchronization
+
+### 1. WebSocket-like Reactivity (Convex)
+
+::tabs
+::div{label="Automatic Subscriptions"}
+```typescript
+// Automatic real-time subscriptions
+function ChatRoom({ roomId }: { roomId: Id<"chatRooms"> }) {
+  // Automatically subscribes to real-time updates
+  const messages = useQuery(api.chat.getMessages, { roomId })
+  const participants = useQuery(api.chat.getParticipants, { roomId })
+  const typingUsers = useQuery(api.chat.getTypingUsers, { roomId })
+  
+  // All queries update automatically when database changes
+  return (
+    <div>
+      {messages?.map(message => (
+        <MessageComponent key={message._id} message={message} />
+      ))}
+      <TypingIndicator users={typingUsers} />
+    </div>
+  )
+}
+```
+::
+
+::div{label="Conflict Resolution"}
+```typescript
+// Automatic conflict resolution with last-write-wins
+export const updateMessage = mutation({
+  args: { 
+    messageId: v.id("messages"), 
+    content: v.string(),
+    version: v.number() 
+  },
+  handler: async (ctx, { messageId, content, version }) => {
+    const existing = await ctx.db.get(messageId)
+    
+    if (!existing) {
+      throw new ConvexError("Message not found")
+    }
+    
+    // Optimistic concurrency control
+    if (existing.version !== version) {
+      throw new ConvexError("Conflict detected", { 
+        currentVersion: existing.version,
+        attemptedVersion: version 
+      })
+    }
+    
+    return await ctx.db.patch(messageId, {
+      content,
+      version: version + 1,
+      editedAt: Date.now()
+    })
+  }
+})
+```
+::
+
+::div{label="Presence System"}
+```typescript
+// Real-time presence tracking
+export const updatePresence = mutation({
+  args: { 
+    roomId: v.id("chatRooms"),
+    status: v.union(v.literal("online"), v.literal("typing"), v.literal("away"))
+  },
+  handler: async (ctx, { roomId, status }) => {
+    const user = await getCurrentUser(ctx)
+    
+    // Upsert presence record with TTL
+    return await ctx.db.insert("presence", {
+      userId: user._id,
+      roomId,
+      status,
+      lastSeen: Date.now(),
+      expiresAt: Date.now() + 30000 // 30 second TTL
+    })
+  }
+})
+
+// Cleanup expired presence records
+export const cleanupPresence = internalMutation({
+  handler: async (ctx) => {
+    const expired = await ctx.db
+      .query("presence")
+      .filter(q => q.lt(q.field("expiresAt"), Date.now()))
+      .collect()
+    
+    for (const record of expired) {
+      await ctx.db.delete(record._id)
+    }
+  }
+})
+```
+::
+::
+
+### 2. Event Sourcing Pattern
+
+::code-group
+```typescript [Event Store]
+// Event-sourced chat history
+interface ChatEvent {
+  id: Id<"events">
+  type: 'message.sent' | 'message.edited' | 'user.joined' | 'user.left'
+  roomId: Id<"chatRooms">
+  userId: Id<"users">
+  payload: any
+  timestamp: number
+  version: number
+}
+
+export const appendEvent = mutation({
+  args: { 
+    roomId: v.id("chatRooms"),
+    type: v.string(),
+    payload: v.any()
+  },
+  handler: async (ctx, { roomId, type, payload }) => {
+    const user = await getCurrentUser(ctx)
+    
+    // Get next version number
+    const lastEvent = await ctx.db
+      .query("events")
+      .withIndex("by_room", q => q.eq("roomId", roomId))
+      .order("desc")
+      .first()
+    
+    const version = (lastEvent?.version ?? 0) + 1
+    
+    // Append new event
+    const eventId = await ctx.db.insert("events", {
+      roomId,
+      type,
+      userId: user._id,
+      payload,
+      timestamp: Date.now(),
+      version
+    })
+    
+    // Update projection (current state)
+    await updateProjection(ctx, roomId, type, payload)
+    
+    return eventId
+  }
+})
+```
+
+```typescript [Projection Updates]
+// Update current state projections
+async function updateProjection(
+  ctx: MutationCtx,
+  roomId: Id<"chatRooms">,
+  type: string,
+  payload: any
+) {
+  switch (type) {
+    case 'message.sent':
+      await ctx.db.insert("messages", {
+        roomId,
+        content: payload.content,
+        authorId: payload.authorId,
+        timestamp: payload.timestamp
+      })
+      break
+      
+    case 'message.edited':
+      await ctx.db.patch(payload.messageId, {
+        content: payload.content,
+        editedAt: payload.editedAt
+      })
+      break
+      
+    case 'user.joined':
+      await ctx.db.insert("participants", {
+        roomId,
+        userId: payload.userId,
+        joinedAt: payload.timestamp
+      })
+      break
+  }
+}
+```
+::
+
+## AI Data Flow Integration
+
+### 1. Streaming AI Responses
+
+::code-group
+```typescript [Server Stream]
+import { streamText } from 'ai'
+
+export const generateStreamingResponse = action({
+  args: { prompt: v.string(), roomId: v.id("chatRooms") },
+  handler: async (ctx, { prompt, roomId }) => {
+    const { textStream } = await streamText({
+      model: openai('gpt-4-turbo'),
+      prompt
+    })
+    
+    let fullResponse = ""
+    const messageId = await ctx.runMutation(api.chat.createMessage, {
+      roomId,
+      content: "",
+      isAI: true,
+      isStreaming: true
+    })
+    
+    for await (const delta of textStream) {
+      fullResponse += delta
+      
+      // Update message in real-time
+      await ctx.runMutation(api.chat.updateMessage, {
+        messageId,
+        content: fullResponse
+      })
+    }
+    
+    // Mark as complete
+    await ctx.runMutation(api.chat.completeMessage, { messageId })
+    
+    return fullResponse
+  }
+})
+```
+
+```typescript [Client Stream Handling]
+// React hook for streaming AI responses
+function useStreamingChat(roomId: string) {
+  const [streamingMessageId, setStreamingMessageId] = useState<string>()
+  const generateResponse = useAction(api.ai.generateStreamingResponse)
+  
+  const sendPrompt = async (prompt: string) => {
+    try {
+      // This will stream updates via Convex reactivity
+      await generateResponse({ prompt, roomId })
+    } catch (error) {
+      console.error('AI generation failed:', error)
+    }
+  }
+  
+  return { sendPrompt, isStreaming: !!streamingMessageId }
+}
+```
+::
+
+### 2. Vector Embeddings Flow
+
+::code-group
+```typescript [Embedding Generation]
+// Generate embeddings for semantic search
+export const generateEmbedding = action({
+  args: { text: v.string() },
+  handler: async (ctx, { text }) => {
+    // Generate embedding via OpenAI
+    const response = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: text,
+    })
+    
+    const embedding = response.data[0].embedding
+    
+    // Store in Qdrant via HTTP API
+    await fetch(`${process.env.QDRANT_URL}/collections/messages/points`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        points: [{
+          id: generateUUID(),
+          vector: embedding,
+          payload: { text, timestamp: Date.now() }
+        }]
+      })
+    })
+    
+    return embedding
+  }
+})
+```
+
+```typescript [Semantic Search]
+// Semantic search across chat history
+export const semanticSearch = action({
+  args: { 
+    query: v.string(), 
+    roomId: v.id("chatRooms"),
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, { query, roomId, limit = 10 }) => {
+    // Generate query embedding
+    const queryEmbedding = await generateEmbedding(ctx, { text: query })
+    
+    // Search Qdrant
+    const searchResponse = await fetch(
+      `${process.env.QDRANT_URL}/collections/messages/points/search`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vector: queryEmbedding,
+          limit,
+          with_payload: true,
+          filter: {
+            must: [
+              { key: "roomId", match: { value: roomId } }
+            ]
+          }
+        })
+      }
+    )
+    
+    const results = await searchResponse.json()
+    return results.result
+  }
+})
+```
+::
+
+## Data Validation & Transformation
+
+### 1. Input Validation Pipeline
+
+::code-group
+```typescript [Zod Schema Validation]
+import { z } from "zod"
+
+// Message validation schema
+const MessageSchema = z.object({
+  content: z.string().min(1).max(4000),
+  roomId: z.string(),
+  mentions: z.array(z.string()).optional(),
+  attachments: z.array(z.object({
+    url: z.string().url(),
+    type: z.enum(['image', 'file', 'video']),
+    size: z.number().max(10 * 1024 * 1024) // 10MB limit
+  })).optional()
+})
+
+export const sendMessage = mutation({
+  args: { 
+    content: v.string(),
+    roomId: v.id("chatRooms"),
+    attachments: v.optional(v.array(v.any()))
+  },
+  handler: async (ctx, args) => {
+    // Validate input
+    const validated = MessageSchema.parse(args)
+    
+    // Content filtering
+    const sanitizedContent = await sanitizeContent(validated.content)
+    
+    // Rate limiting check
+    await checkRateLimit(ctx, ctx.auth.getUserIdentity()?.subject)
+    
+    // Insert message
+    return await ctx.db.insert("messages", {
+      ...validated,
+      content: sanitizedContent,
+      authorId: user._id,
+      timestamp: Date.now()
+    })
+  }
+})
+```
+
+```typescript [Content Sanitization]
+// Content sanitization pipeline
+async function sanitizeContent(content: string): Promise<string> {
+  // 1. HTML escape
+  const escaped = escapeHtml(content)
+  
+  // 2. Markdown parsing (safe subset)
+  const parsed = parseMarkdown(escaped, { 
+    allowedTags: ['strong', 'em', 'code', 'pre'],
+    stripDisallowed: true 
+  })
+  
+  // 3. Link validation
+  const validated = await validateLinks(parsed)
+  
+  // 4. Profanity filtering
+  const filtered = await filterProfanity(validated)
+  
+  return filtered
+}
+```
+::
+
+### 2. Data Transformation Patterns
+
+::code-group
+```typescript [Response Formatting]
+// Consistent API response formatting
+export interface APIResponse<T> {
+  success: boolean
+  data?: T
+  error?: {
+    code: string
+    message: string
+    details?: any
+  }
+  metadata?: {
+    pagination?: PaginationInfo
+    timing?: number
+    version?: string
+  }
+}
+
+export function formatResponse<T>(
+  data?: T, 
+  error?: Error,
+  metadata?: any
+): APIResponse<T> {
+  if (error) {
+    return {
+      success: false,
+      error: {
+        code: error.name,
+        message: error.message,
+        details: error.cause
+      }
+    }
+  }
+  
+  return {
+    success: true,
+    data,
+    metadata
+  }
+}
+```
+
+```typescript [Data Aggregation]
+// Real-time analytics aggregation
+export const getChatAnalytics = query({
+  args: { roomId: v.id("chatRooms") },
+  handler: async (ctx, { roomId }) => {
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_room", q => q.eq("roomId", roomId))
+      .collect()
+    
+    // Aggregate metrics
+    const analytics = {
+      totalMessages: messages.length,
+      uniqueParticipants: new Set(messages.map(m => m.authorId)).size,
+      averageMessageLength: messages.reduce((sum, m) => 
+        sum + m.content.length, 0) / messages.length,
+      messagesByHour: groupMessagesByHour(messages),
+      topKeywords: extractTopKeywords(messages),
+      sentimentAnalysis: analyzeSentiment(messages)
+    }
+    
+    return analytics
+  }
+})
+```
+::
+
+## Error Handling in Data Flow
+
+### 1. Graceful Error Recovery
+
+::alert{type="warning"}
+**Error Recovery Strategy**: Implement graceful degradation with automatic retry, fallback states, and user-friendly error messages.
+::
+
+```typescript
+// Error boundary for data operations
+export class DataFlowErrorBoundary extends React.Component {
+  state = { hasError: false, error: null }
+  
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+  
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Log to monitoring service
+    console.error('Data flow error:', error, errorInfo)
+    
+    // Report to error tracking
+    reportError(error, {
+      component: 'DataFlowErrorBoundary',
+      context: errorInfo
+    })
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback error={this.state.error} />
+    }
+    
+    return this.props.children
+  }
+}
+```
+
+### 2. Retry Mechanisms
+
+```typescript
+// Exponential backoff retry for critical operations
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      if (attempt === maxRetries - 1) {
+        throw error
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  
+  throw new Error('Max retries exceeded')
+}
+```
+
+This data flow architecture ensures robust, real-time, and scalable data management for abubis.chat with proper error handling and optimization patterns.

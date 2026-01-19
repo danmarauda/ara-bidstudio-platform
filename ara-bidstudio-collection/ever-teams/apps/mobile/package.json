@@ -1,0 +1,313 @@
+{
+	"name": "@ever-teams/mobile",
+	"version": "0.1.0",
+	"license": "GPL-3.0",
+	"author": {
+		"name": "Ever Co. LTD",
+		"email": "ever@ever.co",
+		"url": "https://ever.co"
+	},
+	"main": "index.js",
+	"private": true,
+	"expo": {
+		"doctor": {
+			"reactNativeDirectoryCheck": {
+				"listUnknownPackages": false,
+				"exclude": [
+					"jwt-decode",
+					"react-native-cn-quill",
+					"reanimated-bottom-sheet"
+				]
+			}
+		}
+	},
+	"scripts": {
+		"start": "yarn config:mobile && expo start --dev-client",
+		"ios": "yarn config:mobile && yarn react-native run-ios",
+		"android": "yarn config:mobile && yarn react-native run-android --active-arch-only",
+		"test:detox": "yarn config:mobile && yarn detox test -c ios.sim.debug",
+		"build:detox": "yarn config:mobile && yarn detox build -c ios.sim.debug",
+		"ci:test:detox": "yarn config:mobile && yarn detox test -c ios.sim.release -l verbose --cleanup",
+		"ci:build:detox": "yarn config:mobile && yarn detox build -c ios.sim.release",
+		"build": "yarn compile",
+		"compile": "yarn tsc --noEmit -p . --pretty",
+		"format": "yarn prettier --write \"app/**/*.{js,jsx,json,md,ts,tsx}\"",
+		"lint": "yarn eslint index.js App.js app test --fix --ext .js,.ts,.tsx && npm run format",
+		"patch": "yarn patch-package",
+		"test": "yarn jest",
+		"test:watch": "yarn jest --watch",
+		"adb": "yarn adb reverse tcp:9090 tcp:9090 && adb reverse tcp:3000 tcp:3000 && adb reverse tcp:9001 tcp:9001 && adb reverse tcp:8081 tcp:8081",
+		"postinstall": "node ./bin/postInstall",
+		"bundle:ios": "yarn config:mobile && yarn react-native bundle --entry-file index.js --platform ios --dev false --bundle-output ios/main.jsbundle --assets-dest ios",
+		"bundle:android": "yarn config:mobile && yarn react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
+		"release:ios": "echo 'Not implemented yet: release:ios. Use Xcode. More info: https://reactnative.dev/docs/next/publishing-to-app-store'",
+		"release:android": "yarn config:mobile && cd android && rm -rf app/src/main/res/drawable-* && ./gradlew assembleRelease && cd - && echo 'APK generated in ./android/app/build/outputs/apk/release/app-release.apk'",
+		"clean": "yarn npx react-native-clean-project",
+		"clean-all": "yarn npx react-native clean-project-auto",
+		"expo:start": "yarn config:mobile && yarn expo start",
+		"expo:android": "yarn config:mobile && yarn expo start --android",
+		"expo:ios": "yarn config:mobile && yarn expo start --ios",
+		"expo:web": "yarn config:mobile && yarn expo start --web",
+		"expo:build:detox": "yarn config:mobile && yarn detox build -c ios.sim.expo",
+		"expo:test:detox": "yarn config:mobile && ./bin/downloadExpoApp.sh && yarn detox test --configuration ios.sim.expo",
+		"eas:build": "yarn config:mobile && eas build",
+		"config:mobile": "yarn ts-node ../../.scripts/configure.mobile.ts"
+	},
+	"overrides": {
+		"react-error-overlay": "6.0.9"
+	},
+	"dependencies": {
+		"@expo-google-fonts/space-grotesk": "^0.2.2",
+		"@expo/metro-runtime": "~5.0.4",
+		"@gorhom/bottom-sheet": "^5.1.2",
+		"@react-native-async-storage/async-storage": "2.1.2",
+		"@react-navigation/bottom-tabs": "^6.5.7",
+		"@react-navigation/drawer": "^6.6.2",
+		"@react-navigation/native": "^6.0.2",
+		"@react-navigation/native-stack": "^6.0.2",
+		"@react-navigation/stack": "~6.3.16",
+		"@sentry/react-native": "^7.1.0",
+		"@shopify/flash-list": "1.7.6",
+		"@tanstack/react-query": "^5.36.0",
+		"apisauce": "3.0.1",
+		"assert": "^2.1.0",
+		"browserify-zlib": "^0.2.0",
+		"date-fns": "^4.1.0",
+		"expo": "53.0.9",
+		"expo-application": "~6.1.4",
+		"expo-blur": "~14.1.4",
+		"expo-build-properties": "~0.14.6",
+		"expo-clipboard": "~7.1.4",
+		"expo-constants": "~17.1.6",
+		"expo-crypto": "^14.1.4",
+		"expo-dev-client": "~5.1.8",
+		"expo-device": "~7.1.4",
+		"expo-file-system": "~18.1.9",
+		"expo-font": "~13.3.1",
+		"expo-image-picker": "~16.1.4",
+		"expo-linear-gradient": "~14.1.4",
+		"expo-linking": "~7.1.4",
+		"expo-localization": "~16.1.5",
+		"expo-media-library": "~17.1.6",
+		"expo-splash-screen": "~0.30.8",
+		"expo-status-bar": "~2.2.3",
+		"expo-system-ui": "~5.0.7",
+		"expo-updates": "~0.28.12",
+		"https-browserify": "^1.0.0",
+		"i18n-js": "3.8",
+		"i18next": "^23.14.0",
+		"intl-pluralrules": "^2.0.1",
+		"jwt-decode": "^3.1.2",
+		"lodash": "^4.17.21",
+		"mime": "^4.0.6",
+		"mobx": "6.10.2",
+		"mobx-react-lite": "4.0.5",
+		"mobx-state-tree": "5.3.0",
+		"moment-timezone": "^0.5.42",
+		"path-browserify": "^1.0.1",
+		"react": "19.0.0",
+		"react-dom": "19.0.0",
+		"react-i18next": "^15.0.1",
+		"react-native": "0.79.2",
+		"react-native-animatable": "^1.3.3",
+		"react-native-bootsplash": "^6.3.7",
+		"react-native-calendars": "^1.1302.0",
+		"react-native-circular-progress": "^1.3.8",
+		"react-native-click-outside": "^0.1.1",
+		"react-native-cn-quill": "^0.7.18",
+		"react-native-confirmation-code-field": "^7.3.2",
+		"react-native-crypto": "^2.2.0",
+		"react-native-dotenv": "^3.4.11",
+		"react-native-drawer-layout": "^4.0.1",
+		"react-native-dropdown-picker": "^5.4.6",
+		"react-native-extended-stylesheet": "^0.12.0",
+		"react-native-flash-message": "^0.4.0",
+		"react-native-fs": "^2.20.0",
+		"react-native-gesture-handler": "~2.24.0",
+		"react-native-keyboard-controller": "^1.12.7",
+		"react-native-mmkv": "^2.12.2",
+		"react-native-pager-view": "6.7.1",
+		"react-native-paper": "5.5.1",
+		"react-native-reanimated": "~3.17.4",
+		"react-native-safe-area-context": "5.4.0",
+		"react-native-screens": "~4.10.0",
+		"react-native-skeletons": "^1.3.1",
+		"react-native-svg": "15.11.2",
+		"react-native-svg-transformer": "^1.5.0",
+		"react-native-tab-view": "^3.5.2",
+		"react-native-vector-icons": "^9.2.0",
+		"react-native-web": "^0.20.0",
+		"react-native-webview": "13.13.5",
+		"readable-stream": "^4.7.0",
+		"reanimated-color-picker": "^2.3.4",
+		"stream-browserify": "^3.0.0",
+		"stream-http": "^3.2.0",
+		"tslib": "^2.6.0",
+		"validator": "^13.11.0",
+		"whatwg-url": "^14.2.0"
+	},
+	"devDependencies": {
+		"@babel/core": "^7.20.0",
+		"@babel/preset-env": "^7.20.0",
+		"@babel/runtime": "^7.20.0",
+		"@hapi/shot": "^6.0.1",
+		"@testing-library/react-native": "^12.5.2",
+		"@types/hapi__shot": "^6.0.0",
+		"@types/jest": "^29.5.14",
+		"@types/react": "19.1.2",
+		"babel-jest": "^29.2.1",
+		"eslint": "^8.57.0",
+		"eslint-config-expo": "~9.2.0",
+		"eslint-config-prettier": "^9.1.0",
+		"eslint-plugin-prettier": "^5.2.1",
+		"eslint-plugin-react-native": "^4.1.0",
+		"eslint-plugin-reactotron": "^0.1.2",
+		"jest": "^29.2.1",
+		"jest-expo": "~53.0.5",
+		"patch-package": "^8.0.0",
+		"postinstall-prepare": "1.0.1",
+		"prettier": "^3.3.3",
+		"react-test-renderer": "18.2.0",
+		"reactotron-core-client": "^2.9.4",
+		"reactotron-mst": "^3.1.7",
+		"reactotron-react-js": "^3.3.11",
+		"reactotron-react-native": "^5.0.5",
+		"reactotron-react-native-mmkv": "^0.2.6",
+		"ts-jest": "^29.1.1",
+		"ts-node": "^10.9.2",
+		"typescript": "~5.8.3"
+	},
+	"prettier": {
+		"printWidth": 120,
+		"singleQuote": true,
+		"semi": true,
+		"useTabs": true,
+		"tabWidth": 4,
+		"arrowParens": "always",
+		"trailingComma": "none",
+		"quoteProps": "as-needed",
+		"trimTrailingWhitespace": true,
+		"overrides": [
+			{
+				"files": "*.scss",
+				"options": {
+					"useTabs": false,
+					"tabWidth": 2
+				}
+			},
+			{
+				"files": "*.yml",
+				"options": {
+					"useTabs": false,
+					"tabWidth": 2
+				}
+			}
+		]
+	},
+	"detox": {
+		"test-runner": "jest",
+		"runnerConfig": "./detox/config.json",
+		"specs": "detox",
+		"configurations": {
+			"ios.sim.debug": {
+				"binaryPath": "ios/build/Build/Products/Debug-iphonesimulator/mobile.app",
+				"build": "xcodebuild -workspace ios/mobile.xcworkspace -scheme mobile -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build -destination 'name=iPhone 14'",
+				"type": "ios.simulator",
+				"device": {
+					"name": "iPhone 14",
+					"os": "iOS 15.5"
+				}
+			},
+			"ios.sim.release": {
+				"binaryPath": "ios/build/Build/Products/Release-iphonesimulator/mobile.app",
+				"build": "xcodebuild -workspace ios/mobile.xcworkspace -scheme mobile -configuration Release -sdk iphonesimulator -derivedDataPath ios/build -destination 'name=iPhone 14'",
+				"type": "ios.simulator",
+				"device": {
+					"name": "iPhone 14",
+					"os": "iOS 15.5"
+				}
+			},
+			"ios.sim.expo": {
+				"binaryPath": "bin/Exponent.app",
+				"type": "ios.simulator",
+				"name": "iPhone 14"
+			}
+		}
+	},
+	"eslintConfig": {
+		"root": true,
+		"parser": "@typescript-eslint/parser",
+		"extends": [
+			"plugin:@typescript-eslint/recommended",
+			"plugin:react/recommended",
+			"plugin:react-native/all",
+			"standard",
+			"prettier"
+		],
+		"plugins": [
+			"@typescript-eslint",
+			"react",
+			"react-native"
+		],
+		"parserOptions": {
+			"ecmaFeatures": {
+				"jsx": true
+			},
+			"project": "./tsconfig.json"
+		},
+		"settings": {
+			"react": {
+				"pragma": "React",
+				"version": "detect"
+			}
+		},
+		"globals": {
+			"__DEV__": false,
+			"jasmine": false,
+			"beforeAll": false,
+			"afterAll": false,
+			"beforeEach": false,
+			"afterEach": false,
+			"test": false,
+			"expect": false,
+			"describe": false,
+			"jest": false,
+			"it": false
+		},
+		"rules": {
+			"@typescript-eslint/ban-ts-ignore": 0,
+			"@typescript-eslint/ban-ts-comment": 0,
+			"@typescript-eslint/explicit-function-return-type": 0,
+			"@typescript-eslint/explicit-member-accessibility": 0,
+			"@typescript-eslint/explicit-module-boundary-types": 0,
+			"@typescript-eslint/indent": 0,
+			"@typescript-eslint/member-delimiter-style": 0,
+			"@typescript-eslint/no-empty-interface": 0,
+			"@typescript-eslint/no-explicit-any": 0,
+			"@typescript-eslint/no-object-literal-type-assertion": 0,
+			"@typescript-eslint/no-var-requires": 0,
+			"@typescript-eslint/no-unused-vars": [
+				"error",
+				{
+					"argsIgnorePattern": "^_",
+					"varsIgnorePattern": "^_"
+				}
+			],
+			"comma-dangle": 0,
+			"multiline-ternary": 0,
+			"no-undef": 0,
+			"no-unused-vars": 0,
+			"no-use-before-define": 0,
+			"no-global-assign": 0,
+			"quotes": 0,
+			"react-native/no-raw-text": 0,
+			"react/no-unescaped-entities": 0,
+			"react/prop-types": 0,
+			"space-before-function-paren": 0
+		}
+	},
+	"engines": {
+		"node": "^18.18.0 || >=20.0.0",
+		"yarn": ">=1.13.0"
+	}
+}

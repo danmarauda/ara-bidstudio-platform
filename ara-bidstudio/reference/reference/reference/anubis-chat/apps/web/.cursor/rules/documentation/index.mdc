@@ -1,0 +1,308 @@
+---
+category: documentation
+subcategory: overview
+tags: [documentation, developer-experience, maintenance]
+cursor:
+  context_window: 8192
+  temperature: 0.6
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../architecture/index.mdc", "../testing/index.mdc"]
+  exports: ["documentation-standards", "api-docs"]
+  references: ["../frontend/accessibility.mdc", "../security/audit-checklist.mdc"]
+---
+
+# Documentation Standards
+
+::alert{type="info"}
+Comprehensive documentation guidelines ensuring abubis.chat remains maintainable and accessible to all team members.
+::
+
+## Documentation Philosophy
+
+abubis.chat follows a **docs-as-code** approach where documentation lives alongside the code and is treated with the same rigor as production code.
+
+## Documentation Types
+
+### Code Documentation
+
+::tabs
+::tab{label="TypeScript/JSDoc"}
+```typescript
+/**
+ * Processes a chat message with RAG context injection
+ * @param message - User's input message
+ * @param wallet - User's wallet address for context isolation
+ * @param options - Processing options
+ * @returns Streaming AI response with injected context
+ * @throws {RateLimitError} When user exceeds message quota
+ * @example
+ * ```typescript
+ * const response = await processMessage(
+ *   "What is Solana?",
+ *   "7xKXt...addresses",
+ *   { includeRAG: true }
+ * );
+ * ```
+ */
+export async function processMessage(
+  message: string,
+  wallet: string,
+  options?: MessageOptions
+): Promise<StreamingResponse> {
+  // Implementation
+}
+```
+::
+
+::tab{label="Component Documentation"}
+```tsx
+/**
+ * WalletButton Component
+ * 
+ * Renders a multi-wallet connection button with automatic provider detection.
+ * Supports Phantom, Backpack, Solflare, and other Solana wallets.
+ * 
+ * @component
+ * @example
+ * <WalletButton
+ *   onConnect={(wallet) => console.log('Connected:', wallet)}
+ *   variant="primary"
+ *   showBalance
+ * />
+ */
+export const WalletButton: FC<WalletButtonProps> = ({
+  onConnect,
+  variant = 'primary',
+  showBalance = false,
+}) => {
+  // Component implementation
+};
+```
+::
+
+::tab{label="API Documentation"}
+```typescript
+/**
+ * @api {post} /api/chat Send Message
+ * @apiName SendMessage
+ * @apiGroup Chat
+ * @apiVersion 1.0.0
+ * 
+ * @apiHeader {String} Authorization Bearer JWT token
+ * @apiHeader {String} X-Wallet-Address User's Solana wallet
+ * 
+ * @apiParam {String} message User's chat message
+ * @apiParam {Boolean} [includeRAG=true] Include RAG context
+ * @apiParam {String} [model="claude-3.5"] AI model selection
+ * 
+ * @apiSuccess {String} id Message ID
+ * @apiSuccess {Stream} content Streaming response
+ * 
+ * @apiError {401} Unauthorized Invalid or expired token
+ * @apiError {429} RateLimited Exceeded message quota
+ */
+```
+::
+::
+
+### Architecture Documentation
+
+::card
+**System Design Docs**
+- High-level architecture diagrams
+- Component interaction flows
+- Data flow documentation
+- Security architecture
+- Deployment topology
+::
+
+::card
+**Decision Records (ADRs)**
+```markdown
+# ADR-001: Use Convex for Real-time Database
+
+## Status
+Accepted
+
+## Context
+We need a real-time database that supports WebSocket connections,
+automatic syncing, and TypeScript-first development.
+
+## Decision
+We will use Convex as our primary database.
+
+## Consequences
+- ✅ Real-time subscriptions out of the box
+- ✅ TypeScript type safety
+- ✅ Automatic conflict resolution
+- ⚠️ Vendor lock-in risk
+- ⚠️ Learning curve for team
+```
+::
+
+## API Documentation
+
+### OpenAPI Specification
+
+```yaml
+openapi: 3.1.0
+info:
+  title: ANUBIS Chat API
+  version: 1.0.0
+  description: Solana-native AI chat platform API
+
+paths:
+  /api/chat:
+    post:
+      summary: Send chat message
+      operationId: sendMessage
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: User's chat message
+                includeRAG:
+                  type: boolean
+                  default: true
+                model:
+                  type: string
+                  enum: [claude-3.5, gpt-4o, deepseek]
+      responses:
+        '200':
+          description: Streaming response
+          content:
+            text/event-stream:
+              schema:
+                type: string
+```
+
+## User Documentation
+
+### README Structure
+
+```markdown
+# ANUBIS Chat
+
+> Solana-native AI chat platform with RAG capabilities
+
+## Features
+- 🔐 Wallet-based authentication
+- 💬 Multi-model AI chat
+- 📚 Document upload and RAG
+- ⚡ Real-time streaming responses
+- 💰 SOL subscription payments
+
+## Quick Start
+\`\`\`bash
+# Install dependencies
+bun install
+
+# Set up environment
+cp .env.example .env.local
+
+# Run development server
+bun dev
+\`\`\`
+
+## Documentation
+- [Architecture](./docs/architecture.md)
+- [API Reference](./docs/api.md)
+- [Deployment Guide](./docs/deployment.md)
+```
+
+## Inline Documentation
+
+### Comment Standards
+
+```typescript
+// ============================================
+// SECTION: Authentication Middleware
+// ============================================
+
+/**
+ * TODO: Implement rate limiting per wallet
+ * @priority high
+ * @assignee team-backend
+ * @deadline 2025-09-01
+ */
+
+// HACK: Temporary workaround for Phantom wallet bug
+// Remove after phantom-wallet v2.1.0 release
+if (wallet.name === 'Phantom' && !wallet.isConnected) {
+  await delay(100);
+}
+
+// NOTE: Critical security check - do not remove
+validateWalletSignature(signature, message, publicKey);
+
+// OPTIMIZE: Consider caching user sessions
+// Current implementation queries DB on every request
+```
+
+## Documentation Automation
+
+### Generate TypeScript Types
+
+```bash
+# Generate types from Convex schema
+npx convex codegen
+
+# Generate API types from OpenAPI
+npx openapi-typescript api.yaml -o types/api.d.ts
+
+# Generate component documentation
+npx typedoc --out docs/api src
+```
+
+### Documentation Testing
+
+```typescript
+// Test documentation examples
+import { testDocs } from '@utils/test-docs';
+
+describe('Documentation Examples', () => {
+  it('should execute all code examples without errors', async () => {
+    const results = await testDocs('./docs/**/*.md');
+    expect(results.failed).toBe(0);
+  });
+});
+```
+
+## Maintenance Guidelines
+
+::alert{type="warning"}
+Documentation must be updated with every PR that changes functionality.
+::
+
+### Documentation Checklist
+
+- [ ] Code comments updated
+- [ ] JSDoc/TSDoc complete
+- [ ] README updated if needed
+- [ ] API docs regenerated
+- [ ] Examples tested
+- [ ] Changelog updated
+- [ ] Migration guide (if breaking changes)
+
+## Documentation Tools
+
+- **TypeDoc**: TypeScript API documentation
+- **Swagger/OpenAPI**: REST API documentation
+- **Docusaurus**: User-facing documentation site
+- **Mermaid**: Diagrams and flowcharts
+- **Storybook**: Component documentation
+
+## Related Documentation
+
+- [Architecture Overview](../architecture/index.mdc)
+- [Testing Strategy](../testing/index.mdc)
+- [API Design](../backend/api-design.mdc)
+- [Component Patterns](../frontend/components.mdc)

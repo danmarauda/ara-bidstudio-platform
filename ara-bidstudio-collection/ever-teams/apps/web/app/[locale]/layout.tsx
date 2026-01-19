@@ -1,0 +1,155 @@
+'use client';
+
+import { Provider as JotaiProvider } from 'jotai';
+import NextAuthSessionProvider from '@/core/components/layouts/default-layout/next-auth-provider';
+import { JitsuRoot } from '@/core/components/collaborate/jitsu-root';
+import { NextIntlClientProvider } from 'next-intl';
+import { ThemeProvider } from 'next-themes';
+import dynamic from 'next/dynamic';
+import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, use } from 'react';
+import { Geist } from 'next/font/google';
+import { useCheckAPI } from '@/core/hooks/common/use-check-api';
+import OfflineWrapper from '@/core/components/common/offline-wrapper';
+
+import { PHProvider } from './(main)/integration/posthog/provider';
+import { APPLICATION_LANGUAGES_CODE as LOCALES } from '@/core/constants/config/constants';
+import { cn } from '@/core/lib/helpers';
+// import { cn } from '@ever-teams/ui';
+
+interface Props {
+	children: React.ReactNode;
+	params: Promise<{ locale: string }>;
+}
+
+const font = Geist({
+	subsets: ['latin'],
+	variable: '--font-sans',
+	display: 'swap'
+});
+
+const PostHogPageView = dynamic(() => import('./(main)/integration/posthog/page-view'), {
+	ssr: false
+});
+
+// export function generateStaticParams() {
+// 	return locales.map((locale: any) => ({ locale }));
+// }
+
+// export async function generateMetadata({ params: { locale } }: Omit<Props, 'children'>) {
+// 	const t = await getTranslations({ locale, namespace: 'LocaleLayout' });
+
+// 	return {
+// 		title: t('title')
+// 	};
+// }
+
+const LocaleLayout = (props: Props) => {
+	const params = use(props.params);
+	const { locale } = params;
+	const { children } = props;
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+	const { isApiWork, loading } = useCheckAPI();
+
+	// Enable static rendering
+	// unstable_setRequestLocale(locale);
+	const formatTitle = (url: string) => {
+		// Separate the URL into pathname and query parts
+		const [pathname, queryString] = url.split('?');
+
+		// Ignore language codes or any initial two-letter or specific codes like 'ru', 'ur'
+		const segments = pathname
+			.split('/')
+			.filter((seg) => seg && seg.length > 2)
+			.map((seg) => {
+				// Replace dashes with spaces in the segment if it looks like a UUID or has digits (likely an ID)
+				if (seg.includes('-') || /\d/.test(seg)) {
+					return ''; // Exclude IDs from title
+				}
+				return seg.charAt(0).toUpperCase() + seg.slice(1).toLowerCase(); // Capitalize non-ID segments
+			})
+			.filter((seg: string) => seg); // Remove empty strings resulting from ID exclusion
+
+		// Process query parameters, specifically looking for 'name'
+		let namePart = '';
+		if (queryString) {
+			const params = new URLSearchParams(queryString);
+			if (params?.get('name')) {
+				const name = params.get('name') ?? '';
+				const nameValue = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+				namePart = nameValue;
+			}
+		}
+
+		// Combine the pathname segments with the name part, if present
+		const title = [...segments, namePart].filter((part) => part).join(' | ');
+
+		return title;
+	};
+
+	const name = searchParams?.get('name');
+
+	useEffect(() => {
+		if (!isApiWork && !loading) router.push(`/maintenance`);
+		else if (isApiWork && pathname?.split('/').reverse()[0] === 'maintenance') router.replace('/');
+	}, [isApiWork, loading, router, pathname]);
+
+	// Validate that the incoming `locale` parameter is valid
+	if (!LOCALES.includes(locale as string)) {
+		notFound();
+	}
+
+	const messages = require(`@/locales/${locale}.json`);
+	return (
+		<html lang={locale} className={`${font.variable} ${font.className}`} suppressHydrationWarning>
+			<head>
+				<title>{formatTitle(`${pathname}${name ? `?name=${name}` : ''}`) || 'Home'}</title>
+			</head>
+			{/* <head>
+				<link rel="preconnect" href="https://fonts.googleapis.com" />
+				<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+				{GA_MEASUREMENT_ID.value && (
+					<>
+						<script src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID.value}`} async />
+						<script async id="google-analytic-script">
+							{` window.dataLayer = window.dataLayer || [];
+					  function gtag(){dataLayer.push(arguments);}
+					  gtag('js', new Date());
+					  gtag('config', '${GA_MEASUREMENT_ID.value}');`}
+						</script>
+					</>
+				)}
+			</head> */}
+			<NextIntlClientProvider locale={locale} messages={messages} timeZone="Asia/Kolkata">
+				<PHProvider>
+					<body
+						className={cn(
+							'flex h-full flex-col overflow-x-hidden min-w-fit w-full dark:!bg-[#191A20] !bg-gray-100 antialiased '
+						)}
+					>
+						<PostHogPageView />
+
+						<NextAuthSessionProvider>
+							<JotaiProvider>
+								<ThemeProvider
+									attribute="class"
+									defaultTheme="system"
+									enableSystem
+									disableTransitionOnChange
+								>
+									<OfflineWrapper>
+										<JitsuRoot>{children}</JitsuRoot>
+									</OfflineWrapper>
+								</ThemeProvider>
+							</JotaiProvider>
+						</NextAuthSessionProvider>
+					</body>
+				</PHProvider>
+			</NextIntlClientProvider>
+		</html>
+	);
+};
+
+export default LocaleLayout;

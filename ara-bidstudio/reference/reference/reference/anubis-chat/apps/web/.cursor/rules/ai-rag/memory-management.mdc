@@ -1,0 +1,660 @@
+---
+category: ai-rag
+subcategory: memory
+tags: [context-window, memory-management, conversation-state]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./ai-models.mdc", "./prompt-engineering.mdc"]
+  exports: ["memory-patterns", "context-optimization"]
+  references: ["../backend/session-management.mdc"]
+---
+
+# Memory Management & Context Window Optimization
+
+## Context Window Management
+
+### Model Context Limits (2025)
+```typescript
+export const CONTEXT_LIMITS = {
+  'claude-3.5-sonnet': {
+    maxTokens: 200000,
+    optimalWindow: 180000,
+    reserveForResponse: 8192,
+    effectiveInput: 171808
+  },
+  'gpt-4o': {
+    maxTokens: 128000,
+    optimalWindow: 120000,
+    reserveForResponse: 4096,
+    effectiveInput: 115904
+  },
+  'deepseek-chat': {
+    maxTokens: 32768,
+    optimalWindow: 30000,
+    reserveForResponse: 4096,
+    effectiveInput: 25904
+  }
+} as const;
+
+export function getEffectiveContextWindow(
+  modelName: keyof typeof CONTEXT_LIMITS
+): number {
+  return CONTEXT_LIMITS[modelName].effectiveInput;
+}
+```
+
+### Token Estimation
+```typescript
+export class TokenEstimator {
+  private static readonly CHAR_TO_TOKEN_RATIO = {
+    'english': 4.0,
+    'code': 3.5,
+    'json': 3.2,
+    'markdown': 4.2,
+  };
+
+  static estimate(text: string, contentType: keyof typeof this.CHAR_TO_TOKEN_RATIO = 'english'): number {
+    const ratio = this.CHAR_TO_TOKEN_RATIO[contentType];
+    return Math.ceil(text.length / ratio);
+  }
+
+  static estimateWithBreakdown(content: {
+    systemPrompt: string;
+    context: string;
+    conversation: string;
+    userQuery: string;
+  }): TokenBreakdown {
+    return {
+      systemPrompt: this.estimate(content.systemPrompt),
+      context: this.estimate(content.context, 'markdown'),
+      conversation: this.estimate(content.conversation),
+      userQuery: this.estimate(content.userQuery),
+      total: Object.values(content).reduce((sum, text) => sum + this.estimate(text), 0)
+    };
+  }
+}
+
+interface TokenBreakdown {
+  systemPrompt: number;
+  context: number;
+  conversation: number;
+  userQuery: number;
+  total: number;
+}
+```
+
+## Conversation Memory Management
+
+### Sliding Window Memory
+```typescript
+export class SlidingWindowMemory {
+  private maxTokens: number;
+  private messages: ConversationMessage[];
+  private systemPromptTokens: number;
+
+  constructor(
+    modelName: keyof typeof CONTEXT_LIMITS,
+    systemPromptSize = 1000
+  ) {
+    this.maxTokens = getEffectiveContextWindow(modelName) * 0.6; // Reserve space for context
+    this.systemPromptTokens = systemPromptSize;
+    this.messages = [];
+  }
+
+  addMessage(message: ConversationMessage): void {
+    this.messages.push({
+      ...message,
+      tokens: TokenEstimator.estimate(message.content),
+      timestamp: Date.now()
+    });
+
+    this.trimToFit();
+  }
+
+  getMessages(includeSystem = true): ConversationMessage[] {
+    const messages = [...this.messages];
+    
+    if (includeSystem && messages.length > 0) {
+      // Ensure we have user-assistant pairs
+      return this.balanceConversation(messages);
+    }
+
+    return messages;
+  }
+
+  getCurrentTokenCount(): number {
+    return this.messages.reduce((sum, msg) => sum + (msg.tokens || 0), 0) + this.systemPromptTokens;
+  }
+
+  private trimToFit(): void {
+    let totalTokens = this.getCurrentTokenCount();
+
+    while (totalTokens > this.maxTokens && this.messages.length > 2) {
+      // Always keep the most recent exchange
+      const removedMessage = this.messages.shift();
+      if (removedMessage?.tokens) {
+        totalTokens -= removedMessage.tokens;
+      }
+    }
+
+    // Ensure we don't break conversation pairs
+    if (this.messages.length > 0 && this.messages[0].role === 'assistant') {
+      this.messages.shift();
+    }
+  }
+
+  private balanceConversation(messages: ConversationMessage[]): ConversationMessage[] {
+    const balanced = [];
+    
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      
+      // Ensure alternating pattern
+      if (balanced.length === 0 || 
+          (message.role === 'user' && balanced[balanced.length - 1].role === 'assistant') ||
+          (message.role === 'assistant' && balanced[balanced.length - 1].role === 'user')) {
+        balanced.push(message);
+      }
+    }
+
+    return balanced;
+  }
+
+  // Get conversation summary for context compression
+  async getSummary(): Promise<string> {
+    if (this.messages.length < 6) return '';
+
+    const oldMessages = this.messages.slice(0, -4); // Summarize all but last 2 exchanges
+    const conversation = oldMessages
+      .map(m => `${m.role}: ${m.content}`)
+      .join('\n');
+
+    return `Previous conversation summary:\n${this.summarizeConversation(conversation)}`;
+  }
+
+  private summarizeConversation(conversation: string): string {
+    // Simple extraction of key topics - in production, use AI summarization
+    const sentences = conversation.split(/[.!?]+/);
+    const keyTopics = new Set<string>();
+
+    for (const sentence of sentences) {
+      const words = sentence.toLowerCase().match(/\b\w{4,}\b/g);
+      if (words) {
+        words.slice(0, 3).forEach(word => keyTopics.add(word));
+      }
+    }
+
+    return `The conversation covered: ${Array.from(keyTopics).slice(0, 10).join(', ')}`;
+  }
+}
+
+interface ConversationMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  tokens?: number;
+  timestamp?: number;
+  metadata?: {
+    retrievedContext?: string[];
+    model?: string;
+    temperature?: number;
+  };
+}
+```
+
+### Hierarchical Memory System
+```typescript
+export class HierarchicalMemory {
+  private workingMemory: SlidingWindowMemory;
+  private shortTermMemory: MemoryStore;
+  private longTermMemory: MemoryStore;
+
+  constructor(modelName: keyof typeof CONTEXT_LIMITS) {
+    this.workingMemory = new SlidingWindowMemory(modelName);
+    this.shortTermMemory = new MemoryStore('session', 24 * 60 * 60 * 1000); // 24 hours
+    this.longTermMemory = new MemoryStore('persistent', 30 * 24 * 60 * 60 * 1000); // 30 days
+  }
+
+  async addInteraction(
+    userMessage: string,
+    assistantResponse: string,
+    context?: {
+      retrievedDocs?: string[];
+      model?: string;
+      sessionId?: string;
+    }
+  ): Promise<void> {
+    // Add to working memory
+    this.workingMemory.addMessage({
+      role: 'user',
+      content: userMessage,
+      metadata: context
+    });
+
+    this.workingMemory.addMessage({
+      role: 'assistant',
+      content: assistantResponse,
+      metadata: context
+    });
+
+    // Extract and store important information
+    const importance = await this.calculateImportance(userMessage, assistantResponse);
+    
+    if (importance > 0.7) {
+      await this.longTermMemory.store({
+        content: `Q: ${userMessage}\nA: ${assistantResponse}`,
+        importance,
+        timestamp: Date.now(),
+        sessionId: context?.sessionId,
+        tags: this.extractTags(userMessage + ' ' + assistantResponse)
+      });
+    } else if (importance > 0.4) {
+      await this.shortTermMemory.store({
+        content: `Q: ${userMessage}\nA: ${assistantResponse}`,
+        importance,
+        timestamp: Date.now(),
+        sessionId: context?.sessionId,
+        tags: this.extractTags(userMessage + ' ' + assistantResponse)
+      });
+    }
+  }
+
+  async getRelevantMemories(query: string, limit = 3): Promise<MemoryItem[]> {
+    const [longTerm, shortTerm] = await Promise.all([
+      this.longTermMemory.search(query, limit),
+      this.shortTermMemory.search(query, limit)
+    ]);
+
+    // Combine and sort by relevance
+    return [...longTerm, ...shortTerm]
+      .sort((a, b) => b.relevance - a.relevance)
+      .slice(0, limit);
+  }
+
+  getWorkingMemory(): ConversationMessage[] {
+    return this.workingMemory.getMessages();
+  }
+
+  async buildContextualPrompt(
+    userQuery: string,
+    systemPrompt: string,
+    retrievedContext: string[] = []
+  ): Promise<string> {
+    const sections = [systemPrompt];
+
+    // Add relevant memories
+    const relevantMemories = await this.getRelevantMemories(userQuery, 2);
+    if (relevantMemories.length > 0) {
+      const memoryContext = relevantMemories
+        .map(m => m.content)
+        .join('\n\n');
+      sections.push(`## Relevant Previous Context:\n${memoryContext}`);
+    }
+
+    // Add retrieved context
+    if (retrievedContext.length > 0) {
+      sections.push(`## Retrieved Information:\n${retrievedContext.join('\n\n')}`);
+    }
+
+    // Add working memory (recent conversation)
+    const recentMessages = this.workingMemory.getMessages().slice(-4);
+    if (recentMessages.length > 0) {
+      const conversation = recentMessages
+        .map(m => `${m.role}: ${m.content}`)
+        .join('\n');
+      sections.push(`## Recent Conversation:\n${conversation}`);
+    }
+
+    sections.push(`## Current Query:\n${userQuery}`);
+
+    return this.optimizePromptLength(sections.join('\n\n'));
+  }
+
+  private async calculateImportance(userMessage: string, assistantResponse: string): Promise<number> {
+    // Simple heuristic-based importance scoring
+    let importance = 0.3; // Base importance
+
+    // Code-related interactions are more important
+    if (/```|function|class|import|export/.test(assistantResponse)) {
+      importance += 0.3;
+    }
+
+    // Error handling and troubleshooting
+    if (/error|bug|fix|debug|issue/.test(userMessage.toLowerCase())) {
+      importance += 0.2;
+    }
+
+    // Complex explanations (longer responses)
+    if (assistantResponse.length > 1000) {
+      importance += 0.2;
+    }
+
+    // Questions about specific topics
+    if (/solana|anchor|web3|defi|smart contract/.test(userMessage.toLowerCase())) {
+      importance += 0.2;
+    }
+
+    return Math.min(1.0, importance);
+  }
+
+  private extractTags(text: string): string[] {
+    const tags = new Set<string>();
+    const techKeywords = [
+      'solana', 'anchor', 'web3', 'defi', 'smart contract', 'blockchain',
+      'typescript', 'javascript', 'react', 'nextjs', 'api', 'database',
+      'authentication', 'security', 'performance', 'testing', 'deployment'
+    ];
+
+    const lowercaseText = text.toLowerCase();
+    for (const keyword of techKeywords) {
+      if (lowercaseText.includes(keyword)) {
+        tags.add(keyword);
+      }
+    }
+
+    return Array.from(tags);
+  }
+
+  private optimizePromptLength(prompt: string): string {
+    const maxTokens = 16000; // Conservative limit
+    const estimatedTokens = TokenEstimator.estimate(prompt);
+
+    if (estimatedTokens <= maxTokens) {
+      return prompt;
+    }
+
+    // Truncate sections in order of importance
+    const sections = prompt.split('\n\n## ');
+    const priorities = ['Current Query:', 'Recent Conversation:', 'Retrieved Information:', 'Relevant Previous Context:'];
+
+    let optimized = sections[0]; // System prompt always included
+    let currentTokens = TokenEstimator.estimate(optimized);
+
+    for (const priority of priorities) {
+      const sectionIndex = sections.findIndex(s => s.startsWith(priority));
+      if (sectionIndex > 0) {
+        const section = '## ' + sections[sectionIndex];
+        const sectionTokens = TokenEstimator.estimate(section);
+        
+        if (currentTokens + sectionTokens <= maxTokens) {
+          optimized += '\n\n' + section;
+          currentTokens += sectionTokens;
+        }
+      }
+    }
+
+    return optimized;
+  }
+}
+
+class MemoryStore {
+  private items: Map<string, MemoryItem> = new Map();
+  
+  constructor(
+    private type: 'session' | 'persistent',
+    private ttl: number
+  ) {}
+
+  async store(item: Omit<MemoryItem, 'id' | 'relevance'>): Promise<void> {
+    const id = this.generateId();
+    this.items.set(id, {
+      ...item,
+      id,
+      relevance: 0,
+      expiresAt: Date.now() + this.ttl
+    });
+
+    // Cleanup expired items
+    this.cleanup();
+  }
+
+  async search(query: string, limit: number): Promise<MemoryItem[]> {
+    const queryTokens = new Set(query.toLowerCase().split(/\s+/));
+    const results: MemoryItem[] = [];
+
+    for (const item of this.items.values()) {
+      if (item.expiresAt && item.expiresAt < Date.now()) {
+        continue;
+      }
+
+      const contentTokens = new Set(item.content.toLowerCase().split(/\s+/));
+      const tagTokens = new Set(item.tags.map(t => t.toLowerCase()));
+      
+      // Calculate relevance
+      const contentOverlap = this.calculateOverlap(queryTokens, contentTokens);
+      const tagOverlap = this.calculateOverlap(queryTokens, tagTokens);
+      
+      item.relevance = (contentOverlap * 0.7) + (tagOverlap * 0.3) + (item.importance * 0.2);
+
+      if (item.relevance > 0.1) {
+        results.push(item);
+      }
+    }
+
+    return results
+      .sort((a, b) => b.relevance - a.relevance)
+      .slice(0, limit);
+  }
+
+  private calculateOverlap(set1: Set<string>, set2: Set<string>): number {
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+    return union.size > 0 ? intersection.size / union.size : 0;
+  }
+
+  private cleanup(): void {
+    const now = Date.now();
+    for (const [id, item] of this.items.entries()) {
+      if (item.expiresAt && item.expiresAt < now) {
+        this.items.delete(id);
+      }
+    }
+  }
+
+  private generateId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+}
+
+interface MemoryItem {
+  id: string;
+  content: string;
+  importance: number;
+  relevance: number;
+  timestamp: number;
+  sessionId?: string;
+  tags: string[];
+  expiresAt?: number;
+}
+```
+
+## Context Compression Strategies
+
+### Smart Context Compression
+```typescript
+export class ContextCompressor {
+  async compressContext(
+    contexts: string[],
+    targetTokens: number,
+    preserveImportant = true
+  ): Promise<string> {
+    if (contexts.length === 0) return '';
+
+    let combined = contexts.join('\n\n---\n\n');
+    let currentTokens = TokenEstimator.estimate(combined);
+
+    if (currentTokens <= targetTokens) {
+      return combined;
+    }
+
+    // Strategy 1: Remove least important contexts
+    if (preserveImportant) {
+      const scoredContexts = contexts.map(ctx => ({
+        content: ctx,
+        score: this.calculateContextImportance(ctx)
+      }));
+
+      scoredContexts.sort((a, b) => b.score - a.score);
+
+      combined = '';
+      for (const scored of scoredContexts) {
+        const newLength = TokenEstimator.estimate(combined + '\n\n---\n\n' + scored.content);
+        if (newLength <= targetTokens) {
+          combined += (combined ? '\n\n---\n\n' : '') + scored.content;
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Strategy 2: Sentence-level compression if still too long
+    if (TokenEstimator.estimate(combined) > targetTokens) {
+      combined = this.compressBySentence(combined, targetTokens);
+    }
+
+    return combined;
+  }
+
+  private calculateContextImportance(context: string): number {
+    let score = 0.5; // Base score
+
+    // Code examples are important
+    if (context.includes('```')) score += 0.3;
+
+    // Specific API references
+    if (/\b\w+\.\w+\(/g.test(context)) score += 0.2;
+
+    // Error messages and solutions
+    if (/error|exception|fix|solution/i.test(context)) score += 0.2;
+
+    // Length penalty for very long contexts
+    if (context.length > 2000) score -= 0.1;
+
+    // Recency bonus (if timestamp available)
+    // This would be implemented with actual timestamp data
+
+    return Math.min(1.0, Math.max(0.0, score));
+  }
+
+  private compressBySentence(text: string, targetTokens: number): string {
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    let compressed = '';
+    let currentTokens = 0;
+
+    for (const sentence of sentences) {
+      const sentenceTokens = TokenEstimator.estimate(sentence);
+      if (currentTokens + sentenceTokens <= targetTokens) {
+        compressed += sentence + '. ';
+        currentTokens += sentenceTokens;
+      } else {
+        break;
+      }
+    }
+
+    return compressed.trim();
+  }
+
+  // Extract key information from contexts
+  extractKeyPoints(contexts: string[], maxPoints = 5): string[] {
+    const allSentences = contexts
+      .flatMap(ctx => ctx.split(/[.!?]+/))
+      .filter(s => s.trim().length > 20);
+
+    const scoredSentences = allSentences.map(sentence => ({
+      content: sentence.trim(),
+      score: this.calculateSentenceImportance(sentence)
+    }));
+
+    return scoredSentences
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxPoints)
+      .map(s => s.content);
+  }
+
+  private calculateSentenceImportance(sentence: string): number {
+    let score = 0;
+
+    // Technical terms
+    if (/\b(?:function|class|interface|type|async|await|import|export)\b/i.test(sentence)) {
+      score += 0.3;
+    }
+
+    // Actionable content
+    if (/\b(?:should|must|need to|important|note|warning)\b/i.test(sentence)) {
+      score += 0.2;
+    }
+
+    // Questions and answers
+    if (/[?]|[Hh]ow to|[Ww]hat is|[Ww]hy/.test(sentence)) {
+      score += 0.2;
+    }
+
+    // Code references
+    if (/`[^`]+`/.test(sentence)) {
+      score += 0.1;
+    }
+
+    return score;
+  }
+}
+```
+
+## Testing Memory Management
+
+### Unit Tests
+```typescript
+describe('Memory Management', () => {
+  let slidingMemory: SlidingWindowMemory;
+
+  beforeEach(() => {
+    slidingMemory = new SlidingWindowMemory('claude-3.5-sonnet', 1000);
+  });
+
+  it('should maintain conversation within token limits', () => {
+    // Add many messages
+    for (let i = 0; i < 100; i++) {
+      slidingMemory.addMessage({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `Message ${i} `.repeat(50) // ~50 tokens each
+      });
+    }
+
+    const tokenCount = slidingMemory.getCurrentTokenCount();
+    const maxTokens = getEffectiveContextWindow('claude-3.5-sonnet') * 0.6;
+    
+    expect(tokenCount).toBeLessThanOrEqual(maxTokens);
+  });
+
+  it('should preserve conversation balance', () => {
+    slidingMemory.addMessage({ role: 'user', content: 'Hello' });
+    slidingMemory.addMessage({ role: 'assistant', content: 'Hi there' });
+    slidingMemory.addMessage({ role: 'user', content: 'How are you?' });
+
+    const messages = slidingMemory.getMessages();
+    const roles = messages.map(m => m.role);
+    
+    // Should alternate user/assistant
+    for (let i = 0; i < roles.length - 1; i++) {
+      expect(roles[i]).not.toBe(roles[i + 1]);
+    }
+  });
+
+  it('should compress context to target size', async () => {
+    const compressor = new ContextCompressor();
+    const longContexts = [
+      'A'.repeat(1000),
+      'B'.repeat(1000), 
+      'C'.repeat(1000)
+    ];
+
+    const compressed = await compressor.compressContext(longContexts, 500);
+    const tokens = TokenEstimator.estimate(compressed);
+    
+    expect(tokens).toBeLessThanOrEqual(500);
+    expect(compressed.length).toBeGreaterThan(0);
+  });
+});
+```

@@ -1,0 +1,104 @@
+---
+title: Using Docker Compose
+slug: self-hosting/using-docker-compose
+description: Self-host Papra using Docker Compose.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+This guide covers how to deploy Papra using Docker Compose, ideal for users who prefer declarative configurations or plan to integrate Papra into a broader service stack.
+
+Using Docker Compose provides:
+- A single, versioned configuration file
+- Easy integration with volumes, networks, and service dependencies
+- Simplified updates and re-deployments
+
+This method supports both `rootless` and `rootful` Papra images, please refer to the [Docker](/self-hosting/using-docker) guide for more information about the difference between the two. The following example uses the recommended `rootless` setup.
+
+## Prerequisites
+
+Ensure Docker and Docker Compose are installed on your host system. Official installation guides are available at: [docker.com/get-started](https://www.docker.com/get-started)
+
+Verify Docker installation with:
+
+```bash
+docker --version
+docker compose version
+```
+
+
+<Steps>
+
+1. Initialize Project Structure
+
+    Create working directory and persistent storage subdirectories:
+
+    ```bash
+    mkdir -p papra/app-data/{db,documents} && cd papra
+    ```
+
+2. Create Docker Compose file
+
+    Create a file named `docker-compose.yml` with the following content:
+
+    ```yaml
+    services:
+      papra:
+        container_name: papra
+        image: ghcr.io/papra-hq/papra:latest
+        restart: unless-stopped
+        ports:
+          - "1221:1221"
+        volumes:
+          - ./app-data:/app/app-data
+        user: "${UID}:${GID}"
+    ```
+
+3. Start Papra
+
+    From the directory containing your `docker-compose.yml` file, run:
+
+    ```bash
+    UID=$(id -u) GID=$(id -g) docker compose up -d
+    ```
+
+    This command downloads the latest Papra image, sets up the container, and starts the Papra service. The `UID` and `GID` variables are used to set the user and group for the container, ensuring proper file ownership. If you don't want to use the `UID` and `GID` variables, you can replace the image with the rootful variant.
+
+4. Access Papra
+
+    Once your container is running, access Papra via your browser at:
+
+    ```
+    http://localhost:1221
+    ```
+
+    Your Papra instance is now ready for use!
+
+5. To go further
+
+    Check the [configuration](/self-hosting/configuration) page for more information on how to configure your Papra instance.
+
+</Steps>
+
+## Maintenance
+
+Check logs
+
+```bash
+docker compose logs -f
+```
+
+Stop the service
+
+```bash
+docker compose down
+```
+
+Update Papra
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+You're all set! Enjoy managing your documents with Papra.

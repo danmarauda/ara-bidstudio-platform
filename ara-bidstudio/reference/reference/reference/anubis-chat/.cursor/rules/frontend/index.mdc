@@ -1,0 +1,493 @@
+---
+category: frontend
+subcategory: overview
+tags: [frontend, nextjs, react, typescript, tailwind, components, overview, navigation]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["../architecture/index.mdc"]
+  exports: ["frontend-architecture", "component-patterns", "state-management"]
+  references: [
+    "./components.mdc",
+    "./styling.mdc",
+    "./state-management.mdc",
+    "./routing.mdc",
+    "./accessibility.mdc",
+    "./animations.mdc",
+    "./wallet-integration.mdc"
+  ]
+---
+
+# Frontend Development Guidelines
+
+Comprehensive frontend development standards for ANUBIS Chat using Next.js 15, React 19, and TypeScript.
+
+## Architecture Overview
+
+### Technology Stack
+- **Framework**: Next.js 15 with App Router
+- **UI Library**: React 19 with Server Components
+- **Language**: TypeScript 5.7+ (strict mode)
+- **Styling**: Tailwind CSS 4.0 with CSS Variables
+- **Components**: Shadcn UI with Radix UI primitives
+- **State Management**: Zustand + TanStack Query for client, Convex for server
+- **Forms**: React Hook Form with Zod validation
+- **Animation**: Framer Motion with Layout animations
+- **Wallet**: Solana wallet adapters (Phantom, Solflare)
+- **PWA**: Next.js PWA plugin
+
+## Component Architecture
+
+### Component Types
+```typescript
+// Server Component (default)
+export default async function ChatList() {
+  const chats = await getChats() // Direct data fetching
+  return <div>{/* UI */}</div>
+}
+
+// Client Component (interactive)
+'use client'
+export function ChatInput() {
+  const [message, setMessage] = useState('')
+  return <input onChange={(e) => setMessage(e.target.value)} />
+}
+
+// Hybrid Pattern
+export default async function ChatPage() {
+  const data = await fetchData() // Server
+  return (
+    <>
+      <ChatDisplay data={data} /> {/* Server */}
+      <ChatInput /> {/* Client */}
+    </>
+  )
+}
+```
+
+### Component Organization
+```
+src/components/
+├── ui/              # Shadcn UI primitives
+│   ├── button.tsx
+│   ├── dialog.tsx
+│   └── card.tsx
+├── features/        # Feature-specific components
+│   ├── chat/
+│   ├── auth/
+│   └── wallet/
+├── layouts/         # Layout components
+│   ├── header.tsx
+│   └── sidebar.tsx
+└── providers/       # Context providers
+    ├── theme-provider.tsx
+    └── wallet-provider.tsx
+```
+
+## Server Components Best Practices
+
+### Data Fetching
+```typescript
+// Parallel data fetching
+export default async function Dashboard() {
+  const [user, chats, stats] = await Promise.all([
+    getUser(),
+    getChats(),
+    getStats()
+  ])
+  
+  return (
+    <div>
+      <UserProfile user={user} />
+      <ChatList chats={chats} />
+      <Statistics stats={stats} />
+    </div>
+  )
+}
+
+// Streaming with Suspense
+export default function Page() {
+  return (
+    <>
+      <Header />
+      <Suspense fallback={<ChatSkeleton />}>
+        <ChatList /> {/* Async component */}
+      </Suspense>
+    </>
+  )
+}
+```
+
+## State Management Patterns
+
+### Client State (Zustand)
+```typescript
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+interface ChatStore {
+  messages: Message[]
+  addMessage: (message: Message) => void
+  clearChat: () => void
+}
+
+export const useChatStore = create<ChatStore>()(
+  persist(
+    (set) => ({
+      messages: [],
+      addMessage: (message) => 
+        set((state) => ({ 
+          messages: [...state.messages, message] 
+        })),
+      clearChat: () => set({ messages: [] })
+    }),
+    { name: 'chat-storage' }
+  )
+)
+```
+
+### Server State (Convex)
+```typescript
+// Real-time subscriptions
+import { useQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
+
+export function ChatMessages() {
+  const messages = useQuery(api.messages.list)
+  
+  if (!messages) return <Loading />
+  
+  return (
+    <div>
+      {messages.map(msg => (
+        <Message key={msg._id} {...msg} />
+      ))}
+    </div>
+  )
+}
+```
+
+## Styling System
+
+### Tailwind Configuration
+```javascript
+// tailwind.config.js
+export default {
+  content: ['./src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: 'hsl(var(--brand-50))',
+          // ... color scale
+        }
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.5s ease-in-out',
+        'slide-up': 'slideUp 0.3s ease-out'
+      }
+    }
+  }
+}
+```
+
+### Component Styling
+```typescript
+import { cn } from '@/lib/utils'
+
+interface ButtonProps {
+  variant?: 'primary' | 'secondary' | 'ghost'
+  size?: 'sm' | 'md' | 'lg'
+  className?: string
+}
+
+export function Button({ 
+  variant = 'primary',
+  size = 'md',
+  className,
+  ...props 
+}: ButtonProps) {
+  return (
+    <button
+      className={cn(
+        'inline-flex items-center justify-center rounded-md font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2',
+        'disabled:pointer-events-none disabled:opacity-50',
+        {
+          'bg-brand-600 text-white hover:bg-brand-700': variant === 'primary',
+          'bg-gray-100 text-gray-900 hover:bg-gray-200': variant === 'secondary',
+          'hover:bg-gray-100': variant === 'ghost',
+          'h-8 px-3 text-sm': size === 'sm',
+          'h-10 px-4': size === 'md',
+          'h-12 px-6 text-lg': size === 'lg'
+        },
+        className
+      )}
+      {...props}
+    />
+  )
+}
+```
+
+## Form Handling
+
+### React Hook Form + Zod
+```typescript
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+
+const chatSchema = z.object({
+  message: z.string().min(1).max(1000),
+  model: z.enum(['claude-3.5', 'gpt-4o', 'deepseeek-v3']),
+  temperature: z.number().min(0).max(1)
+})
+
+type ChatForm = z.infer<typeof chatSchema>
+
+export function ChatForm() {
+  const form = useForm<ChatForm>({
+    resolver: zodResolver(chatSchema),
+    defaultValues: {
+      model: 'claude-3.5',
+      temperature: 0.7
+    }
+  })
+  
+  const onSubmit = async (data: ChatForm) => {
+    try {
+      await sendChat(data)
+      form.reset()
+    } catch (error) {
+      form.setError('root', { 
+        message: 'Failed to send message' 
+      })
+    }
+  }
+  
+  return (
+    <form onSubmit={form.handleSubmit(onSubmit)}>
+      <input {...form.register('message')} />
+      {form.formState.errors.message && (
+        <span>{form.formState.errors.message.message}</span>
+      )}
+      <button type="submit">Send</button>
+    </form>
+  )
+}
+```
+
+## Performance Optimization
+
+### Image Optimization
+```typescript
+import Image from 'next/image'
+
+export function Avatar({ src, alt }: Props) {
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      width={40}
+      height={40}
+      quality={85}
+      placeholder="blur"
+      blurDataURL={shimmer}
+      loading="lazy"
+    />
+  )
+}
+```
+
+### Code Splitting
+```typescript
+import dynamic from 'next/dynamic'
+
+// Lazy load heavy components
+const RichTextEditor = dynamic(
+  () => import('@/components/RichTextEditor'),
+  { 
+    loading: () => <EditorSkeleton />,
+    ssr: false 
+  }
+)
+
+// Route-based splitting (automatic with App Router)
+export default function Page() {
+  return <RichTextEditor />
+}
+```
+
+### Memoization
+```typescript
+import { memo, useMemo, useCallback } from 'react'
+
+// Memoize expensive components
+export const ExpensiveList = memo(function ExpensiveList({ items }: Props) {
+  return items.map(item => <Item key={item.id} {...item} />)
+})
+
+// Memoize expensive computations
+function useFilteredItems(items: Item[], filter: string) {
+  return useMemo(
+    () => items.filter(item => item.name.includes(filter)),
+    [items, filter]
+  )
+}
+
+// Memoize callbacks
+function useItemHandler() {
+  return useCallback((id: string) => {
+    // Handle item
+  }, [])
+}
+```
+
+## Accessibility Standards
+
+### WCAG 2.1 AA Compliance
+```typescript
+export function Modal({ isOpen, onClose, title, children }: Props) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent
+        aria-labelledby="modal-title"
+        aria-describedby="modal-description"
+      >
+        <DialogHeader>
+          <DialogTitle id="modal-title">{title}</DialogTitle>
+        </DialogHeader>
+        <div id="modal-description">
+          {children}
+        </div>
+        <DialogClose asChild>
+          <button aria-label="Close modal">×</button>
+        </DialogClose>
+      </DialogContent>
+    </Dialog>
+  )
+}
+```
+
+### Keyboard Navigation
+```typescript
+export function Menu() {
+  const [focusedIndex, setFocusedIndex] = useState(0)
+  
+  const handleKeyDown = (e: KeyboardEvent) => {
+    switch(e.key) {
+      case 'ArrowDown':
+        setFocusedIndex(i => (i + 1) % items.length)
+        break
+      case 'ArrowUp':
+        setFocusedIndex(i => (i - 1 + items.length) % items.length)
+        break
+      case 'Enter':
+        selectItem(focusedIndex)
+        break
+      case 'Escape':
+        closeMenu()
+        break
+    }
+  }
+  
+  return (
+    <div role="menu" onKeyDown={handleKeyDown}>
+      {items.map((item, i) => (
+        <div
+          key={item.id}
+          role="menuitem"
+          tabIndex={i === focusedIndex ? 0 : -1}
+          aria-selected={i === focusedIndex}
+        >
+          {item.label}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+## Testing Frontend
+
+### Component Testing
+```typescript
+import { render, screen, fireEvent } from '@testing-library/react'
+import { ChatInput } from './ChatInput'
+
+describe('ChatInput', () => {
+  it('should handle message submission', async () => {
+    const onSubmit = vi.fn()
+    render(<ChatInput onSubmit={onSubmit} />)
+    
+    const input = screen.getByRole('textbox')
+    const button = screen.getByRole('button', { name: /send/i })
+    
+    fireEvent.change(input, { target: { value: 'Test message' } })
+    fireEvent.click(button)
+    
+    expect(onSubmit).toHaveBeenCalledWith('Test message')
+    expect(input).toHaveValue('')
+  })
+})
+```
+
+## Progressive Web App
+
+### PWA Configuration
+```javascript
+// next.config.js
+import withPWA from 'next-pwa'
+
+export default withPWA({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+  runtimeCaching: [
+    {
+      urlPattern: /^https:\/\/api\.anubis\.chat\/.*/i,
+      handler: 'NetworkFirst',
+      options: {
+        cacheName: 'api-cache',
+        expiration: {
+          maxEntries: 32,
+          maxAgeSeconds: 24 * 60 * 60 // 24 hours
+        }
+      }
+    }
+  ]
+})
+```
+
+## Error Boundaries
+
+```typescript
+'use client'
+
+import { ErrorBoundary } from 'react-error-boundary'
+
+function ErrorFallback({ error, resetErrorBoundary }: Props) {
+  return (
+    <div role="alert" className="p-4 border border-red-500 rounded">
+      <h2>Something went wrong:</h2>
+      <pre className="text-sm">{error.message}</pre>
+      <button onClick={resetErrorBoundary}>Try again</button>
+    </div>
+  )
+}
+
+export function ChatContainer() {
+  return (
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onReset={() => window.location.reload()}
+    >
+      <Chat />
+    </ErrorBoundary>
+  )
+}
+```

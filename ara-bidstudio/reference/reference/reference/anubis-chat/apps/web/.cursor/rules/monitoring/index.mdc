@@ -1,0 +1,320 @@
+---
+category: monitoring
+subcategory: overview
+tags: [monitoring, observability, alerting]
+cursor:
+  context_window: 8192
+  temperature: 0.5
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../deployment/index.mdc", "../architecture/performance.mdc"]
+  exports: ["monitoring-strategies", "alerting-patterns"]
+  references: ["../backend/caching.mdc", "../ai-rag/memory-management.mdc"]
+---
+
+# Monitoring & Observability
+
+::alert{type="info"}
+Comprehensive monitoring and observability strategy for abubis.chat's distributed architecture.
+::
+
+## Overview
+
+abubis.chat implements a multi-layer observability stack providing real-time insights into system health, performance, and user experience.
+
+## Monitoring Stack
+
+### Core Components
+
+::tabs
+::tab{label="Application Monitoring"}
+```typescript
+// Vercel Analytics
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/next';
+
+// Sentry Error Tracking
+import * as Sentry from '@sentry/nextjs';
+
+Sentry.init({
+  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  tracesSampleRate: 0.1,
+  environment: process.env.NODE_ENV,
+});
+```
+::
+
+::tab{label="Infrastructure Monitoring"}
+```yaml
+# Prometheus metrics
+metrics:
+  - name: api_response_time_ms
+    type: histogram
+    buckets: [50, 100, 200, 500, 1000]
+  
+  - name: wallet_connections_total
+    type: counter
+    labels: [wallet_type, success]
+  
+  - name: ai_tokens_used
+    type: counter
+    labels: [model, user_tier]
+```
+::
+
+::tab{label="Custom Metrics"}
+```typescript
+// Custom performance tracking
+export const trackMetric = (name: string, value: number, tags?: Record<string, string>) => {
+  // Send to monitoring service
+  monitor.trackMetric({
+    name,
+    value,
+    timestamp: Date.now(),
+    tags: {
+      ...tags,
+      environment: process.env.NODE_ENV,
+      region: process.env.VERCEL_REGION,
+    },
+  });
+};
+```
+::
+::
+
+## Key Metrics
+
+### Application Metrics
+
+::card
+**User Experience**
+- Page Load Time (< 3s target)
+- Time to First Byte (< 200ms)
+- Core Web Vitals (LCP, FID, CLS)
+- JavaScript Error Rate (< 0.1%)
+- API Response Time (< 500ms P95)
+::
+
+::card
+**Business Metrics**
+- Active Users (DAU/MAU)
+- Subscription Conversions
+- Message Volume
+- RAG Document Uploads
+- Wallet Connection Success Rate
+::
+
+### System Metrics
+
+::card
+**Infrastructure Health**
+- CPU Utilization (< 70% average)
+- Memory Usage (< 80% peak)
+- Database Query Time (< 100ms P95)
+- Vector Search Latency (< 100ms)
+- WebSocket Connection Count
+::
+
+::card
+**AI/LLM Metrics**
+- Token Usage by Model
+- Response Generation Time
+- Streaming Latency
+- Context Window Utilization
+- Embedding Generation Rate
+::
+
+## Alerting Strategy
+
+### Alert Severity Levels
+
+::tabs
+::tab{label="Critical"}
+```yaml
+critical:
+  - Service downtime > 1 minute
+  - Error rate > 5%
+  - Database unavailable
+  - Payment processing failure
+  response_time: immediate
+  escalation: PagerDuty
+```
+::
+
+::tab{label="Warning"}
+```yaml
+warning:
+  - Response time > 1s (P95)
+  - Memory usage > 85%
+  - Error rate > 1%
+  - Queue depth > 1000
+  response_time: 15 minutes
+  notification: Slack
+```
+::
+
+::tab{label="Info"}
+```yaml
+info:
+  - New deployment completed
+  - Scheduled maintenance
+  - Traffic spike detected
+  - Cache hit rate < 80%
+  response_time: business hours
+  notification: Email
+```
+::
+::
+
+## Dashboards
+
+### Real-Time Dashboard
+
+```typescript
+export const RealtimeDashboard = {
+  panels: [
+    {
+      title: "Active Users",
+      query: "SELECT COUNT(DISTINCT wallet) FROM sessions WHERE last_seen > NOW() - INTERVAL '5 minutes'",
+      visualization: "gauge",
+    },
+    {
+      title: "Message Throughput",
+      query: "rate(messages_created_total[5m])",
+      visualization: "line",
+    },
+    {
+      title: "AI Response Time",
+      query: "histogram_quantile(0.95, ai_response_time_bucket)",
+      visualization: "heatmap",
+    },
+  ],
+};
+```
+
+## Logging Architecture
+
+### Structured Logging
+
+```typescript
+import pino from 'pino';
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level: (label) => ({ level: label }),
+    bindings: () => ({
+      service: 'anubis-chat',
+      environment: process.env.NODE_ENV,
+      version: process.env.npm_package_version,
+    }),
+  },
+});
+
+// Usage
+logger.info({
+  action: 'wallet_connected',
+  wallet: walletAddress,
+  provider: walletProvider,
+  timestamp: Date.now(),
+});
+```
+
+### Log Aggregation
+
+::alert{type="info"}
+All logs are aggregated in real-time for analysis and alerting.
+::
+
+- **Application Logs**: Vercel Logs
+- **Function Logs**: Convex Dashboard
+- **Error Logs**: Sentry
+- **Audit Logs**: Custom PostgreSQL
+
+## Performance Monitoring
+
+### Core Web Vitals Tracking
+
+```typescript
+export function reportWebVitals(metric: NextWebVitalsMetric) {
+  const vitals = {
+    'FCP': 2000,  // First Contentful Paint
+    'LCP': 2500,  // Largest Contentful Paint
+    'CLS': 0.1,   // Cumulative Layout Shift
+    'FID': 100,   // First Input Delay
+    'TTFB': 600,  // Time to First Byte
+  };
+
+  if (vitals[metric.name] && metric.value > vitals[metric.name]) {
+    console.warn(`Performance degradation detected: ${metric.name} = ${metric.value}`);
+    trackMetric(`web_vital_${metric.name}`, metric.value);
+  }
+}
+```
+
+## Distributed Tracing
+
+### OpenTelemetry Integration
+
+```typescript
+import { trace } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('anubis-chat');
+
+export async function processMessage(message: string, wallet: string) {
+  const span = tracer.startSpan('process_message');
+  
+  try {
+    span.setAttributes({
+      'wallet.address': wallet,
+      'message.length': message.length,
+    });
+    
+    // Process message
+    const result = await ai.generate(message);
+    
+    span.setStatus({ code: SpanStatusCode.OK });
+    return result;
+  } catch (error) {
+    span.recordException(error);
+    span.setStatus({ code: SpanStatusCode.ERROR });
+    throw error;
+  } finally {
+    span.end();
+  }
+}
+```
+
+## Health Checks
+
+### Endpoint Monitoring
+
+```typescript
+// /api/health
+export async function GET() {
+  const checks = {
+    database: await checkDatabase(),
+    vector_db: await checkVectorDB(),
+    blockchain: await checkSolanaRPC(),
+    ai_service: await checkAIService(),
+  };
+
+  const healthy = Object.values(checks).every(c => c.status === 'healthy');
+  
+  return Response.json({
+    status: healthy ? 'healthy' : 'degraded',
+    checks,
+    timestamp: Date.now(),
+  }, {
+    status: healthy ? 200 : 503,
+  });
+}
+```
+
+## Related Documentation
+
+- [Performance Optimization](../architecture/performance.mdc)
+- [Deployment Strategy](../deployment/index.mdc)
+- [Caching Patterns](../backend/caching.mdc)
+- [AI Memory Management](../ai-rag/memory-management.mdc)

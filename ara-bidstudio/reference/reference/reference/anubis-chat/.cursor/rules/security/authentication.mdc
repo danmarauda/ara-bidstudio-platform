@@ -1,0 +1,666 @@
+---
+category: security
+subcategory: authentication
+tags: [wallet-auth, siwe, signature-verification, session-management]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["../web3/wallet-auth.mdc"]
+  exports: ["auth-security-patterns", "signature-validation"]
+  references: ["./data-isolation.mdc"]
+---
+
+# Authentication Security Patterns
+
+## Wallet-Based Authentication Security
+
+### 1. Secure Message Construction
+```typescript
+interface AuthenticationMessage {
+  domain: string;
+  publicKey: string;
+  statement: string;
+  uri: string;
+  version: string;
+  chainId: number;
+  nonce: string;
+  issuedAt: string;
+  expirationTime: string;
+  notBefore?: string;
+  requestId?: string;
+  resources?: string[];
+}
+
+export function createSecureAuthMessage(
+  publicKey: string,
+  nonce: string
+): AuthenticationMessage {
+  const now = new Date();
+  const expirationTime = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes
+  
+  return {
+    domain: window.location.host,
+    publicKey,
+    statement: 'Sign in to abubis.chat',
+    uri: window.location.origin,
+    version: '1',
+    chainId: 1, // Solana mainnet
+    nonce,
+    issuedAt: now.toISOString(),
+    expirationTime: expirationTime.toISOString(),
+    notBefore: now.toISOString(),
+    requestId: generateSecureId(),
+    resources: [
+      'https://abubis.chat/api/chat',
+      'https://abubis.chat/api/memory',
+      'https://abubis.chat/api/subscription'
+    ]
+  };
+}
+
+function generateSecureId(): string {
+  return crypto.getRandomValues(new Uint8Array(16))
+    .reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '');
+}
+```
+
+### 2. Server-Side Signature Verification
+```typescript
+import { PublicKey } from '@solana/web3.js';
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
+import { createHash } from 'crypto';
+
+export interface SignatureVerificationResult {
+  isValid: boolean;
+  publicKey?: string;
+  error?: string;
+  metadata?: {
+    messageHash: string;
+    timestamp: number;
+    expiresAt: number;
+  };
+}
+
+export class SecureSignatureVerifier {
+  private nonceStore: Map<string, { nonce: string; expires: number; used: boolean }> = new Map();
+  private readonly NONCE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly MESSAGE_TTL = 15 * 60 * 1000; // 15 minutes
+
+  public async verifyWalletSignature(
+    message: string,
+    signature: string,
+    expectedPublicKey: string
+  ): Promise<SignatureVerificationResult> {
+    try {
+      // Decode inputs
+      const messageBytes = bs58.decode(message);
+      const signatureBytes = bs58.decode(signature);
+      const publicKeyBytes = new PublicKey(expectedPublicKey).toBytes();
+
+      // Verify cryptographic signature
+      const isValidSignature = nacl.sign.detached.verify(
+        messageBytes,
+        signatureBytes,
+        publicKeyBytes
+      );
+
+      if (!isValidSignature) {
+        return { isValid: false, error: 'Invalid signature' };
+      }
+
+      // Parse message content
+      const messageContent = this.parseAuthMessage(messageBytes);
+      if (!messageContent) {
+        return { isValid: false, error: 'Invalid message format' };
+      }
+
+      // Verify message integrity
+      const integrityCheck = this.verifyMessageIntegrity(messageContent, expectedPublicKey);
+      if (!integrityCheck.isValid) {
+        return { isValid: false, error: integrityCheck.error };
+      }
+
+      // Verify nonce (prevent replay attacks)
+      const nonceCheck = this.verifyAndConsumeNonce(messageContent.nonce, expectedPublicKey);
+      if (!nonceCheck.isValid) {
+        return { isValid: false, error: nonceCheck.error };
+      }
+
+      return {
+        isValid: true,
+        publicKey: expectedPublicKey,
+        metadata: {
+          messageHash: createHash('sha256').update(messageBytes).digest('hex'),
+          timestamp: Date.now(),
+          expiresAt: new Date(messageContent.expirationTime).getTime()
+        }
+      };
+
+    } catch (error) {
+      console.error('Signature verification error:', error);
+      return { 
+        isValid: false, 
+        error: `Verification failed: ${error.message}` 
+      };
+    }
+  }
+
+  private parseAuthMessage(messageBytes: Uint8Array): AuthenticationMessage | null {
+    try {
+      const messageText = new TextDecoder().decode(messageBytes);
+      return JSON.parse(messageText);
+    } catch {
+      return null;
+    }
+  }
+
+  private verifyMessageIntegrity(
+    message: AuthenticationMessage,
+    expectedPublicKey: string
+  ): { isValid: boolean; error?: string } {
+    const now = Date.now();
+    const issuedAt = new Date(message.issuedAt).getTime();
+    const expiresAt = new Date(message.expirationTime).getTime();
+    const notBefore = message.notBefore ? new Date(message.notBefore).getTime() : issuedAt;
+
+    // Verify public key matches
+    if (message.publicKey !== expectedPublicKey) {
+      return { isValid: false, error: 'Public key mismatch' };
+    }
+
+    // Verify domain
+    if (message.domain !== process.env.NEXT_PUBLIC_DOMAIN) {
+      return { isValid: false, error: 'Invalid domain' };
+    }
+
+    // Verify chain ID
+    if (message.chainId !== 1) {
+      return { isValid: false, error: 'Invalid chain ID' };
+    }
+
+    // Verify timing constraints
+    if (now < notBefore) {
+      return { isValid: false, error: 'Message not yet valid' };
+    }
+
+    if (now > expiresAt) {
+      return { isValid: false, error: 'Message has expired' };
+    }
+
+    // Verify message is not too old
+    if (now - issuedAt > this.MESSAGE_TTL) {
+      return { isValid: false, error: 'Message too old' };
+    }
+
+    // Verify statement contains expected text
+    if (!message.statement.includes('abubis.chat')) {
+      return { isValid: false, error: 'Invalid statement' };
+    }
+
+    return { isValid: true };
+  }
+
+  private verifyAndConsumeNonce(
+    nonce: string,
+    publicKey: string
+  ): { isValid: boolean; error?: string } {
+    const nonceKey = `${publicKey}:${nonce}`;
+    const storedNonce = this.nonceStore.get(nonceKey);
+
+    // Check if nonce exists
+    if (!storedNonce) {
+      return { isValid: false, error: 'Invalid or unknown nonce' };
+    }
+
+    // Check if nonce has expired
+    if (Date.now() > storedNonce.expires) {
+      this.nonceStore.delete(nonceKey);
+      return { isValid: false, error: 'Nonce has expired' };
+    }
+
+    // Check if nonce has been used (prevent replay)
+    if (storedNonce.used) {
+      return { isValid: false, error: 'Nonce already used' };
+    }
+
+    // Mark nonce as used
+    storedNonce.used = true;
+
+    return { isValid: true };
+  }
+
+  public createNonce(publicKey: string): string {
+    const nonce = bs58.encode(crypto.getRandomValues(new Uint8Array(32)));
+    const nonceKey = `${publicKey}:${nonce}`;
+    const expires = Date.now() + this.NONCE_TTL;
+
+    this.nonceStore.set(nonceKey, { nonce, expires, used: false });
+
+    // Clean up expired nonces
+    this.cleanupExpiredNonces();
+
+    return nonce;
+  }
+
+  private cleanupExpiredNonces(): void {
+    const now = Date.now();
+    for (const [key, value] of this.nonceStore.entries()) {
+      if (now > value.expires) {
+        this.nonceStore.delete(key);
+      }
+    }
+  }
+}
+```
+
+### 3. Session Security Management
+```typescript
+import jwt from 'jsonwebtoken';
+import { randomBytes } from 'crypto';
+
+export interface SecureSession {
+  publicKey: string;
+  issuedAt: number;
+  expiresAt: number;
+  sessionId: string;
+  permissions: string[];
+  metadata: {
+    userAgent: string;
+    ipAddress: string;
+    lastActivity: number;
+  };
+}
+
+export class SessionSecurityManager {
+  private activeSessions: Map<string, SecureSession> = new Map();
+  private readonly SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+  private readonly ACTIVITY_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours
+  private readonly MAX_SESSIONS_PER_WALLET = 5;
+
+  public createSecureSession(
+    publicKey: string,
+    userAgent: string,
+    ipAddress: string
+  ): { token: string; session: SecureSession } {
+    // Clean up expired sessions
+    this.cleanupExpiredSessions(publicKey);
+
+    // Check session limit
+    const existingSessions = this.getWalletSessions(publicKey);
+    if (existingSessions.length >= this.MAX_SESSIONS_PER_WALLET) {
+      // Remove oldest session
+      const oldestSession = existingSessions.sort((a, b) => a.lastActivity - b.lastActivity)[0];
+      this.revokeSession(oldestSession.sessionId);
+    }
+
+    const now = Date.now();
+    const sessionId = this.generateSecureSessionId();
+    const session: SecureSession = {
+      publicKey,
+      issuedAt: now,
+      expiresAt: now + this.SESSION_DURATION,
+      sessionId,
+      permissions: ['chat', 'memory', 'subscription'],
+      metadata: {
+        userAgent,
+        ipAddress,
+        lastActivity: now
+      }
+    };
+
+    this.activeSessions.set(sessionId, session);
+
+    // Create JWT token
+    const token = jwt.sign(
+      {
+        sub: publicKey,
+        sid: sessionId,
+        iat: Math.floor(now / 1000),
+        exp: Math.floor(session.expiresAt / 1000)
+      },
+      process.env.JWT_SECRET!,
+      {
+        algorithm: 'HS256',
+        issuer: 'abubis.chat',
+        audience: 'abubis.chat'
+      }
+    );
+
+    return { token, session };
+  }
+
+  public validateSession(token: string): {
+    isValid: boolean;
+    session?: SecureSession;
+    error?: string;
+  } {
+    try {
+      // Verify JWT token
+      const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      const sessionId = payload.sid;
+
+      // Get session from store
+      const session = this.activeSessions.get(sessionId);
+      if (!session) {
+        return { isValid: false, error: 'Session not found' };
+      }
+
+      const now = Date.now();
+
+      // Check expiration
+      if (now > session.expiresAt) {
+        this.revokeSession(sessionId);
+        return { isValid: false, error: 'Session expired' };
+      }
+
+      // Check activity timeout
+      if (now - session.metadata.lastActivity > this.ACTIVITY_TIMEOUT) {
+        this.revokeSession(sessionId);
+        return { isValid: false, error: 'Session timed out due to inactivity' };
+      }
+
+      // Update last activity
+      session.metadata.lastActivity = now;
+
+      return { isValid: true, session };
+
+    } catch (error) {
+      return { 
+        isValid: false, 
+        error: `Token validation failed: ${error.message}` 
+      };
+    }
+  }
+
+  public refreshSession(sessionId: string): boolean {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      return false;
+    }
+
+    const now = Date.now();
+
+    // Only refresh if less than half the session duration has passed
+    if (now - session.issuedAt < this.SESSION_DURATION / 2) {
+      return false;
+    }
+
+    // Extend session
+    session.expiresAt = now + this.SESSION_DURATION;
+    session.metadata.lastActivity = now;
+
+    return true;
+  }
+
+  public revokeSession(sessionId: string): boolean {
+    return this.activeSessions.delete(sessionId);
+  }
+
+  public revokeAllWalletSessions(publicKey: string): number {
+    const walletSessions = this.getWalletSessions(publicKey);
+    let revokedCount = 0;
+
+    for (const session of walletSessions) {
+      if (this.revokeSession(session.sessionId)) {
+        revokedCount++;
+      }
+    }
+
+    return revokedCount;
+  }
+
+  private getWalletSessions(publicKey: string): SecureSession[] {
+    return Array.from(this.activeSessions.values()).filter(
+      session => session.publicKey === publicKey
+    );
+  }
+
+  private cleanupExpiredSessions(publicKey?: string): void {
+    const now = Date.now();
+    const sessionsToRemove: string[] = [];
+
+    for (const [sessionId, session] of this.activeSessions.entries()) {
+      if (publicKey && session.publicKey !== publicKey) {
+        continue;
+      }
+
+      if (now > session.expiresAt || 
+          now - session.metadata.lastActivity > this.ACTIVITY_TIMEOUT) {
+        sessionsToRemove.push(sessionId);
+      }
+    }
+
+    for (const sessionId of sessionsToRemove) {
+      this.activeSessions.delete(sessionId);
+    }
+  }
+
+  private generateSecureSessionId(): string {
+    return randomBytes(32).toString('hex');
+  }
+
+  public getSessionStats(): {
+    totalActiveSessions: number;
+    uniqueWallets: number;
+    averageSessionDuration: number;
+    expiringSoon: number;
+  } {
+    const now = Date.now();
+    const sessions = Array.from(this.activeSessions.values());
+    const uniqueWallets = new Set(sessions.map(s => s.publicKey)).size;
+    
+    const averageSessionDuration = sessions.length > 0 
+      ? sessions.reduce((sum, s) => sum + (now - s.issuedAt), 0) / sessions.length
+      : 0;
+    
+    const expiringSoon = sessions.filter(
+      s => s.expiresAt - now < 60 * 60 * 1000 // Expires within 1 hour
+    ).length;
+
+    return {
+      totalActiveSessions: sessions.length,
+      uniqueWallets,
+      averageSessionDuration,
+      expiringSoon
+    };
+  }
+}
+```
+
+### 4. Multi-Factor Authentication (Future Enhancement)
+```typescript
+export interface MFAChallenge {
+  challengeId: string;
+  type: 'hardware_key' | 'totp' | 'backup_codes';
+  publicKey: string;
+  createdAt: number;
+  expiresAt: number;
+  attempts: number;
+}
+
+export class MFAManager {
+  private challenges: Map<string, MFAChallenge> = new Map();
+  private readonly CHALLENGE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private readonly MAX_ATTEMPTS = 3;
+
+  public createMFAChallenge(
+    publicKey: string,
+    type: 'hardware_key' | 'totp' | 'backup_codes'
+  ): string {
+    const challengeId = randomBytes(32).toString('hex');
+    const now = Date.now();
+
+    const challenge: MFAChallenge = {
+      challengeId,
+      type,
+      publicKey,
+      createdAt: now,
+      expiresAt: now + this.CHALLENGE_DURATION,
+      attempts: 0
+    };
+
+    this.challenges.set(challengeId, challenge);
+
+    return challengeId;
+  }
+
+  public async verifyMFAChallenge(
+    challengeId: string,
+    response: string
+  ): Promise<{ isValid: boolean; error?: string }> {
+    const challenge = this.challenges.get(challengeId);
+    
+    if (!challenge) {
+      return { isValid: false, error: 'Invalid challenge' };
+    }
+
+    const now = Date.now();
+    
+    if (now > challenge.expiresAt) {
+      this.challenges.delete(challengeId);
+      return { isValid: false, error: 'Challenge expired' };
+    }
+
+    if (challenge.attempts >= this.MAX_ATTEMPTS) {
+      this.challenges.delete(challengeId);
+      return { isValid: false, error: 'Too many attempts' };
+    }
+
+    challenge.attempts++;
+
+    // Verify based on challenge type
+    let isValid = false;
+    switch (challenge.type) {
+      case 'totp':
+        isValid = await this.verifyTOTP(challenge.publicKey, response);
+        break;
+      case 'backup_codes':
+        isValid = await this.verifyBackupCode(challenge.publicKey, response);
+        break;
+      case 'hardware_key':
+        isValid = await this.verifyHardwareKey(challenge.publicKey, response);
+        break;
+    }
+
+    if (isValid) {
+      this.challenges.delete(challengeId);
+    }
+
+    return { 
+      isValid, 
+      error: isValid ? undefined : 'Invalid MFA response' 
+    };
+  }
+
+  private async verifyTOTP(publicKey: string, token: string): Promise<boolean> {
+    // Implementation would integrate with TOTP library
+    // This is a placeholder for future implementation
+    return false;
+  }
+
+  private async verifyBackupCode(publicKey: string, code: string): Promise<boolean> {
+    // Implementation would check against stored backup codes
+    // This is a placeholder for future implementation
+    return false;
+  }
+
+  private async verifyHardwareKey(publicKey: string, signature: string): Promise<boolean> {
+    // Implementation would verify hardware key signature
+    // This is a placeholder for future implementation
+    return false;
+  }
+}
+```
+
+### 5. Authentication Rate Limiting
+```typescript
+export class AuthenticationRateLimit {
+  private attemptHistory: Map<string, { attempts: number; windowStart: number; blocked: boolean }> = new Map();
+  private readonly MAX_ATTEMPTS = 5;
+  private readonly WINDOW_DURATION = 15 * 60 * 1000; // 15 minutes
+  private readonly BLOCK_DURATION = 60 * 60 * 1000; // 1 hour
+
+  public checkAuthAttempt(
+    identifier: string // Could be wallet address or IP
+  ): { allowed: boolean; remainingAttempts?: number; retryAfter?: number } {
+    const now = Date.now();
+    const record = this.attemptHistory.get(identifier);
+
+    if (!record) {
+      this.attemptHistory.set(identifier, {
+        attempts: 0,
+        windowStart: now,
+        blocked: false
+      });
+      return { allowed: true, remainingAttempts: this.MAX_ATTEMPTS };
+    }
+
+    // Reset window if expired
+    if (now - record.windowStart > this.WINDOW_DURATION) {
+      record.attempts = 0;
+      record.windowStart = now;
+      record.blocked = false;
+    }
+
+    // Check if blocked
+    if (record.blocked) {
+      const retryAfter = record.windowStart + this.BLOCK_DURATION - now;
+      if (retryAfter > 0) {
+        return { allowed: false, retryAfter };
+      }
+      // Block period expired
+      record.blocked = false;
+      record.attempts = 0;
+      record.windowStart = now;
+    }
+
+    // Check attempt limit
+    if (record.attempts >= this.MAX_ATTEMPTS) {
+      record.blocked = true;
+      const retryAfter = record.windowStart + this.BLOCK_DURATION - now;
+      return { allowed: false, retryAfter };
+    }
+
+    return { 
+      allowed: true, 
+      remainingAttempts: this.MAX_ATTEMPTS - record.attempts 
+    };
+  }
+
+  public recordAuthAttempt(identifier: string, success: boolean): void {
+    const record = this.attemptHistory.get(identifier);
+    if (!record) return;
+
+    if (success) {
+      // Reset on successful authentication
+      record.attempts = 0;
+      record.blocked = false;
+    } else {
+      // Increment failed attempts
+      record.attempts++;
+    }
+  }
+
+  public getAttemptStats(): {
+    totalIdentifiers: number;
+    blockedIdentifiers: number;
+    averageAttempts: number;
+  } {
+    const records = Array.from(this.attemptHistory.values());
+    const blocked = records.filter(r => r.blocked).length;
+    const averageAttempts = records.length > 0 
+      ? records.reduce((sum, r) => sum + r.attempts, 0) / records.length
+      : 0;
+
+    return {
+      totalIdentifiers: records.length,
+      blockedIdentifiers: blocked,
+      averageAttempts
+    };
+  }
+}
+```

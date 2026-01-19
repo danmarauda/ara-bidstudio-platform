@@ -1,0 +1,468 @@
+---
+category: ai-rag
+subcategory: embeddings
+tags: [embeddings, openai, chunking, preprocessing]
+cursor:
+  context_window: 16384
+  temperature: 0.2
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["./vector-search.mdc"]
+  exports: ["embedding-strategies", "chunking-patterns"]
+  references: ["../backend/data-processing.mdc"]
+---
+
+# Embeddings & Chunking Strategies (2025)
+
+## Embedding Models Selection
+
+### Primary Models for abubis.chat
+```typescript
+export const EMBEDDING_MODELS = {
+  // Primary - High quality, balanced performance
+  'text-embedding-3-large': {
+    dimensions: 3072,
+    maxTokens: 8191,
+    costPer1M: 0.13,
+    strengths: ['general', 'semantic', 'retrieval'],
+    use: 'primary-rag'
+  },
+  
+  // Secondary - Fast and cost-effective
+  'text-embedding-3-small': {
+    dimensions: 1536,
+    maxTokens: 8191,
+    costPer1M: 0.02,
+    strengths: ['speed', 'cost'],
+    use: 'bulk-processing'
+  },
+  
+  // Specialized - Multi-language support
+  'multilingual-e5-large': {
+    dimensions: 1024,
+    maxTokens: 512,
+    strengths: ['multilingual', 'cross-lingual'],
+    use: 'international'
+  }
+} as const;
+```
+
+### Model Selection Logic
+```typescript
+export function selectEmbeddingModel(
+  content: string,
+  requirements: {
+    quality: 'high' | 'medium' | 'low';
+    budget: 'high' | 'medium' | 'low';
+    language: string;
+  }
+): keyof typeof EMBEDDING_MODELS {
+  
+  // Multi-language content
+  if (requirements.language !== 'en') {
+    return 'multilingual-e5-large';
+  }
+  
+  // High quality requirements
+  if (requirements.quality === 'high' && requirements.budget !== 'low') {
+    return 'text-embedding-3-large';
+  }
+  
+  // Bulk processing
+  return 'text-embedding-3-small';
+}
+```
+
+## Advanced Chunking Strategies
+
+### Semantic Chunking with Overlap
+```typescript
+import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
+
+export class SemanticChunker {
+  private splitter: RecursiveCharacterTextSplitter;
+  
+  constructor(options: {
+    chunkSize: number;
+    chunkOverlap: number;
+    separators?: string[];
+  }) {
+    this.splitter = new RecursiveCharacterTextSplitter({
+      chunkSize: options.chunkSize,
+      chunkOverlap: options.chunkOverlap,
+      separators: options.separators ?? ['\n\n', '\n', '. ', ' ', ''],
+    });
+  }
+  
+  async chunkDocument(text: string): Promise<ChunkWithMetadata[]> {
+    const chunks = await this.splitter.createDocuments([text]);
+    
+    return chunks.map((chunk, index) => ({
+      content: chunk.pageContent,
+      metadata: {
+        index,
+        length: chunk.pageContent.length,
+        tokens: this.estimateTokens(chunk.pageContent),
+      },
+      overlap: {
+        previous: index > 0 ? this.calculateOverlap(chunks[index - 1], chunk) : null,
+        next: index < chunks.length - 1 ? this.calculateOverlap(chunk, chunks[index + 1]) : null,
+      }
+    }));
+  }
+  
+  private estimateTokens(text: string): number {
+    // Rough estimation: 4 characters per token
+    return Math.ceil(text.length / 4);
+  }
+  
+  private calculateOverlap(chunk1: any, chunk2: any): number {
+    const text1 = chunk1.pageContent;
+    const text2 = chunk2.pageContent;
+    
+    // Find longest common substring at boundaries
+    let overlap = 0;
+    const minLength = Math.min(text1.length, text2.length);
+    
+    for (let i = 1; i <= minLength; i++) {
+      if (text1.slice(-i) === text2.slice(0, i)) {
+        overlap = i;
+      }
+    }
+    
+    return overlap;
+  }
+}
+
+interface ChunkWithMetadata {
+  content: string;
+  metadata: {
+    index: number;
+    length: number;
+    tokens: number;
+  };
+  overlap: {
+    previous: number | null;
+    next: number | null;
+  };
+}
+```
+
+### Content-Type Specific Chunkers
+
+#### Markdown Chunker
+```typescript
+export class MarkdownChunker extends SemanticChunker {
+  constructor(chunkSize = 1000, overlap = 200) {
+    super({
+      chunkSize,
+      chunkOverlap: overlap,
+      separators: [
+        '\n## ',     // H2 headers
+        '\n### ',    // H3 headers
+        '\n#### ',   // H4 headers
+        '\n\n',      // Paragraphs
+        '\n',        // Lines
+        '. ',        // Sentences
+        ' '          // Words
+      ]
+    });
+  }
+  
+  async chunkMarkdown(markdown: string): Promise<ChunkWithMetadata[]> {
+    const preprocessed = this.preprocessMarkdown(markdown);
+    return this.chunkDocument(preprocessed);
+  }
+  
+  private preprocessMarkdown(markdown: string): string {
+    return markdown
+      .replace(/```[\s\S]*?```/g, (match) => {
+        // Preserve code blocks but add markers
+        return `\n[CODE_BLOCK]\n${match}\n[/CODE_BLOCK]\n`;
+      })
+      .replace(/!\[.*?\]\(.*?\)/g, '[IMAGE]') // Replace images
+      .replace(/\[.*?\]\(.*?\)/g, (match) => match.replace(/\n/g, ' ')); // Clean links
+  }
+}
+```
+
+#### Code Chunker
+```typescript
+export class CodeChunker {
+  async chunkCodeFile(
+    code: string, 
+    language: string
+  ): Promise<ChunkWithMetadata[]> {
+    switch (language) {
+      case 'typescript':
+      case 'javascript':
+        return this.chunkJavaScript(code);
+      case 'python':
+        return this.chunkPython(code);
+      default:
+        return this.chunkGeneric(code);
+    }
+  }
+  
+  private chunkJavaScript(code: string): ChunkWithMetadata[] {
+    const chunks: ChunkWithMetadata[] = [];
+    const lines = code.split('\n');
+    let currentChunk = '';
+    let braceCount = 0;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      currentChunk += line + '\n';
+      
+      // Track brace nesting
+      braceCount += (line.match(/{/g) || []).length;
+      braceCount -= (line.match(/}/g) || []).length;
+      
+      // End chunk at function/class boundaries
+      if (braceCount === 0 && 
+          (line.trim().endsWith('}') || 
+           line.trim() === '' && currentChunk.length > 500)) {
+        
+        if (currentChunk.trim()) {
+          chunks.push({
+            content: currentChunk.trim(),
+            metadata: {
+              index: chunks.length,
+              length: currentChunk.length,
+              tokens: Math.ceil(currentChunk.length / 4),
+              type: 'code',
+              language: 'javascript'
+            },
+            overlap: { previous: null, next: null }
+          });
+        }
+        currentChunk = '';
+      }
+    }
+    
+    // Add remaining chunk
+    if (currentChunk.trim()) {
+      chunks.push({
+        content: currentChunk.trim(),
+        metadata: {
+          index: chunks.length,
+          length: currentChunk.length,
+          tokens: Math.ceil(currentChunk.length / 4),
+          type: 'code',
+          language: 'javascript'
+        },
+        overlap: { previous: null, next: null }
+      });
+    }
+    
+    return chunks;
+  }
+}
+```
+
+## Optimal Chunking Configurations
+
+### Configuration by Content Type
+```typescript
+export const CHUNKING_CONFIGS = {
+  documentation: {
+    chunkSize: 1200,
+    overlap: 240,  // 20% overlap
+    separators: ['\n## ', '\n### ', '\n\n', '\n', '. ']
+  },
+  
+  code: {
+    chunkSize: 800,
+    overlap: 160,  // 20% overlap
+    preserveStructure: true,
+    respectIndentation: true
+  },
+  
+  conversational: {
+    chunkSize: 600,
+    overlap: 120,  // 20% overlap
+    separators: ['\n\n', '\n', '. ', '? ', '! ']
+  },
+  
+  legal: {
+    chunkSize: 1500,
+    overlap: 300,  // 20% overlap
+    separators: ['\n\n', '\n', '. ', '; ']
+  }
+} as const;
+```
+
+### Dynamic Chunk Size Selection
+```typescript
+export function getOptimalChunkSize(
+  contentType: keyof typeof CHUNKING_CONFIGS,
+  averageQueryLength: number,
+  modelContextWindow: number
+): number {
+  const baseConfig = CHUNKING_CONFIGS[contentType];
+  
+  // Adjust based on query length
+  // Longer queries need more context per chunk
+  const queryMultiplier = Math.min(2, averageQueryLength / 100);
+  
+  // Adjust based on model context window
+  // Larger context windows can handle bigger chunks
+  const contextMultiplier = Math.min(1.5, modelContextWindow / 8192);
+  
+  return Math.round(baseConfig.chunkSize * queryMultiplier * contextMultiplier);
+}
+```
+
+## Embedding Pipeline
+
+### Production Pipeline
+```typescript
+export class EmbeddingPipeline {
+  constructor(
+    private openaiClient: OpenAI,
+    private model = 'text-embedding-3-large'
+  ) {}
+  
+  async embedChunks(chunks: ChunkWithMetadata[]): Promise<EmbeddedChunk[]> {
+    const batchSize = 100; // OpenAI batch limit
+    const results: EmbeddedChunk[] = [];
+    
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batch = chunks.slice(i, i + batchSize);
+      const embeddings = await this.embedBatch(batch);
+      results.push(...embeddings);
+    }
+    
+    return results;
+  }
+  
+  private async embedBatch(chunks: ChunkWithMetadata[]): Promise<EmbeddedChunk[]> {
+    try {
+      const response = await this.openaiClient.embeddings.create({
+        model: this.model,
+        input: chunks.map(chunk => chunk.content),
+        encoding_format: 'float',
+      });
+      
+      return chunks.map((chunk, index) => ({
+        ...chunk,
+        embedding: response.data[index].embedding,
+        model: this.model,
+        createdAt: new Date().toISOString(),
+      }));
+      
+    } catch (error) {
+      console.error('Embedding batch failed:', error);
+      throw error;
+    }
+  }
+  
+  async embedSingle(text: string): Promise<number[]> {
+    const response = await this.openaiClient.embeddings.create({
+      model: this.model,
+      input: [text],
+      encoding_format: 'float',
+    });
+    
+    return response.data[0].embedding;
+  }
+}
+
+interface EmbeddedChunk extends ChunkWithMetadata {
+  embedding: number[];
+  model: string;
+  createdAt: string;
+}
+```
+
+## Text Preprocessing
+
+### Advanced Preprocessing Pipeline
+```typescript
+export class TextPreprocessor {
+  static clean(text: string): string {
+    return text
+      // Normalize whitespace
+      .replace(/\s+/g, ' ')
+      // Remove excessive punctuation
+      .replace(/[.]{3,}/g, '...')
+      // Clean up quotes
+      .replace(/[""'']/g, '"')
+      .replace(/['']/g, "'")
+      // Normalize dashes
+      .replace(/[—–]/g, '-')
+      // Remove control characters
+      .replace(/[\x00-\x1F\x7F]/g, '')
+      .trim();
+  }
+  
+  static extractMetadata(text: string): TextMetadata {
+    return {
+      length: text.length,
+      wordCount: text.split(/\s+/).length,
+      sentenceCount: text.split(/[.!?]+/).length,
+      paragraphCount: text.split(/\n\s*\n/).length,
+      hasCode: /```|`[^`]+`/.test(text),
+      hasLinks: /\[.*?\]\(.*?\)/.test(text),
+      hasImages: /!\[.*?\]\(.*?\)/.test(text),
+      language: this.detectLanguage(text),
+    };
+  }
+  
+  private static detectLanguage(text: string): string {
+    // Simple language detection based on common words
+    const englishWords = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for'];
+    const words = text.toLowerCase().split(/\s+/).slice(0, 100);
+    
+    const englishScore = englishWords
+      .map(word => words.includes(word) ? 1 : 0)
+      .reduce((sum, score) => sum + score, 0) / englishWords.length;
+    
+    return englishScore > 0.1 ? 'en' : 'unknown';
+  }
+}
+
+interface TextMetadata {
+  length: number;
+  wordCount: number;
+  sentenceCount: number;
+  paragraphCount: number;
+  hasCode: boolean;
+  hasLinks: boolean;
+  hasImages: boolean;
+  language: string;
+}
+```
+
+## Testing Embedding Pipeline
+
+### Unit Tests
+```typescript
+describe('EmbeddingPipeline', () => {
+  let pipeline: EmbeddingPipeline;
+  
+  beforeEach(() => {
+    pipeline = new EmbeddingPipeline(mockOpenAI);
+  });
+  
+  it('should chunk text with proper overlap', async () => {
+    const chunker = new SemanticChunker({
+      chunkSize: 100,
+      chunkOverlap: 20
+    });
+    
+    const chunks = await chunker.chunkDocument('A'.repeat(250));
+    
+    expect(chunks).toHaveLength(3);
+    expect(chunks[0].overlap.next).toBeGreaterThan(0);
+  });
+  
+  it('should generate embeddings for chunks', async () => {
+    const chunks = [{ content: 'test', metadata: { tokens: 1 } }];
+    const embedded = await pipeline.embedChunks(chunks);
+    
+    expect(embedded[0].embedding).toHaveLength(3072);
+  });
+});
+```

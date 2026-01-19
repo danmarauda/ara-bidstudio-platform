@@ -1,0 +1,121 @@
+volumes:
+  local_postgres_data: {}
+  local_postgres_data_backups: {}
+
+services:
+  django: &django
+    build:
+      context: .
+      args:
+        - GITHUB_ACTIONS
+      dockerfile: ./compose/local/django/Dockerfile
+    image: opencontractserver_local_django
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vector-embedder:
+        condition: service_started
+      docling-parser:
+        condition: service_started
+    volumes:
+      - .:/app:z
+    env_file:
+      - ./.envs/.local/.django
+      - ./.envs/.local/.postgres
+    ports:
+      - "8000:8000"
+    command: /start
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/production/postgres/Dockerfile
+    container_name: postgres
+    image: opencontractserver_production_postgres
+    volumes:
+      - local_postgres_data:/var/lib/postgresql/data:Z
+      - local_postgres_data_backups:/backups:z
+      - ./compose/production/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    env_file:
+      - ./.envs/.local/.postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  docling-parser:
+    image: jscrudato/docsling-local
+    container_name: docling-parser
+
+  vector-embedder:
+    image: jscrudato/vector-embedder-microservice
+    container_name: vector-embedder
+    environment:
+      PORT: 8000
+      TRANSFORMERS_OFFLINE: 1
+      HF_DATASETS_OFFLINE: 1
+
+  celeryworker:
+    image: opencontractserver_local_django
+    container_name: celeryworker
+    depends_on:
+      - redis
+      - postgres
+      - docling-parser
+    volumes:
+      - .:/app:z
+    env_file:
+      - ./.envs/.local/.django
+      - ./.envs/.local/.postgres
+    command: /start-celeryworker
+
+
+  celerybeat:
+    image: opencontractserver_local_django
+    container_name: celerybeat
+    depends_on:
+      - redis
+      - postgres
+      - docling-parser
+    volumes:
+      - .:/app:z
+    env_file:
+      - ./.envs/.local/.django
+      - ./.envs/.local/.postgres
+    command: /start-celerybeat
+
+  flower:
+    <<: *django
+    image: opencontractserver_local_flower
+    container_name: flower
+    ports:
+      - "5555:5555"
+    command: /start-flower
+
+  frontend:
+      build:
+        context: ./frontend
+        dockerfile: ./Dockerfile
+      image: opencontractserver_local_frontend
+      container_name: frontend
+      depends_on:
+        - django
+      env_file:
+      - ./.envs/.local/.frontend
+      ports:
+        - "3000:3000"
+      profiles:
+        - "fullstack"

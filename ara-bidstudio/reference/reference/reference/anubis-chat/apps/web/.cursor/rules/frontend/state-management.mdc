@@ -1,0 +1,974 @@
+---
+category: frontend
+subcategory: state-management
+tags: [react, hooks, context, state, zustand, convex]
+cursor:
+  context_window: 8192
+  temperature: 0.6
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./index.mdc", "./components.mdc"]
+  exports: ["state-patterns", "hook-patterns", "context-patterns"]
+  references: ["./routing.mdc", "../backend/convex-integration.mdc"]
+---
+
+# State Management Patterns for React 19
+
+## State Management Architecture
+
+### State Colocation Strategy
+
+```typescript
+// ✅ Good: Colocate state with components that use it
+function ChatMessage({ messageId }: { messageId: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  
+  // State is only in the component that needs it
+  return (
+    <div>
+      {isEditing ? (
+        <MessageEditor messageId={messageId} onSave={() => setIsEditing(false)} />
+      ) : (
+        <MessageDisplay 
+          messageId={messageId}
+          expanded={isExpanded}
+          onToggle={() => setIsExpanded(!isExpanded)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ❌ Avoid: Lifting state too high unnecessarily
+function ChatInterface() {
+  // Don't put message-specific state here unless multiple components need it
+  const [allMessageExpanded, setAllMessageExpanded] = useState<Record<string, boolean>>({});
+  // ...
+}
+```
+
+### React 19 New Hooks
+
+#### useActionState Hook
+
+```typescript
+// React 19's useActionState for form handling
+import { useActionState } from 'react';
+
+interface SendMessageState {
+  message?: string;
+  error?: string;
+  pending: boolean;
+}
+
+async function sendMessageAction(
+  prevState: SendMessageState,
+  formData: FormData
+): Promise<SendMessageState> {
+  const message = formData.get('message') as string;
+  
+  if (!message.trim()) {
+    return { error: 'Message cannot be empty', pending: false };
+  }
+  
+  try {
+    await api.sendMessage(message);
+    return { message: 'Message sent successfully', pending: false };
+  } catch (error) {
+    return { error: 'Failed to send message', pending: false };
+  }
+}
+
+function ChatInput() {
+  const [state, formAction, isPending] = useActionState(sendMessageAction, {
+    pending: false,
+  });
+  
+  return (
+    <form action={formAction} className="flex gap-2">
+      <textarea 
+        name="message"
+        placeholder="Type a message..."
+        disabled={isPending}
+        className="flex-1 p-2 border rounded"
+      />
+      
+      <button type="submit" disabled={isPending}>
+        {isPending ? 'Sending...' : 'Send'}
+      </button>
+      
+      {state.error && (
+        <div className="text-red-500 text-sm">{state.error}</div>
+      )}
+      
+      {state.message && (
+        <div className="text-green-500 text-sm">{state.message}</div>
+      )}
+    </form>
+  );
+}
+```
+
+#### useOptimistic Hook
+
+```typescript
+// React 19's useOptimistic for optimistic updates
+import { useOptimistic, useTransition } from 'react';
+
+interface Message {
+  id: string;
+  content: string;
+  timestamp: Date;
+  status: 'pending' | 'sent' | 'failed';
+}
+
+function ChatMessages({ initialMessages }: { initialMessages: Message[] }) {
+  const [isPending, startTransition] = useTransition();
+  const [optimisticMessages, addOptimisticMessage] = useOptimistic(
+    initialMessages,
+    (state, newMessage: Omit<Message, 'id' | 'timestamp' | 'status'>) => [
+      ...state,
+      {
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        status: 'pending' as const,
+        ...newMessage,
+      },
+    ]
+  );
+  
+  const sendMessage = async (content: string) => {
+    // Optimistically add the message
+    addOptimisticMessage({ content });
+    
+    // Send the actual request
+    startTransition(async () => {
+      try {
+        await api.sendMessage(content);
+        // The actual message will come through real-time updates
+      } catch (error) {
+        // Handle error - the optimistic update will be reverted
+        console.error('Failed to send message:', error);
+      }
+    });
+  };
+  
+  return (
+    <div className="space-y-4">
+      {optimisticMessages.map((message) => (
+        <MessageBubble 
+          key={message.id} 
+          message={message}
+          isPending={message.status === 'pending'}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+#### use Hook for Promises and Context
+
+```typescript
+// React 19's use hook for promises
+import { use, Suspense } from 'react';
+
+function UserProfile({ userIdPromise }: { userIdPromise: Promise<string> }) {
+  // use hook unwraps promises
+  const userId = use(userIdPromise);
+  const userData = use(fetchUser(userId)); // Can use with any promise
+  
+  return (
+    <div>
+      <h2>{userData.name}</h2>
+      <p>{userData.email}</p>
+    </div>
+  );
+}
+
+// use hook with context
+const ThemeContext = createContext<'dark' | 'light'>('light');
+
+function ThemedButton() {
+  // Alternative to useContext
+  const theme = use(ThemeContext);
+  
+  return (
+    <button className={`btn btn-${theme}`}>
+      Themed Button
+    </button>
+  );
+}
+
+// Usage with Suspense
+function App() {
+  const userIdPromise = getUserId();
+  
+  return (
+    <Suspense fallback={<div>Loading user...</div>}>
+      <UserProfile userIdPromise={userIdPromise} />
+    </Suspense>
+  );
+}
+```
+
+## Context Patterns
+
+### Theme Context with React 19
+
+```typescript
+// Enhanced theme context using React 19 patterns
+import { createContext, use, useTransition, ReactNode } from 'react';
+
+type Theme = 'light' | 'dark' | 'system';
+
+interface ThemeContextType {
+  theme: Theme;
+  resolvedTheme: 'light' | 'dark';
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextType | null>(null);
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>('system');
+  const [isPending, startTransition] = useTransition();
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+  
+  // Listen for system theme changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const updateResolvedTheme = () => {
+      if (theme === 'system') {
+        setResolvedTheme(mediaQuery.matches ? 'dark' : 'light');
+      } else {
+        setResolvedTheme(theme);
+      }
+    };
+    
+    updateResolvedTheme();
+    mediaQuery.addEventListener('change', updateResolvedTheme);
+    
+    return () => mediaQuery.removeEventListener('change', updateResolvedTheme);
+  }, [theme]);
+  
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.classList.remove('light', 'dark');
+    document.documentElement.classList.add(resolvedTheme);
+  }, [resolvedTheme]);
+  
+  const setTheme = (newTheme: Theme) => {
+    startTransition(() => {
+      setThemeState(newTheme);
+      localStorage.setItem('theme', newTheme);
+    });
+  };
+  
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
+  
+  const value: ThemeContextType = {
+    theme,
+    resolvedTheme,
+    setTheme,
+    toggleTheme,
+  };
+  
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+// Custom hook using React 19's use()
+export function useTheme() {
+  const context = use(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+}
+```
+
+### Chat Context with Real-time Updates
+
+```typescript
+// Chat context with Convex real-time integration
+interface ChatContextType {
+  messages: Message[];
+  sendMessage: (content: string, files?: File[]) => Promise<void>;
+  editMessage: (id: string, content: string) => Promise<void>;
+  deleteMessage: (id: string) => Promise<void>;
+  isTyping: boolean;
+  typingUsers: string[];
+}
+
+const ChatContext = createContext<ChatContextType | null>(null);
+
+export function ChatProvider({ children, chatId }: { children: ReactNode; chatId: string }) {
+  const [isTyping, setIsTyping] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  
+  // Convex real-time queries
+  const messages = useQuery(api.messages.list, { chatId });
+  const typingUsers = useQuery(api.chat.typingUsers, { chatId });
+  
+  // Convex mutations
+  const sendMessageMutation = useMutation(api.messages.send);
+  const editMessageMutation = useMutation(api.messages.edit);
+  const deleteMessageMutation = useMutation(api.messages.delete);
+  const setTypingMutation = useMutation(api.chat.setTyping);
+  
+  // Optimistic state for messages
+  const [optimisticMessages, addOptimisticMessage] = useOptimistic(
+    messages || [],
+    (state, newMessage: Omit<Message, 'id' | 'timestamp'>) => [
+      ...state,
+      {
+        id: `temp-${Date.now()}`,
+        timestamp: new Date(),
+        ...newMessage,
+      },
+    ]
+  );
+  
+  const sendMessage = useCallback(async (content: string, files?: File[]) => {
+    // Add optimistic message
+    addOptimisticMessage({ content, role: 'user' });
+    
+    startTransition(async () => {
+      try {
+        await sendMessageMutation({ chatId, content, files });
+      } catch (error) {
+        // Handle error - optimistic update will be reverted
+        console.error('Failed to send message:', error);
+      }
+    });
+  }, [chatId, sendMessageMutation, addOptimisticMessage, startTransition]);
+  
+  const editMessage = useCallback(async (id: string, content: string) => {
+    startTransition(async () => {
+      await editMessageMutation({ id, content });
+    });
+  }, [editMessageMutation, startTransition]);
+  
+  const deleteMessage = useCallback(async (id: string) => {
+    startTransition(async () => {
+      await deleteMessageMutation({ id });
+    });
+  }, [deleteMessageMutation, startTransition]);
+  
+  // Typing indicator with debounce
+  const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  
+  const handleTyping = useCallback(() => {
+    if (!isTyping) {
+      setIsTyping(true);
+      setTypingMutation({ chatId, isTyping: true });
+    }
+    
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+      setTypingMutation({ chatId, isTyping: false });
+    }, 2000);
+  }, [isTyping, chatId, setTypingMutation]);
+  
+  const value: ChatContextType = {
+    messages: optimisticMessages,
+    sendMessage,
+    editMessage,
+    deleteMessage,
+    isTyping,
+    typingUsers: typingUsers || [],
+  };
+  
+  return (
+    <ChatContext.Provider value={value}>
+      {children}
+    </ChatContext.Provider>
+  );
+}
+
+export function useChat() {
+  const context = use(ChatContext);
+  if (!context) {
+    throw new Error('useChat must be used within a ChatProvider');
+  }
+  return context;
+}
+```
+
+## Custom Hooks Patterns
+
+### useLocalStorage with Server State Sync
+
+```typescript
+// Enhanced localStorage hook with server synchronization
+function useLocalStorage<T>(
+  key: string,
+  initialValue: T,
+  options?: {
+    syncWithServer?: boolean;
+    serialize?: (value: T) => string;
+    deserialize?: (value: string) => T;
+  }
+): [T, (value: T | ((prev: T) => T)) => void, boolean] {
+  const [storedValue, setStoredValue] = useState<T>(initialValue);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const serialize = options?.serialize || JSON.stringify;
+  const deserialize = options?.deserialize || JSON.parse;
+  
+  // Initialize from localStorage
+  useEffect(() => {
+    try {
+      const item = localStorage.getItem(key);
+      if (item !== null) {
+        setStoredValue(deserialize(item));
+      }
+    } catch (error) {
+      console.error(`Error reading localStorage key "${key}":`, error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [key, deserialize]);
+  
+  const setValue = useCallback(
+    (value: T | ((prev: T) => T)) => {
+      try {
+        const valueToStore = value instanceof Function ? value(storedValue) : value;
+        setStoredValue(valueToStore);
+        localStorage.setItem(key, serialize(valueToStore));
+        
+        // Sync with server if enabled
+        if (options?.syncWithServer) {
+          // Implement server sync logic here
+        }
+      } catch (error) {
+        console.error(`Error setting localStorage key "${key}":`, error);
+      }
+    },
+    [key, storedValue, serialize, options?.syncWithServer]
+  );
+  
+  return [storedValue, setValue, isLoading];
+}
+```
+
+### useDebounce with React 19 Transitions
+
+```typescript
+function useDebounce<T>(
+  value: T,
+  delay: number,
+  options?: {
+    leading?: boolean;
+    trailing?: boolean;
+    maxWait?: number;
+  }
+): [T, boolean] {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  const [isPending, startTransition] = useTransition();
+  
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      startTransition(() => {
+        setDebouncedValue(value);
+      });
+    }, delay);
+    
+    return () => clearTimeout(handler);
+  }, [value, delay, startTransition]);
+  
+  return [debouncedValue, isPending];
+}
+
+// Usage in search component
+function SearchInput() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedTerm, isSearching] = useDebounce(searchTerm, 300);
+  
+  // Trigger search when debounced term changes
+  useEffect(() => {
+    if (debouncedTerm) {
+      performSearch(debouncedTerm);
+    }
+  }, [debouncedTerm]);
+  
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        placeholder="Search messages..."
+        className="w-full p-2 border rounded"
+      />
+      {isSearching && (
+        <div className="absolute right-2 top-2">
+          <Spinner className="h-4 w-4" />
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### useMediaQuery with SSR Support
+
+```typescript
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query);
+    
+    const updateMatches = () => {
+      setMatches(mediaQuery.matches);
+      setIsLoading(false);
+    };
+    
+    // Set initial value
+    updateMatches();
+    
+    // Listen for changes
+    mediaQuery.addEventListener('change', updateMatches);
+    
+    return () => mediaQuery.removeEventListener('change', updateMatches);
+  }, [query]);
+  
+  // Return false during SSR to avoid hydration mismatches
+  return typeof window === 'undefined' ? false : matches;
+}
+
+// Usage
+function ResponsiveComponent() {
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  
+  return (
+    <div>
+      {isMobile && <MobileNavigation />}
+      {isDesktop && <DesktopSidebar />}
+    </div>
+  );
+}
+```
+
+## Zustand Integration
+
+### Zustand Store with TypeScript
+
+```typescript
+// Zustand store with proper TypeScript integration
+import { create } from 'zustand';
+import { devtools, persist } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
+
+interface ChatState {
+  // State
+  activeChats: string[];
+  currentChatId: string | null;
+  messages: Record<string, Message[]>;
+  isLoading: boolean;
+  error: string | null;
+  
+  // Actions
+  setCurrentChat: (chatId: string) => void;
+  addMessage: (chatId: string, message: Message) => void;
+  updateMessage: (chatId: string, messageId: string, updates: Partial<Message>) => void;
+  deleteMessage: (chatId: string, messageId: string) => void;
+  clearError: () => void;
+  setLoading: (loading: boolean) => void;
+}
+
+export const useChatStore = create<ChatState>()(
+  devtools(
+    persist(
+      immer((set, get) => ({
+        // Initial state
+        activeChats: [],
+        currentChatId: null,
+        messages: {},
+        isLoading: false,
+        error: null,
+        
+        // Actions
+        setCurrentChat: (chatId) =>
+          set((state) => {
+            state.currentChatId = chatId;
+            if (!state.activeChats.includes(chatId)) {
+              state.activeChats.push(chatId);
+            }
+          }),
+        
+        addMessage: (chatId, message) =>
+          set((state) => {
+            if (!state.messages[chatId]) {
+              state.messages[chatId] = [];
+            }
+            state.messages[chatId].push(message);
+          }),
+        
+        updateMessage: (chatId, messageId, updates) =>
+          set((state) => {
+            const messages = state.messages[chatId];
+            if (messages) {
+              const messageIndex = messages.findIndex(m => m.id === messageId);
+              if (messageIndex !== -1) {
+                Object.assign(messages[messageIndex], updates);
+              }
+            }
+          }),
+        
+        deleteMessage: (chatId, messageId) =>
+          set((state) => {
+            const messages = state.messages[chatId];
+            if (messages) {
+              state.messages[chatId] = messages.filter(m => m.id !== messageId);
+            }
+          }),
+        
+        clearError: () =>
+          set((state) => {
+            state.error = null;
+          }),
+        
+        setLoading: (loading) =>
+          set((state) => {
+            state.isLoading = loading;
+          }),
+      })),
+      {
+        name: 'chat-store',
+        partialize: (state) => ({
+          activeChats: state.activeChats,
+          currentChatId: state.currentChatId,
+          messages: state.messages,
+        }),
+      }
+    ),
+    { name: 'chat-store' }
+  )
+);
+
+// Selectors
+export const useCurrentChat = () => {
+  const currentChatId = useChatStore((state) => state.currentChatId);
+  const messages = useChatStore((state) => 
+    currentChatId ? state.messages[currentChatId] || [] : []
+  );
+  
+  return { currentChatId, messages };
+};
+
+export const useChatMessages = (chatId: string) =>
+  useChatStore((state) => state.messages[chatId] || []);
+```
+
+### Zustand with React Query Integration
+
+```typescript
+// Combine Zustand with React Query for server state
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+interface ServerChatState {
+  // Server-side actions
+  fetchMessages: (chatId: string) => void;
+  sendMessage: (chatId: string, content: string) => Promise<void>;
+  syncWithServer: () => void;
+}
+
+const useServerChatStore = create<ServerChatState>()((set, get) => ({
+  fetchMessages: (chatId) => {
+    // This will be handled by React Query
+  },
+  
+  sendMessage: async (chatId, content) => {
+    // Optimistic update in Zustand
+    const chatStore = useChatStore.getState();
+    const tempMessage: Message = {
+      id: `temp-${Date.now()}`,
+      content,
+      role: 'user',
+      timestamp: new Date(),
+    };
+    
+    chatStore.addMessage(chatId, tempMessage);
+    
+    try {
+      const response = await api.sendMessage({ chatId, content });
+      
+      // Replace temp message with server response
+      chatStore.deleteMessage(chatId, tempMessage.id);
+      chatStore.addMessage(chatId, response);
+    } catch (error) {
+      // Remove temp message on error
+      chatStore.deleteMessage(chatId, tempMessage.id);
+      chatStore.setError('Failed to send message');
+      throw error;
+    }
+  },
+  
+  syncWithServer: async () => {
+    // Sync local state with server
+  },
+}));
+
+// Component using both stores
+function ChatInterface({ chatId }: { chatId: string }) {
+  const queryClient = useQueryClient();
+  
+  // React Query for server state
+  const { data: serverMessages, isLoading } = useQuery({
+    queryKey: ['messages', chatId],
+    queryFn: () => api.fetchMessages(chatId),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+  
+  // Zustand for local state
+  const localMessages = useChatMessages(chatId);
+  const { addMessage, setLoading } = useChatStore();
+  
+  // Mutation for sending messages
+  const sendMessageMutation = useMutation({
+    mutationFn: ({ content }: { content: string }) => 
+      api.sendMessage({ chatId, content }),
+    
+    onMutate: async ({ content }) => {
+      // Optimistic update
+      const tempMessage: Message = {
+        id: `temp-${Date.now()}`,
+        content,
+        role: 'user',
+        timestamp: new Date(),
+      };
+      
+      addMessage(chatId, tempMessage);
+      return { tempMessage };
+    },
+    
+    onSuccess: (response, variables, context) => {
+      // Replace temp message with server response
+      const { tempMessage } = context;
+      useChatStore.getState().deleteMessage(chatId, tempMessage.id);
+      addMessage(chatId, response);
+      
+      // Invalidate and refetch
+      queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+    },
+    
+    onError: (error, variables, context) => {
+      // Remove temp message on error
+      if (context?.tempMessage) {
+        useChatStore.getState().deleteMessage(chatId, context.tempMessage.id);
+      }
+    },
+  });
+  
+  const handleSendMessage = (content: string) => {
+    sendMessageMutation.mutate({ content });
+  };
+  
+  // Merge server and local messages
+  const allMessages = [...(serverMessages || []), ...localMessages];
+  
+  return (
+    <div>
+      {isLoading && <div>Loading messages...</div>}
+      <MessageList messages={allMessages} />
+      <ChatInput 
+        onSend={handleSendMessage} 
+        disabled={sendMessageMutation.isPending}
+      />
+    </div>
+  );
+}
+```
+
+## Error Boundaries and Error Handling
+
+### Error Boundary with State Management
+
+```typescript
+// Error boundary with Zustand integration
+interface ErrorState {
+  hasError: boolean;
+  error: Error | null;
+  errorBoundaryId: string;
+  clearError: () => void;
+  reportError: (error: Error, errorInfo: ErrorInfo) => void;
+}
+
+const useErrorStore = create<ErrorState>()((set) => ({
+  hasError: false,
+  error: null,
+  errorBoundaryId: '',
+  
+  clearError: () =>
+    set((state) => ({
+      hasError: false,
+      error: null,
+      errorBoundaryId: '',
+    })),
+  
+  reportError: (error, errorInfo) =>
+    set((state) => ({
+      hasError: true,
+      error,
+      errorBoundaryId: crypto.randomUUID(),
+    })),
+}));
+
+class ChatErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ComponentType<{ error: Error; reset: () => void }> },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true };
+  }
+  
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    useErrorStore.getState().reportError(error, errorInfo);
+    
+    // Report to error tracking service
+    console.error('Chat error boundary caught an error:', error, errorInfo);
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      const Fallback = this.props.fallback || DefaultErrorFallback;
+      return (
+        <Fallback 
+          error={useErrorStore.getState().error!}
+          reset={() => {
+            this.setState({ hasError: false });
+            useErrorStore.getState().clearError();
+          }}
+        />
+      );
+    }
+    
+    return this.props.children;
+  }
+}
+
+function DefaultErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center p-8 text-center">
+      <div className="text-destructive mb-4">
+        <AlertTriangleIcon className="h-12 w-12 mx-auto mb-2" />
+        <h2 className="text-lg font-semibold">Something went wrong</h2>
+      </div>
+      
+      <p className="text-muted-foreground mb-4 max-w-md">
+        {error.message || 'An unexpected error occurred in the chat interface.'}
+      </p>
+      
+      <div className="space-x-2">
+        <Button onClick={reset} variant="outline">
+          Try Again
+        </Button>
+        <Button onClick={() => window.location.reload()}>
+          Reload Page
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+## Performance Optimization
+
+### Memoization with React 19
+
+```typescript
+// Optimized component with React 19 patterns
+const ChatMessage = memo(({ message, onEdit, onDelete }: ChatMessageProps) => {
+  // Use React 19's compiler optimizations
+  const handleEdit = useCallback(
+    (content: string) => onEdit(message.id, content),
+    [message.id, onEdit]
+  );
+  
+  const handleDelete = useCallback(
+    () => onDelete(message.id),
+    [message.id, onDelete]
+  );
+  
+  // Memoize expensive computations
+  const formattedContent = useMemo(
+    () => formatMessageContent(message.content),
+    [message.content]
+  );
+  
+  return (
+    <div className="message">
+      <div className="message-content">
+        {formattedContent}
+      </div>
+      
+      <MessageActions onEdit={handleEdit} onDelete={handleDelete} />
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison for optimal re-renders
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.message.content === nextProps.message.content &&
+    prevProps.message.timestamp === nextProps.message.timestamp
+  );
+});
+```
+
+### Virtualization for Large Lists
+
+```typescript
+// Virtual scrolling for large message lists
+import { FixedSizeList as List } from 'react-window';
+
+interface VirtualizedChatProps {
+  messages: Message[];
+  height: number;
+}
+
+function VirtualizedChat({ messages, height }: VirtualizedChatProps) {
+  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => (
+    <div style={style}>
+      <ChatMessage message={messages[index]} />
+    </div>
+  );
+  
+  return (
+    <List
+      height={height}
+      itemCount={messages.length}
+      itemSize={120} // Approximate message height
+      width="100%"
+    >
+      {Row}
+    </List>
+  );
+}
+```
+
+## Related Files
+
+- [Component Architecture](./components.mdc) - Component state patterns
+- [Routing Patterns](./routing.mdc) - Route-level state management
+- [Wallet Integration](./wallet-integration.mdc) - Wallet state patterns
+- [Backend Integration](../backend/convex-integration.mdc) - Server state sync

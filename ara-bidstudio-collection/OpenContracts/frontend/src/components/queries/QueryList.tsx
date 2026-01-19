@@ -1,0 +1,81 @@
+import { Table } from "semantic-ui-react";
+import { FetchMoreOnVisible } from "../../components/widgets/infinite_scroll/FetchMoreOnVisible";
+import { LoadingOverlay } from "../common/LoadingOverlay";
+import {
+  CorpusQueryType,
+  ExtractType,
+  PageInfo,
+} from "../../types/graphql-api";
+import { CorpusQueryListItem } from "./CorpusQueryListItem";
+
+interface QueryListProps {
+  items: CorpusQueryType[] | undefined;
+  pageInfo: PageInfo | undefined;
+  loading: boolean;
+  style?: Record<string, any>;
+  fetchMore: (args?: any) => void | any;
+  onDelete: (args?: any) => void | any;
+  onSelectRow?: (item: CorpusQueryType) => void;
+}
+
+export function QueryList({
+  items,
+  pageInfo,
+  loading,
+  style,
+  fetchMore,
+  onDelete,
+  onSelectRow,
+}: QueryListProps) {
+  const handleUpdate = () => {
+    if (!loading && pageInfo?.hasNextPage) {
+      fetchMore({
+        variables: {
+          limit: 20,
+          cursor: pageInfo.endCursor,
+        },
+      });
+    }
+  };
+
+  let extract_rows = items
+    ? items.map((item) => (
+        <CorpusQueryListItem
+          key={item.id}
+          onDelete={() => onDelete(item.id)}
+          {...(onSelectRow ? { onSelect: () => onSelectRow(item) } : {})}
+          item={item}
+        />
+      ))
+    : [];
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        width: "100%",
+        overflowY: "auto",
+        position: "relative",
+      }}
+    >
+      <LoadingOverlay active={loading} content="Loading Queries..." />
+      <Table
+        celled
+        padded
+        style={{ minHeight: "20vh", ...(style ? style : {}) }}
+      >
+        <Table.Header>
+          <Table.Row>
+            <Table.HeaderCell textAlign="left">Query</Table.HeaderCell>
+            <Table.HeaderCell textAlign="center">Response</Table.HeaderCell>
+            <Table.HeaderCell textAlign="center">Started</Table.HeaderCell>
+            <Table.HeaderCell textAlign="center">Completed</Table.HeaderCell>
+            <Table.HeaderCell textAlign="center">Actions</Table.HeaderCell>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>{extract_rows}</Table.Body>
+        <FetchMoreOnVisible fetchNextPage={handleUpdate} />
+      </Table>
+    </div>
+  );
+}

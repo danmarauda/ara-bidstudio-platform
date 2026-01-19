@@ -1,0 +1,199 @@
+{
+  "summary": {
+    "total_questions": 11,
+    "total_conversations": 5,
+    "tokens": {
+      "baseline_total": 13779,
+      "omnimemory_total": 2099,
+      "reduction_total": 11680,
+      "reduction_pct": 84.76667392408737
+    },
+    "accuracy": {
+      "average": 0.20725375103365537,
+      "maintained": false
+    },
+    "cost": {
+      "baseline_total": 0.041337000000000006,
+      "omnimemory_total": 0.0062970000000000005,
+      "saved_total": 0.03504000000000001,
+      "savings_pct": 84.76667392408739
+    },
+    "target_met": {
+      "token_reduction": false,
+      "accuracy": false
+    }
+  },
+  "results": [
+    {
+      "conversation_id": "auth_implementation",
+      "question": "What authentication strategy did we choose and why?",
+      "baseline_tokens": 2196,
+      "omnimemory_tokens": 199,
+      "reduction_tokens": 1997,
+      "reduction_pct": 90.93806921675774,
+      "baseline_answer": "Let's implement authentication with JWT tokens. Here's what I recommend:\n\n1. **Auth Strategy**: JWT (JSON Web Tokens) with bcrypt for password hashing\n2. **Storage**: Store hashed passwords in Postgre...",
+      "omnimemory_answer": "Let's implement authentication with JWT tokens. Here's what I recommend:\n\n1. **Auth Strategy**: JWT (JSON Web Tokens) with bcrypt for password hashing\n2. **Storage**: Store hashed passwords in Postgre...",
+      "expected_answer": "JWT (JSON Web Tokens) with bcrypt password hashing. We chose this because it's stateless, scalable for 50k users, and provides good security with access tokens (15 min expiry) and refresh tokens (7 days).",
+      "accuracy_score": 0.375,
+      "cost_baseline": 0.006588000000000001,
+      "cost_omnimemory": 0.0005970000000000001,
+      "cost_saved": 0.005991000000000001
+    },
+    {
+      "conversation_id": "auth_implementation",
+      "question": "How did we fix the token expiration issue?",
+      "baseline_tokens": 2196,
+      "omnimemory_tokens": 199,
+      "reduction_tokens": 1997,
+      "reduction_pct": 90.93806921675774,
+      "baseline_answer": "Let's implement authentication with JWT tokens. Here's what I recommend:\n\n1. **Auth Strategy**: JWT (JSON Web Tokens) with bcrypt for password hashing\n2. **Storage**: Store hashed passwords in Postgre...",
+      "omnimemory_answer": "I'll add a token refresh endpoint that uses the refresh token to issue new access tokens:\n\n```javascript\n// routes/auth.js (continued)\n\nrouter.post('/refresh', async (req, res) => {\n  try {\n    const ...",
+      "expected_answer": "We implemented a token refresh endpoint with refresh token rotation. Each time a refresh token is used, it's revoked and a new one is issued, preventing token reuse attacks while keeping users logged in.",
+      "accuracy_score": 0.12857142857142856,
+      "cost_baseline": 0.006588000000000001,
+      "cost_omnimemory": 0.0005970000000000001,
+      "cost_saved": 0.005991000000000001
+    },
+    {
+      "conversation_id": "auth_implementation",
+      "question": "What security measures did we implement for password storage?",
+      "baseline_tokens": 2197,
+      "omnimemory_tokens": 243,
+      "reduction_tokens": 1954,
+      "reduction_pct": 88.93946290395995,
+      "baseline_answer": "Let's implement authentication with JWT tokens. Here's what I recommend:\n\n1. **Auth Strategy**: JWT (JSON Web Tokens) with bcrypt for password hashing\n2. **Storage**: Store hashed passwords in Postgre...",
+      "omnimemory_answer": "Let's implement authentication with JWT tokens. Here's what I recommend:\n\n1. **Auth Strategy**: JWT (JSON Web Tokens) with bcrypt for password hashing\n2. **Storage**: Store hashed passwords in Postgre...",
+      "expected_answer": "We used bcrypt with 12 salt rounds to hash passwords, stored only the hash in the database, and implemented rate limiting. Passwords must be at least 8 characters with uppercase, lowercase, and digits.",
+      "accuracy_score": 0.19999999999999998,
+      "cost_baseline": 0.0065910000000000005,
+      "cost_omnimemory": 0.000729,
+      "cost_saved": 0.005862000000000001
+    },
+    {
+      "conversation_id": "bug_debugging",
+      "question": "What was the root cause of the 'Cannot read property map of undefined' error?",
+      "baseline_tokens": 584,
+      "omnimemory_tokens": 144,
+      "reduction_tokens": 440,
+      "reduction_pct": 75.34246575342466,
+      "baseline_answer": "Let's debug this systematically. The error indicates you're trying to call `.map()` on an undefined value. Let me help you trace it:\n\n1. **Check your component state initialization**\n2. **Verify API d...",
+      "omnimemory_answer": "Let's debug this systematically. The error indicates you're trying to call `.map()` on an undefined value. Let me help you trace it:\n\n1. **Check your component state initialization**\n2. **Verify API d...",
+      "expected_answer": "The state was initialized as undefined (useState() with no argument), and the component tried to access data.items before the API call completed, causing the error.",
+      "accuracy_score": 0.36923076923076925,
+      "cost_baseline": 0.0017519999999999999,
+      "cost_omnimemory": 0.000432,
+      "cost_saved": 0.00132
+    },
+    {
+      "conversation_id": "bug_debugging",
+      "question": "What are the three key fixes we applied?",
+      "baseline_tokens": 576,
+      "omnimemory_tokens": 136,
+      "reduction_tokens": 440,
+      "reduction_pct": 76.38888888888889,
+      "baseline_answer": "Found the issue! The problem is in your state initialization and data access. Here's what's wrong:\n\n1. **State is undefined initially**: `useState()` with no argument\n2. **No loading state**: Componen...",
+      "omnimemory_answer": "Found the issue! The problem is in your state initialization and data access. Here's what's wrong:\n\n1. **State is undefined initially**: `useState()` with no argument\n2. **No loading state**: Componen...",
+      "expected_answer": "1) Initialize state to null instead of undefined, 2) Add loading and error states, 3) Use optional chaining (data?.items) and provide fallback empty array.",
+      "accuracy_score": 0.2571428571428571,
+      "cost_baseline": 0.001728,
+      "cost_omnimemory": 0.00040800000000000005,
+      "cost_saved": 0.00132
+    },
+    {
+      "conversation_id": "payment_refactoring",
+      "question": "How did we break down the 500-line payment function?",
+      "baseline_tokens": 885,
+      "omnimemory_tokens": 169,
+      "reduction_tokens": 716,
+      "reduction_pct": 80.90395480225989,
+      "baseline_answer": "Absolutely! Let's refactor the payment processing into smaller, testable functions following Single Responsibility Principle.\n\nFirst, can you share the current monolithic function? Then we'll:\n1. Iden...",
+      "omnimemory_answer": "Absolutely! Let's refactor the payment processing into smaller, testable functions following Single Responsibility Principle.\n\nFirst, can you share the current monolithic function? Then we'll:\n1. Iden...",
+      "expected_answer": "We split it into four modular classes: PaymentValidator (validation), PaymentProcessor (gateway interaction), PaymentNotificationService (notifications), and PaymentService (orchestrator). Each follows Single Responsibility Principle.",
+      "accuracy_score": 0.22499999999999998,
+      "cost_baseline": 0.0026550000000000002,
+      "cost_omnimemory": 0.0005070000000000001,
+      "cost_saved": 0.002148
+    },
+    {
+      "conversation_id": "payment_refactoring",
+      "question": "What are the benefits of the refactored architecture?",
+      "baseline_tokens": 884,
+      "omnimemory_tokens": 168,
+      "reduction_tokens": 716,
+      "reduction_pct": 80.99547511312217,
+      "baseline_answer": "I'll refactor this into a clean, modular architecture:\n\n```javascript\n// Before: One massive function\nasync function processPayment(paymentData) {\n  // 500 lines of validation, processing, notificatio...",
+      "omnimemory_answer": "Absolutely! Let's refactor the payment processing into smaller, testable functions following Single Responsibility Principle.\n\nFirst, can you share the current monolithic function? Then we'll:\n1. Iden...",
+      "expected_answer": "Each class has single responsibility, components are testable in isolation, payment gateways are easily swappable, the main flow is clear and readable, and validation logic is reusable.",
+      "accuracy_score": 0.2,
+      "cost_baseline": 0.0026520000000000003,
+      "cost_omnimemory": 0.000504,
+      "cost_saved": 0.002148
+    },
+    {
+      "conversation_id": "performance_optimization",
+      "question": "What was the main performance problem with the /users endpoint?",
+      "baseline_tokens": 1010,
+      "omnimemory_tokens": 205,
+      "reduction_tokens": 805,
+      "reduction_pct": 79.70297029702971,
+      "baseline_answer": "3 seconds for 1000 users is definitely too slow. Let's optimize this systematically:\n\n1. **Database query optimization** (likely the main issue)\n2. **Add pagination** (don't return all 1000 users at o...",
+      "omnimemory_answer": "3 seconds for 1000 users is definitely too slow. Let's optimize this systematically:\n\n1. **Database query optimization** (likely the main issue)\n2. **Add pagination** (don't return all 1000 users at o...",
+      "expected_answer": "It was a classic N+1 query problem. The endpoint fetched 1000 users, then made 2000 additional queries (one for profile, one for posts per user), totaling 3001 queries taking 3 seconds.",
+      "accuracy_score": 0.2571428571428571,
+      "cost_baseline": 0.00303,
+      "cost_omnimemory": 0.000615,
+      "cost_saved": 0.002415
+    },
+    {
+      "conversation_id": "performance_optimization",
+      "question": "What optimizations did we implement and what was the improvement?",
+      "baseline_tokens": 1009,
+      "omnimemory_tokens": 204,
+      "reduction_tokens": 805,
+      "reduction_pct": 79.78196233894946,
+      "baseline_answer": "3 seconds for 1000 users is definitely too slow. Let's optimize this systematically:\n\n1. **Database query optimization** (likely the main issue)\n2. **Add pagination** (don't return all 1000 users at o...",
+      "omnimemory_answer": "3 seconds for 1000 users is definitely too slow. Let's optimize this systematically:\n\n1. **Database query optimization** (likely the main issue)\n2. **Add pagination** (don't return all 1000 users at o...",
+      "expected_answer": "We added pagination (20 users per page), used JOINs to eliminate N+1 queries, implemented JSON aggregation in the database, added 5-minute caching, and created database indexes. This reduced response time from 3000ms to 150ms (95% improvement).",
+      "accuracy_score": 0.0631578947368421,
+      "cost_baseline": 0.0030269999999999997,
+      "cost_omnimemory": 0.000612,
+      "cost_saved": 0.0024149999999999996
+    },
+    {
+      "conversation_id": "stripe_integration",
+      "question": "What are the main components of our Stripe integration?",
+      "baseline_tokens": 1121,
+      "omnimemory_tokens": 216,
+      "reduction_tokens": 905,
+      "reduction_pct": 80.73148974130241,
+      "baseline_answer": "I'll guide you through Stripe integration step by step. Here's the plan:\n\n1. **Setup Stripe account** and get API keys\n2. **Install Stripe SDK**\n3. **Create payment intent** (server-side)\n4. **Collect...",
+      "omnimemory_answer": "I'll guide you through Stripe integration step by step. Here's the plan:\n\n1. **Setup Stripe account** and get API keys\n2. **Install Stripe SDK**\n3. **Create payment intent** (server-side)\n4. **Collect...",
+      "expected_answer": "1) Payment intent creation endpoint (server-side), 2) Webhook handler for async events (payment success/failure/refunds), 3) Database updates for order status, 4) Email notifications for payment events.",
+      "accuracy_score": 0.15,
+      "cost_baseline": 0.003363,
+      "cost_omnimemory": 0.000648,
+      "cost_saved": 0.002715
+    },
+    {
+      "conversation_id": "stripe_integration",
+      "question": "Why do we need webhooks for Stripe integration?",
+      "baseline_tokens": 1121,
+      "omnimemory_tokens": 216,
+      "reduction_tokens": 905,
+      "reduction_pct": 80.73148974130241,
+      "baseline_answer": "I'll guide you through Stripe integration step by step. Here's the plan:\n\n1. **Setup Stripe account** and get API keys\n2. **Install Stripe SDK**\n3. **Create payment intent** (server-side)\n4. **Collect...",
+      "omnimemory_answer": "I'll guide you through Stripe integration step by step. Here's the plan:\n\n1. **Setup Stripe account** and get API keys\n2. **Install Stripe SDK**\n3. **Create payment intent** (server-side)\n4. **Collect...",
+      "expected_answer": "Webhooks handle asynchronous payment events (success, failure, refunds) that occur outside the initial request flow. They ensure our database stays in sync with Stripe's payment status and allow us to notify users of payment outcomes.",
+      "accuracy_score": 0.05454545454545454,
+      "cost_baseline": 0.003363,
+      "cost_omnimemory": 0.000648,
+      "cost_saved": 0.002715
+    }
+  ],
+  "metadata": {
+    "model": "gpt-4",
+    "cost_per_1k_tokens": 0.003,
+    "compression_ratio": 0.15,
+    "retrieval_limit": 3
+  }
+}

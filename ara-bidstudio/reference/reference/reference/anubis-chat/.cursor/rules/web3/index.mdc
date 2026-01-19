@@ -1,0 +1,88 @@
+---
+category: web3
+subcategory: overview
+tags: [solana, web3, integration, anchor]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["../backend/database-schema.mdc"]
+  exports: ["web3-patterns", "solana-integration"]
+  references: ["../frontend/wallet-integration.mdc"]
+---
+
+# Web3 Integration Overview - abubis.chat
+
+## Architecture Philosophy
+
+abubis.chat follows a wallet-native approach where the Solana wallet IS the user identity. This eliminates traditional authentication complexity while maintaining security through cryptographic signatures.
+
+## Core Technologies
+
+- **Blockchain**: Solana mainnet with Helius RPC primary, Shyft fallback
+- **Smart Contracts**: Anchor 0.29.0 framework for type-safe Rust programs
+- **Wallet Integration**: Solana Wallet Adapter with Phantom/Backpack support
+- **Payment Processing**: Native SOL transactions with on-chain subscription records
+
+## Integration Stack
+
+### Frontend (Next.js 15)
+```typescript
+// Wallet connection pattern
+import { useAnchorWallet } from '@solana/wallet-adapter-react';
+import { Connection, PublicKey } from '@solana/web3.js';
+```
+
+### Backend (Convex + Anchor)
+```rust
+// Anchor program pattern
+use anchor_lang::prelude::*;
+
+#[program]
+pub mod anubis_chat {
+    use super::*;
+    
+    pub fn initialize_subscription(ctx: Context<InitializeSubscription>) -> Result<()> {
+        // Subscription logic
+    }
+}
+```
+
+## Security Model
+
+1. **Wallet = Identity**: No email/password required
+2. **Message Signing**: All auth via wallet signatures
+3. **On-chain Payments**: SOL subscriptions recorded immutably
+4. **Data Isolation**: User data keyed by wallet public key
+5. **Rate Limiting**: Per-wallet usage controls
+
+## File Structure
+
+```
+web3/
+├── wallet-auth.mdc         # Wallet connection & authentication
+├── smart-contracts.mdc     # Anchor patterns & program design
+├── subscriptions.mdc       # SOL payment flows & on-chain records
+├── rpc-optimization.mdc    # RPC strategies & fallback patterns
+├── transaction-handling.mdc # Transaction patterns & error recovery
+└── index.mdc              # This overview file
+```
+
+## Development Workflow
+
+1. Connect wallet via Wallet Adapter
+2. Sign authentication message
+3. Verify signature server-side
+4. Create/retrieve user record keyed by wallet pubkey
+5. Handle subscription payments via Anchor program
+6. Manage user data with wallet-based isolation
+
+## Key Principles
+
+- **Wallet-First**: Every operation starts with wallet connection
+- **On-Chain Truth**: Subscription status lives on Solana
+- **Graceful Degradation**: Fallback RPCs for reliability
+- **Type Safety**: Anchor IDL for frontend/backend sync
+- **Gas Optimization**: Minimize transaction costs

@@ -1,0 +1,469 @@
+---
+category: web3
+subcategory: payments
+tags: [subscriptions, sol, payments, recurring, streamflow]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["./smart-contracts.mdc"]
+  exports: ["payment-flows", "subscription-logic"]
+  references: ["../backend/database-schema.mdc"]
+---
+
+# SOL Subscription Payment Flows
+
+## Payment Architecture
+
+abubis.chat implements a hybrid on-chain/off-chain subscription model:
+- **On-chain**: Payment validation and subscription records
+- **Off-chain**: Convex polling for real-time status updates
+- **Fallback**: Grace period logic for network delays
+
+## Subscription Plans
+
+### Plan Configuration
+```typescript
+export enum PlanType {
+  MONTHLY = 'monthly',
+  YEARLY = 'yearly'
+}
+
+export const SUBSCRIPTION_PLANS = {
+  [PlanType.MONTHLY]: {
+    price: 0.15, // SOL
+    duration: 30 * 24 * 60 * 60, // 30 days in seconds
+    lamports: 150_000_000 // 0.15 SOL in lamports
+  },
+  [PlanType.YEARLY]: {
+    price: 1.5, // SOL
+    duration: 365 * 24 * 60 * 60, // 365 days in seconds
+    lamports: 1_500_000_000 // 1.5 SOL in lamports
+  }
+} as const;
+```
+
+### Grace Period Logic
+```typescript
+export const GRACE_PERIOD = 7 * 24 * 60 * 60; // 7 days in seconds
+
+export function calculateGracePeriod(expiresAt: number): number {
+  return expiresAt + GRACE_PERIOD;
+}
+
+export function isInGracePeriod(expiresAt: number, currentTime: number): boolean {
+  const gracePeriodEnd = calculateGracePeriod(expiresAt);
+  return currentTime <= gracePeriodEnd;
+}
+```
+
+## Frontend Payment Integration
+
+### 1. Subscription Purchase Flow
+```typescript
+import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
+import { Program, AnchorProvider, web3 } from '@project-serum/anchor';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
+
+export function useSubscriptionPurchase() {
+  const wallet = useAnchorWallet();
+  const { connection } = useConnection();
+  
+  const purchaseSubscription = async (planType: PlanType) => {
+    if (!wallet) throw new Error('Wallet not connected');
+    
+    const provider = new AnchorProvider(connection, wallet, {});
+    const program = new Program(IDL, PROGRAM_ID, provider);
+    
+    const plan = SUBSCRIPTION_PLANS[planType];
+    
+    // Derive subscription PDA
+    const [subscriptionPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from('subscription'),
+        wallet.publicKey.toBuffer()
+      ],
+      PROGRAM_ID
+    );
+    
+    // Derive treasury PDA
+    const [treasuryPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from('treasury')],
+      PROGRAM_ID
+    );
+    
+    try {
+      // Check if subscription already exists
+      const existingSubscription = await program.account.subscription
+        .fetchNullable(subscriptionPDA);
+      
+      let tx;
+      if (existingSubscription) {
+        // Renew existing subscription
+        tx = await program.methods
+          .renewSubscription(new web3.BN(plan.lamports))
+          .accounts({
+            subscription: subscriptionPDA,
+            user: wallet.publicKey,
+            treasury: treasuryPDA,
+            systemProgram: SystemProgram.programId,
+          })
+          .transaction();
+      } else {
+        // Create new subscription
+        tx = await program.methods
+          .initializeSubscription(
+            planType === PlanType.MONTHLY ? { monthly: {} } : { yearly: {} },
+            new web3.BN(plan.lamports)
+          )
+          .accounts({
+            subscription: subscriptionPDA,
+            user: wallet.publicKey,
+            treasury: treasuryPDA,
+            systemProgram: SystemProgram.programId,
+          })
+          .transaction();
+      }
+      
+      // Send and confirm transaction
+      const signature = await wallet.sendTransaction(tx, connection);
+      const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+      
+      if (confirmation.value.err) {
+        throw new Error('Transaction failed');
+      }
+      
+      // Trigger Convex sync
+      await triggerSubscriptionSync(wallet.publicKey.toString());
+      
+      return {
+        signature,
+        subscriptionPDA: subscriptionPDA.toString()
+      };
+      
+    } catch (error) {
+      console.error('Subscription purchase failed:', error);
+      throw error;
+    }
+  };
+  
+  return { purchaseSubscription };
+}
+```
+
+### 2. Subscription Status Checking
+```typescript
+export function useSubscriptionStatus() {
+  const wallet = useAnchorWallet();
+  const { connection } = useConnection();
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  
+  const checkSubscriptionStatus = useCallback(async () => {
+    if (!wallet) return null;
+    
+    setLoading(true);
+    try {
+      const provider = new AnchorProvider(connection, wallet, {});
+      const program = new Program(IDL, PROGRAM_ID, provider);
+      
+      const [subscriptionPDA] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from('subscription'),
+          wallet.publicKey.toBuffer()
+        ],
+        PROGRAM_ID
+      );
+      
+      const subscription = await program.account.subscription
+        .fetchNullable(subscriptionPDA);
+      
+      if (!subscription) {
+        setStatus(null);
+        return null;
+      }
+      
+      const currentTime = Math.floor(Date.now() / 1000);
+      const isActive = subscription.isActive;
+      const isExpired = subscription.expiresAt.toNumber() < currentTime;
+      const inGracePeriod = isInGracePeriod(
+        subscription.expiresAt.toNumber(),
+        currentTime
+      );
+      
+      const subscriptionStatus: SubscriptionStatus = {
+        isActive: isActive && !isExpired,
+        planType: subscription.planType.monthly ? PlanType.MONTHLY : PlanType.YEARLY,
+        expiresAt: subscription.expiresAt.toNumber(),
+        inGracePeriod: isExpired && inGracePeriod,
+        daysRemaining: Math.max(0, Math.ceil((subscription.expiresAt.toNumber() - currentTime) / (24 * 60 * 60)))
+      };
+      
+      setStatus(subscriptionStatus);
+      return subscriptionStatus;
+      
+    } catch (error) {
+      console.error('Failed to check subscription status:', error);
+      setStatus(null);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [wallet, connection]);
+  
+  useEffect(() => {
+    if (wallet) {
+      checkSubscriptionStatus();
+      
+      // Poll subscription status every 5 minutes
+      const interval = setInterval(checkSubscriptionStatus, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [wallet, checkSubscriptionStatus]);
+  
+  return { status, loading, refetch: checkSubscriptionStatus };
+}
+```
+
+## Backend Sync with Convex
+
+### 1. Subscription Polling Action
+```typescript
+import { action } from './_generated/server';
+import { api } from './_generated/api';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { Program, AnchorProvider } from '@project-serum/anchor';
+
+export const syncSubscriptionStatus = action({
+  args: { userPublicKey: v.string() },
+  handler: async (ctx, { userPublicKey }) => {
+    const connection = new Connection(process.env.HELIUS_RPC_URL!);
+    
+    try {
+      // Create read-only provider
+      const provider = new AnchorProvider(
+        connection,
+        {} as any, // No wallet needed for read-only operations
+        {}
+      );
+      
+      const program = new Program(IDL, PROGRAM_ID, provider);
+      
+      // Derive subscription PDA
+      const userPubkey = new PublicKey(userPublicKey);
+      const [subscriptionPDA] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from('subscription'),
+          userPubkey.toBuffer()
+        ],
+        PROGRAM_ID
+      );
+      
+      // Fetch on-chain subscription data
+      const subscription = await program.account.subscription
+        .fetchNullable(subscriptionPDA);
+      
+      if (!subscription) {
+        // Clear subscription status in database
+        await ctx.runMutation(api.users.updateSubscription, {
+          publicKey: userPublicKey,
+          subscription: null
+        });
+        return { status: 'no_subscription' };
+      }
+      
+      const currentTime = Math.floor(Date.now() / 1000);
+      const isActive = subscription.isActive;
+      const isExpired = subscription.expiresAt.toNumber() < currentTime;
+      const inGracePeriod = !isExpired || isInGracePeriod(
+        subscription.expiresAt.toNumber(),
+        currentTime
+      );
+      
+      // Update database with on-chain status
+      await ctx.runMutation(api.users.updateSubscription, {
+        publicKey: userPublicKey,
+        subscription: {
+          planType: subscription.planType.monthly ? 'monthly' : 'yearly',
+          expiresAt: subscription.expiresAt.toNumber(),
+          isActive: isActive && inGracePeriod,
+          amountPaid: subscription.amountPaid.toNumber(),
+          createdAt: subscription.createdAt.toNumber(),
+          onChainAddress: subscriptionPDA.toString()
+        }
+      });
+      
+      return {
+        status: 'synced',
+        subscription: {
+          isActive: isActive && inGracePeriod,
+          expiresAt: subscription.expiresAt.toNumber(),
+          planType: subscription.planType.monthly ? 'monthly' : 'yearly'
+        }
+      };
+      
+    } catch (error) {
+      console.error('Failed to sync subscription:', error);
+      throw new Error('Subscription sync failed');
+    }
+  }
+});
+```
+
+### 2. Automated Polling Scheduler
+```typescript
+import { internalAction } from './_generated/server';
+import { api } from './_generated/api';
+
+export const pollAllSubscriptions = internalAction({
+  handler: async (ctx) => {
+    // Get all users with subscriptions
+    const users = await ctx.runQuery(api.users.getAllUsersWithSubscriptions, {});
+    
+    const syncPromises = users.map(user => 
+      ctx.runAction(api.subscriptions.syncSubscriptionStatus, {
+        userPublicKey: user.publicKey
+      }).catch(error => {
+        console.error(`Failed to sync subscription for ${user.publicKey}:`, error);
+        return { status: 'error', error: error.message };
+      })
+    );
+    
+    const results = await Promise.all(syncPromises);
+    
+    return {
+      total: users.length,
+      synced: results.filter(r => r.status === 'synced').length,
+      errors: results.filter(r => r.status === 'error').length
+    };
+  }
+});
+
+// Schedule polling every 10 minutes
+export const scheduleSubscriptionPolling = internalAction({
+  handler: async (ctx) => {
+    await ctx.scheduler.runAfter(10 * 60 * 1000, api.subscriptions.pollAllSubscriptions, {});
+  }
+});
+```
+
+## Payment Error Handling
+
+### 1. Transaction Failures
+```typescript
+export enum PaymentError {
+  INSUFFICIENT_FUNDS = 'INSUFFICIENT_FUNDS',
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  USER_REJECTED = 'USER_REJECTED',
+  SUBSCRIPTION_EXISTS = 'SUBSCRIPTION_EXISTS',
+  INVALID_PLAN = 'INVALID_PLAN',
+  PROGRAM_ERROR = 'PROGRAM_ERROR'
+}
+
+export function handlePaymentError(error: any): PaymentError {
+  if (error.message?.includes('insufficient funds')) {
+    return PaymentError.INSUFFICIENT_FUNDS;
+  }
+  
+  if (error.message?.includes('User rejected')) {
+    return PaymentError.USER_REJECTED;
+  }
+  
+  if (error.code === 'NETWORK_ERROR') {
+    return PaymentError.NETWORK_ERROR;
+  }
+  
+  if (error.message?.includes('custom program error')) {
+    return PaymentError.PROGRAM_ERROR;
+  }
+  
+  return PaymentError.NETWORK_ERROR;
+}
+```
+
+### 2. Retry Logic
+```typescript
+export async function retryPayment<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3,
+  delay = 1000
+): Promise<T> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      const paymentError = handlePaymentError(error);
+      
+      // Don't retry user rejections or insufficient funds
+      if (paymentError === PaymentError.USER_REJECTED || 
+          paymentError === PaymentError.INSUFFICIENT_FUNDS) {
+        throw error;
+      }
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, attempt - 1)));
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+```
+
+## Price Oracle Integration
+
+### 1. SOL/USD Price Feeds
+```typescript
+import { Connection, PublicKey } from '@solana/web3.js';
+
+// Pyth SOL/USD price feed
+const SOL_USD_PRICE_FEED = new PublicKey('H6ARHf6YXhGYeQfUzQNGk6rDNnLBQKrenN712K4AQJEG');
+
+export async function getSOLPrice(connection: Connection): Promise<number> {
+  try {
+    const priceAccountInfo = await connection.getAccountInfo(SOL_USD_PRICE_FEED);
+    
+    if (!priceAccountInfo) {
+      throw new Error('Price feed not found');
+    }
+    
+    // Parse Pyth price data (simplified)
+    // In production, use @pythnetwork/client
+    const price = parsePythPriceData(priceAccountInfo.data);
+    
+    return price;
+  } catch (error) {
+    console.error('Failed to fetch SOL price:', error);
+    // Fallback to cached price or external API
+    return await getFallbackSOLPrice();
+  }
+}
+
+export async function calculateUSDPrice(solAmount: number): Promise<number> {
+  const solPrice = await getSOLPrice(new Connection(process.env.HELIUS_RPC_URL!));
+  return solAmount * solPrice;
+}
+```
+
+### 2. Dynamic Pricing (Future)
+```typescript
+export function calculateDynamicPrice(
+  basePrice: number,
+  solPrice: number,
+  targetUSD: number
+): number {
+  // Adjust SOL price based on USD target
+  const adjustedPrice = targetUSD / solPrice;
+  
+  // Apply bounds to prevent extreme price swings
+  const minPrice = basePrice * 0.8;
+  const maxPrice = basePrice * 1.2;
+  
+  return Math.max(minPrice, Math.min(maxPrice, adjustedPrice));
+}
+```

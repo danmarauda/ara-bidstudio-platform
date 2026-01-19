@@ -1,0 +1,535 @@
+---
+category: backend
+subcategory: database-schema
+tags: [convex, schema, indexing, relationships, typescript]
+cursor:
+  context_window: 8192
+  temperature: 0.5
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./convex-patterns.mdc"]
+  exports: ["schema-definitions", "index-strategies", "validation-rules"]
+  references: ["../ai-rag/embeddings.mdc", "./api-design.mdc"]
+---
+
+# Database Schema Design - Convex Best Practices
+
+## Core Schema Principles
+
+**Wallet-Centric Design**: All data must be isolated by Solana wallet address
+**Optimistic Indexing**: Create indexes before you need them for performance
+**Type Safety**: Leverage Convex's automatic TypeScript generation
+**Denormalization Strategy**: Balance normalization with query performance
+
+## Primary Schema Definition
+
+```typescript
+// convex/schema.ts
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  // Users and Authentication
+  users: defineTable({
+    walletAddress: v.string(),
+    publicKey: v.string(),
+    displayName: v.optional(v.string()),
+    avatar: v.optional(v.string()),
+    preferences: v.object({
+      theme: v.union(v.literal("light"), v.literal("dark")),
+      aiModel: v.string(),
+      notifications: v.boolean(),
+      language: v.optional(v.string()),
+    }),
+    subscription: v.object({
+      tier: v.union(v.literal("free"), v.literal("pro"), v.literal("enterprise")),
+      expiresAt: v.optional(v.number()),
+      tokensUsed: v.number(),
+      tokensLimit: v.number(),
+    }),
+    createdAt: v.number(),
+    lastActiveAt: v.number(),
+    isActive: v.boolean(),
+  })
+  .index("by_wallet", ["walletAddress"])
+  .index("by_active", ["isActive", "lastActiveAt"])
+  .index("by_subscription_tier", ["subscription.tier"]),
+
+  // Chat Sessions
+  chats: defineTable({
+    walletAddress: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    model: v.string(), // AI model used for this chat
+    systemPrompt: v.optional(v.string()),
+    temperature: v.optional(v.number()),
+    maxTokens: v.optional(v.number()),
+    isArchived: v.boolean(),
+    isPinned: v.boolean(),
+    messageCount: v.number(),
+    tokensUsed: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastMessageAt: v.optional(v.number()),
+  })
+  .index("by_wallet", ["walletAddress"])
+  .index("by_wallet_updated", ["walletAddress", "updatedAt"])
+  .index("by_wallet_active", ["walletAddress", "isArchived", "updatedAt"])
+  .index("by_last_message", ["lastMessageAt"])
+  .searchIndex("title_search", {
+    searchField: "title",
+    filterFields: ["walletAddress", "isArchived"],
+  }),
+
+  // Chat Messages
+  messages: defineTable({
+    chatId: v.id("chats"),
+    walletAddress: v.string(),
+    role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+    content: v.string(),
+    tokenCount: v.optional(v.number()),
+    embedding: v.optional(v.array(v.number())),
+    metadata: v.optional(v.object({
+      model: v.optional(v.string()),
+      finishReason: v.optional(v.string()),
+      usage: v.optional(v.object({
+        promptTokens: v.number(),
+        completionTokens: v.number(),
+        totalTokens: v.number(),
+      })),
+    })),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sending"), 
+      v.literal("sent"),
+      v.literal("failed"),
+      v.literal("deleted")
+    ),
+    error: v.optional(v.string()),
+    parentMessageId: v.optional(v.id("messages")), // For message threading
+    timestamp: v.number(),
+    editedAt: v.optional(v.number()),
+  })
+  .index("by_chat", ["chatId"])
+  .index("by_chat_timestamp", ["chatId", "timestamp"])
+  .index("by_wallet_timestamp", ["walletAddress", "timestamp"])
+  .index("by_status", ["status"])
+  .index("by_parent", ["parentMessageId"])
+  .index("by_role_chat", ["role", "chatId"])
+  .searchIndex("content_search", {
+    searchField: "content",
+    filterFields: ["walletAddress", "chatId", "role"],
+  })
+  .vectorIndex("content_embedding", {
+    vectorField: "embedding",
+    dimensions: 1536, // OpenAI embedding dimension
+    filterFields: ["walletAddress", "chatId"],
+  }),
+
+  // Knowledge Base Documents
+  documents: defineTable({
+    walletAddress: v.string(),
+    title: v.string(),
+    content: v.string(),
+    type: v.union(v.literal("text"), v.literal("pdf"), v.literal("markdown")),
+    source: v.optional(v.string()), // URL or file path
+    hash: v.string(), // Content hash for deduplication
+    size: v.number(), // Size in bytes
+    embedding: v.optional(v.array(v.number())),
+    metadata: v.optional(v.object({
+      author: v.optional(v.string()),
+      tags: v.optional(v.array(v.string())),
+      category: v.optional(v.string()),
+    })),
+    isProcessed: v.boolean(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+  .index("by_wallet", ["walletAddress"])
+  .index("by_hash", ["hash"])
+  .index("by_wallet_active", ["walletAddress", "isActive"])
+  .index("by_processed", ["isProcessed"])
+  .searchIndex("content_search", {
+    searchField: "content",
+    filterFields: ["walletAddress", "type", "isActive"],
+  })
+  .vectorIndex("content_embedding", {
+    vectorField: "embedding",
+    dimensions: 1536,
+    filterFields: ["walletAddress", "type"],
+  }),
+
+  // Document Chunks (for RAG)
+  chunks: defineTable({
+    documentId: v.id("documents"),
+    walletAddress: v.string(),
+    content: v.string(),
+    chunkIndex: v.number(),
+    startOffset: v.number(),
+    endOffset: v.number(),
+    embedding: v.optional(v.array(v.number())),
+    metadata: v.optional(v.object({
+      pageNumber: v.optional(v.number()),
+      section: v.optional(v.string()),
+    })),
+    createdAt: v.number(),
+  })
+  .index("by_document", ["documentId"])
+  .index("by_wallet", ["walletAddress"])
+  .index("by_document_index", ["documentId", "chunkIndex"])
+  .vectorIndex("content_embedding", {
+    vectorField: "embedding",
+    dimensions: 1536,
+    filterFields: ["walletAddress", "documentId"],
+  }),
+
+  // Usage Analytics
+  usage: defineTable({
+    walletAddress: v.string(),
+    action: v.union(
+      v.literal("message_sent"),
+      v.literal("chat_created"),
+      v.literal("document_uploaded"),
+      v.literal("search_performed")
+    ),
+    resourceId: v.optional(v.string()), // Chat ID, document ID, etc.
+    tokens: v.optional(v.number()),
+    cost: v.optional(v.number()), // In SOL
+    metadata: v.optional(v.object({
+      model: v.optional(v.string()),
+      duration: v.optional(v.number()),
+      success: v.optional(v.boolean()),
+    })),
+    timestamp: v.number(),
+    date: v.string(), // YYYY-MM-DD for daily aggregation
+  })
+  .index("by_wallet", ["walletAddress"])
+  .index("by_wallet_date", ["walletAddress", "date"])
+  .index("by_action", ["action"])
+  .index("by_timestamp", ["timestamp"]),
+
+  // API Keys and Integrations
+  apiKeys: defineTable({
+    walletAddress: v.string(),
+    name: v.string(),
+    keyHash: v.string(), // Hashed API key
+    provider: v.union(v.literal("openai"), v.literal("anthropic"), v.literal("custom")),
+    permissions: v.array(v.string()),
+    isActive: v.boolean(),
+    lastUsed: v.optional(v.number()),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+  })
+  .index("by_wallet", ["walletAddress"])
+  .index("by_hash", ["keyHash"])
+  .index("by_wallet_active", ["walletAddress", "isActive"]),
+
+  // Background Jobs
+  jobs: defineTable({
+    walletAddress: v.optional(v.string()),
+    type: v.union(
+      v.literal("embedding_generation"),
+      v.literal("document_processing"),
+      v.literal("analytics_aggregation"),
+      v.literal("cleanup")
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("cancelled")
+    ),
+    priority: v.union(v.literal("low"), v.literal("normal"), v.literal("high")),
+    data: v.any(), // Job-specific data
+    progress: v.optional(v.number()), // 0-100
+    result: v.optional(v.any()),
+    error: v.optional(v.string()),
+    retryCount: v.number(),
+    maxRetries: v.number(),
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    scheduledFor: v.optional(v.number()),
+  })
+  .index("by_status", ["status"])
+  .index("by_type", ["type"])
+  .index("by_wallet", ["walletAddress"])
+  .index("by_priority_created", ["priority", "createdAt"])
+  .index("by_scheduled", ["scheduledFor"]),
+
+  // System Configuration
+  config: defineTable({
+    key: v.string(),
+    value: v.any(),
+    description: v.optional(v.string()),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.string()),
+  })
+  .index("by_key", ["key"]),
+});
+```
+
+## Schema Validation Rules
+
+::alert{type="warning"}
+**Critical**: Always validate wallet ownership before any database operation to prevent data leakage.
+::
+
+### Input Validation Patterns
+
+```typescript
+// Input validators for common patterns
+export const validators = {
+  walletAddress: v.string().refine((addr) => 
+    /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr), 
+    "Invalid Solana wallet address"
+  ),
+  
+  chatTitle: v.string().refine((title) => 
+    title.trim().length >= 1 && title.trim().length <= 100,
+    "Chat title must be 1-100 characters"
+  ),
+  
+  messageContent: v.string().refine((content) => 
+    content.trim().length >= 1 && content.trim().length <= 10000,
+    "Message must be 1-10000 characters"
+  ),
+  
+  embedding: v.array(v.number()).refine((arr) => 
+    arr.length === 1536 && arr.every(n => !isNaN(n)),
+    "Invalid embedding format"
+  ),
+};
+
+// Usage in mutations
+export const createChat = mutation({
+  args: {
+    walletAddress: validators.walletAddress,
+    title: validators.chatTitle,
+  },
+  handler: async (ctx, args) => {
+    // Implementation
+  },
+});
+```
+
+## Index Strategy Guidelines
+
+### 1. Wallet-Based Isolation Indexes
+```typescript
+// Always include wallet address as first field in compound indexes
+.index("by_wallet_timestamp", ["walletAddress", "timestamp"])
+.index("by_wallet_active", ["walletAddress", "isActive", "updatedAt"])
+.index("by_wallet_status", ["walletAddress", "status"])
+```
+
+### 2. Query Performance Indexes
+```typescript
+// Optimize for common query patterns
+.index("by_chat_timestamp", ["chatId", "timestamp"]) // Message pagination
+.index("by_role_chat", ["role", "chatId"]) // Filter by message role
+.index("by_status", ["status"]) // Background job processing
+```
+
+### 3. Search and Vector Indexes
+```typescript
+// Full-text search
+.searchIndex("content_search", {
+  searchField: "content",
+  filterFields: ["walletAddress", "chatId", "role"],
+})
+
+// Vector similarity search
+.vectorIndex("content_embedding", {
+  vectorField: "embedding", 
+  dimensions: 1536,
+  filterFields: ["walletAddress", "chatId"],
+})
+```
+
+## Relationship Patterns
+
+### 1. One-to-Many Relationships
+```typescript
+// User -> Chats -> Messages hierarchy
+const userChats = await ctx.db
+  .query("chats")
+  .withIndex("by_wallet", (q) => q.eq("walletAddress", walletAddress))
+  .collect();
+
+const chatMessages = await ctx.db
+  .query("messages")
+  .withIndex("by_chat_timestamp", (q) => q.eq("chatId", chatId))
+  .collect();
+```
+
+### 2. Document-Chunk Relationships
+```typescript
+// Efficient chunk retrieval for RAG
+const documentChunks = await ctx.db
+  .query("chunks")
+  .withIndex("by_document_index", (q) => 
+    q.eq("documentId", documentId)
+  )
+  .order("asc") // Ordered by chunkIndex
+  .collect();
+```
+
+### 3. Soft Delete Pattern
+```typescript
+// Prefer status flags over hard deletion
+await ctx.db.patch(messageId, { 
+  status: "deleted",
+  deletedAt: Date.now() 
+});
+
+// Query active records only
+const activeMessages = await ctx.db
+  .query("messages")
+  .withIndex("by_chat_timestamp", (q) => q.eq("chatId", chatId))
+  .filter((q) => q.neq("status", "deleted"))
+  .collect();
+```
+
+## Data Migration Patterns
+
+### Schema Evolution Strategy
+```typescript
+// Safe field addition migration
+export const migrateUserPreferences = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    
+    let processed = 0;
+    for (const user of users) {
+      if (!user.preferences?.language) {
+        await ctx.db.patch(user._id, {
+          preferences: {
+            ...user.preferences,
+            language: "en", // Default value
+          },
+        });
+        processed++;
+      }
+    }
+    
+    console.log(`Migrated ${processed} user records`);
+  },
+});
+
+// Data type migration with validation
+export const migrateMessageTokenCounts = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const messages = await ctx.db
+      .query("messages")
+      .filter((q) => q.eq("tokenCount", undefined))
+      .take(100); // Process in batches
+    
+    for (const message of messages) {
+      const tokenCount = estimateTokenCount(message.content);
+      await ctx.db.patch(message._id, { tokenCount });
+    }
+    
+    return { processed: messages.length };
+  },
+});
+```
+
+## Performance Optimization
+
+### 1. Denormalization for Read Performance
+```typescript
+// Store frequently accessed data directly
+chats: defineTable({
+  // ... other fields
+  messageCount: v.number(), // Denormalized count
+  lastMessagePreview: v.optional(v.string()), // Last message snippet
+  lastMessageAt: v.optional(v.number()), // Denormalized timestamp
+}),
+```
+
+### 2. Aggregation Tables
+```typescript
+// Pre-computed daily usage statistics
+dailyUsage: defineTable({
+  walletAddress: v.string(),
+  date: v.string(), // YYYY-MM-DD
+  messagesCount: v.number(),
+  tokensUsed: v.number(),
+  chatsCreated: v.number(),
+  documentsUploaded: v.number(),
+  updatedAt: v.number(),
+})
+.index("by_wallet_date", ["walletAddress", "date"])
+.index("by_date", ["date"]),
+```
+
+### 3. Efficient Pagination Helpers
+```typescript
+// Cursor-based pagination utility
+export const paginateQuery = async <T>(
+  query: any,
+  cursor: string | null,
+  limit: number = 20
+): Promise<{ items: T[]; nextCursor: string | null; hasMore: boolean }> => {
+  if (cursor) {
+    const cursorDoc = await ctx.db.get(cursor as Id<any>);
+    if (cursorDoc) {
+      query = query.filter((q: any) => q.lt("timestamp", cursorDoc.timestamp));
+    }
+  }
+
+  const items = await query.order("desc").take(limit + 1);
+  const hasMore = items.length > limit;
+  const result = hasMore ? items.slice(0, limit) : items;
+  const nextCursor = hasMore ? result[result.length - 1]._id : null;
+
+  return { items: result, nextCursor, hasMore };
+};
+```
+
+## Security Considerations
+
+### 1. Row-Level Security
+```typescript
+// Always validate ownership in queries
+const secureQuery = async (ctx: any, walletAddress: string, resourceId: string) => {
+  const resource = await ctx.db.get(resourceId);
+  
+  if (!resource || resource.walletAddress !== walletAddress) {
+    throw new ConvexError("Unauthorized access");
+  }
+  
+  return resource;
+};
+```
+
+### 2. Input Sanitization
+```typescript
+// Sanitize user inputs
+export const sanitizeInput = (input: string): string => {
+  return input
+    .trim()
+    .slice(0, 10000) // Max length
+    .replace(/[<>]/g, ''); // Basic XSS prevention
+};
+```
+
+### 3. Rate Limiting Schema
+```typescript
+// Track API usage for rate limiting
+rateLimits: defineTable({
+  walletAddress: v.string(),
+  endpoint: v.string(),
+  windowStart: v.number(),
+  requestCount: v.number(),
+  lastRequest: v.number(),
+})
+.index("by_wallet_endpoint", ["walletAddress", "endpoint"])
+.index("by_window", ["windowStart"]),
+```

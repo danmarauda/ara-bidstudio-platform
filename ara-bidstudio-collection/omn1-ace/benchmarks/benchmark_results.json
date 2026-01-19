@@ -1,0 +1,57 @@
+{
+  "timestamp": 1763385739.896124,
+  "redis_available": true,
+  "benchmarks": {
+    "speed": {
+      "p50_ms": 0.1705204999999932,
+      "p95_ms": 0.27447259999999896,
+      "p99_ms": 0.716462080000001,
+      "mean_ms": 0.1859791600000009,
+      "iterations": 100,
+      "estimated": false
+    },
+    "token_reduction": {
+      "overall_reduction_pct": 97.89,
+      "total_original_tokens": 115044,
+      "total_compressed_tokens": 2431,
+      "file_results": [
+        {
+          "file": "unified_cache_manager.py",
+          "original_tokens": 4652,
+          "compressed_tokens": 479,
+          "reduction_pct": 89.7
+        },
+        {
+          "file": "omnimemory_mcp.py",
+          "original_tokens": 108385,
+          "compressed_tokens": 1732,
+          "reduction_pct": 98.4
+        },
+        {
+          "file": "qdrant_vector_store.py",
+          "original_tokens": 2007,
+          "compressed_tokens": 220,
+          "reduction_pct": 89.04
+        }
+      ],
+      "compression_method": "VisionDrop Adaptive + LZ4 (max_compression)"
+    },
+    "memory_efficiency": {
+      "total_files": 100,
+      "memory_used_mb": 1.84014892578125,
+      "per_file_kb": 18.843125,
+      "hash_savings_pct": 0.46,
+      "estimated": false
+    },
+    "team_sharing": {
+      "team_size": 5,
+      "files": 100,
+      "tokens_without_sharing": 2277000,
+      "tokens_with_sharing": 455400,
+      "savings_pct": 80.0,
+      "cost_without": 34.16,
+      "cost_with": 6.83,
+      "cost_savings": 27.32
+    }
+  }
+}

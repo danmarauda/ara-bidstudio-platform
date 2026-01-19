@@ -1,0 +1,438 @@
+---
+category: security
+subcategory: audit
+tags: [security-audit, checklist, compliance, assessment]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["./authentication.mdc", "./data-isolation.mdc", "./rate-limiting.mdc", "./csp-headers.mdc"]
+  exports: ["audit-procedures", "security-checklist"]
+  references: ["../web3/smart-contracts.mdc"]
+---
+
+# Security Audit Checklist & Procedures
+
+## Pre-Audit Preparation
+
+### 1. Documentation Requirements
+- [ ] Architecture diagrams (network, application, data flow)
+- [ ] Threat model documentation
+- [ ] Security policies and procedures
+- [ ] Incident response plan
+- [ ] Code repository access (read-only)
+- [ ] Test environment access
+- [ ] Configuration files (sanitized)
+- [ ] Third-party dependency list
+- [ ] Previous audit reports and remediation status
+
+### 2. Scope Definition
+- [ ] **Frontend Security**: Next.js application, wallet integration, CSP
+- [ ] **Backend Security**: Convex functions, API endpoints, data validation
+- [ ] **Smart Contracts**: Anchor programs, subscription logic, treasury management
+- [ ] **Infrastructure**: RPC endpoints, rate limiting, monitoring
+- [ ] **Data Protection**: Encryption, isolation, privacy compliance
+- [ ] **Authentication**: Wallet-based auth, session management, MFA readiness
+
+## Authentication & Authorization Audit
+
+### 1. Wallet Authentication
+```typescript
+interface AuthAuditChecklist {
+  signatureVerification: {
+    cryptographicValidation: boolean;        // ✅ nacl.sign.detached.verify implementation
+    nonceManagement: boolean;                // ✅ Unique nonces with expiration
+    replayAttackPrevention: boolean;         // ✅ Nonce consumption tracking
+    messageIntegrityChecks: boolean;         // ✅ Domain, chain, timing validation
+    sessionSecurityValidation: boolean;      // ✅ JWT with proper signing
+  };
+  
+  accessControl: {
+    walletOwnershipVerification: boolean;    // ✅ Every request validates wallet ownership
+    crossWalletDataAccess: boolean;          // ❌ Must prevent access to other wallets' data
+    sessionManagement: boolean;              // ✅ Proper session lifecycle
+    privilegeEscalation: boolean;            // ❌ Must prevent elevation attacks
+    authorizationBypass: boolean;            // ❌ Must prevent bypass attempts
+  };
+  
+  securityHeaders: {
+    cspImplementation: boolean;              // ✅ Comprehensive CSP with nonces
+    hstsEnforcement: boolean;                // ✅ HTTPS enforcement
+    clickjackingPrevention: boolean;         // ✅ X-Frame-Options: DENY
+    contentTypeValidation: boolean;          // ✅ X-Content-Type-Options: nosniff
+  };
+}
+```
+
+**Audit Steps**:
+1. **Test signature verification bypass attempts**
+2. **Verify nonce reuse prevention**
+3. **Test session hijacking scenarios**
+4. **Validate wallet ownership checks on all endpoints**
+5. **Test cross-origin request handling**
+
+### 2. Session Security
+- [ ] JWT token validation and signing algorithm (HS256 required)
+- [ ] Session expiration and renewal mechanisms
+- [ ] Concurrent session limits per wallet
+- [ ] Session invalidation on wallet disconnect
+- [ ] Secure session storage (HTTP-only cookies preferred)
+
+## Data Protection Audit
+
+### 1. Data Isolation
+```typescript
+interface DataIsolationAudit {
+  conversationSecurity: {
+    walletKeyEncryption: boolean;           // ✅ Wallet-specific encryption keys
+    crossWalletAccess: boolean;             // ❌ Test unauthorized conversation access
+    encryptionAtRest: boolean;              // ✅ All messages encrypted
+    keyRotationCapability: boolean;         // ⚠️ Future implementation needed
+  };
+  
+  memorySecurity: {
+    vectorStoreIsolation: boolean;          // ✅ Wallet-specific Qdrant collections
+    ragDataLeakage: boolean;                // ❌ Test cross-wallet RAG contamination
+    fileUploadValidation: boolean;          // ✅ Content type and size validation
+    metadataProtection: boolean;            // ✅ Encrypted metadata storage
+  };
+  
+  subscriptionSecurity: {
+    onChainVerification: boolean;           // ✅ Subscription status from blockchain
+    subscriptionSpoofing: boolean;          // ❌ Test subscription bypass attempts
+    paymentValidation: boolean;             // ✅ SOL amount and recipient validation
+    gracePeriodLogic: boolean;              // ✅ Grace period implementation
+  };
+}
+```
+
+**Audit Steps**:
+1. **Test unauthorized data access between wallets**
+2. **Verify encryption key derivation and storage**
+3. **Test data deletion and purging capabilities**
+4. **Validate subscription status verification**
+5. **Test memory isolation in vector database**
+
+### 2. Privacy Compliance
+- [ ] GDPR compliance (right to deletion, data portability)
+- [ ] CCPA compliance (consumer privacy rights)
+- [ ] Data retention policies and automated cleanup
+- [ ] PII handling (minimal collection, wallet addresses only)
+- [ ] Third-party data sharing agreements
+
+## Smart Contract Security Audit
+
+### 1. Anchor Program Security
+```typescript
+interface SmartContractAudit {
+  programSecurity: {
+    accessControlValidation: boolean;       // ✅ Signer requirements on all instructions
+    pdaValidation: boolean;                 // ✅ Proper PDA derivation and validation
+    arithmeticSafety: boolean;              // ✅ checked_add, checked_mul usage
+    accountValidation: boolean;             // ✅ Account ownership and type checks
+    reentrancyProtection: boolean;          // ✅ No external calls in critical sections
+  };
+  
+  subscriptionLogic: {
+    paymentValidation: boolean;             // ✅ Correct SOL amounts and recipients
+    subscriptionCreation: boolean;          // ✅ Proper initialization and state
+    renewalLogic: boolean;                  // ✅ Extension logic and timing
+    cancellationHandling: boolean;          // ✅ State updates and cleanup
+    treasuryManagement: boolean;            // ✅ Multi-sig treasury controls
+  };
+  
+  testCoverage: {
+    unitTests: boolean;                     // ✅ >90% instruction coverage
+    integrationTests: boolean;              // ✅ End-to-end workflows
+    fuzzing: boolean;                       // ⚠️ Property-based testing needed
+    auditReports: boolean;                  // ⚠️ Third-party audit required
+  };
+}
+```
+
+**Audit Steps**:
+1. **Review all program instructions for access control**
+2. **Test unauthorized subscription modifications**
+3. **Validate arithmetic operations for overflow/underflow**
+4. **Test PDA collision and manipulation attempts**
+5. **Review treasury fund management and withdrawal controls**
+
+### 2. Integration Security
+- [ ] Frontend-to-program interaction security
+- [ ] Transaction simulation and validation
+- [ ] Error handling and user feedback
+- [ ] Network resilience and fallback mechanisms
+- [ ] RPC endpoint security and rate limiting
+
+## Infrastructure Security Audit
+
+### 1. Network Security
+```typescript
+interface InfrastructureAudit {
+  networkSecurity: {
+    httpsEnforcement: boolean;              // ✅ All traffic encrypted
+    certificateValidation: boolean;         // ✅ Valid TLS certificates
+    rpcEndpointSecurity: boolean;           // ✅ Authenticated RPC access
+    corsConfiguration: boolean;             // ✅ Proper CORS policies
+    ddosProtection: boolean;                // ✅ Rate limiting and IP blocking
+  };
+  
+  rateLimiting: {
+    walletBasedLimits: boolean;            // ✅ Per-wallet usage controls
+    ipBasedLimits: boolean;                // ✅ IP-based rate limiting
+    subscriptionTierEnforcement: boolean;   // ✅ Different limits per tier
+    gracefulDegradation: boolean;           // ✅ Proper error responses
+    usageAnalytics: boolean;                // ✅ Usage tracking and reporting
+  };
+  
+  monitoring: {
+    securityLogging: boolean;               // ✅ Comprehensive audit logs
+    incidentDetection: boolean;             // ✅ Automated alert systems
+    performanceMonitoring: boolean;         // ✅ Resource usage tracking
+    errorTracking: boolean;                 // ✅ Error aggregation and analysis
+  };
+}
+```
+
+**Audit Steps**:
+1. **Test rate limiting bypass attempts**
+2. **Validate CORS policy effectiveness**
+3. **Test DDoS resilience with load testing**
+4. **Review logging and monitoring coverage**
+5. **Verify certificate chain and security**
+
+### 2. Deployment Security
+- [ ] Environment variable security and rotation
+- [ ] Container security scanning
+- [ ] Dependency vulnerability scanning
+- [ ] CI/CD pipeline security
+- [ ] Secrets management and access control
+
+## Web Application Security Audit
+
+### 1. Frontend Security
+```typescript
+interface FrontendSecurityAudit {
+  webSecurity: {
+    xssProtection: boolean;                 // ✅ Input sanitization and CSP
+    csrfProtection: boolean;                // ✅ CSRF tokens in state changes
+    clickjackingPrevention: boolean;        // ✅ Frame-ancestors directive
+    inputValidation: boolean;               // ✅ Client and server validation
+    sensitiveDataExposure: boolean;         // ❌ Check for exposed credentials
+  };
+  
+  walletIntegration: {
+    walletConnectionSecurity: boolean;      // ✅ Secure wallet adapter usage
+    transactionValidation: boolean;         // ✅ User confirmation for all TX
+    signatureRequestSecurity: boolean;      // ✅ Clear message presentation
+    networkValidation: boolean;             // ✅ Mainnet enforcement
+  };
+  
+  contentSecurity: {
+    cspCompliance: boolean;                 // ✅ Comprehensive CSP policy
+    resourceIntegrityChecks: boolean;       // ✅ SRI for external resources
+    secureDefaults: boolean;                // ✅ Secure-by-default configuration
+  };
+}
+```
+
+**Audit Steps**:
+1. **Test XSS injection in all input fields**
+2. **Validate CSP effectiveness with violation testing**
+3. **Test wallet connection security and user consent**
+4. **Review client-side data handling and storage**
+5. **Test transaction tampering and user awareness**
+
+### 2. API Security
+- [ ] Input validation on all endpoints
+- [ ] Output encoding and sanitization
+- [ ] SQL injection prevention (not applicable to Convex)
+- [ ] Command injection prevention
+- [ ] File upload security and validation
+
+## Third-Party Dependencies Audit
+
+### 1. Dependency Security
+- [ ] Vulnerability scanning with npm audit / yarn audit
+- [ ] Dependency license compliance
+- [ ] Supply chain security verification
+- [ ] Regular dependency updates and maintenance
+- [ ] Pinned dependency versions
+
+### 2. External Services
+- [ ] **Helius RPC**: API key security, rate limiting compliance
+- [ ] **Shyft RPC**: Fallback security and access controls
+- [ ] **OpenAI API**: Key rotation, usage monitoring
+- [ ] **Convex**: Access controls, function security
+- [ ] **Qdrant**: Authentication, data isolation
+- [ ] **Vercel**: Deployment security, environment variables
+
+## Compliance & Governance Audit
+
+### 1. Regulatory Compliance
+```typescript
+interface ComplianceAudit {
+  dataProtection: {
+    gdprCompliance: boolean;                // ✅ Data subject rights implementation
+    ccpaCompliance: boolean;                // ✅ Consumer privacy controls
+    dataRetentionPolicies: boolean;         // ✅ Automated data lifecycle
+    consentManagement: boolean;             // ✅ User consent tracking
+  };
+  
+  financialCompliance: {
+    amlMonitoring: boolean;                 // ⚠️ Future requirement
+    kytImplementation: boolean;             // ⚠️ Know Your Transaction
+    sanctionsScreening: boolean;            // ⚠️ OFAC compliance
+    reportingRequirements: boolean;         // ⚠️ Regulatory reporting
+  };
+  
+  securityStandards: {
+    owasp10Compliance: boolean;             // ✅ OWASP Top 10 mitigation
+    soc2Controls: boolean;                  // ⚠️ SOC 2 Type II needed
+    iso27001Alignment: boolean;             // ⚠️ Information security standards
+    penetrationTesting: boolean;            // ✅ Annual pen testing
+  };
+}
+```
+
+### 2. Security Governance
+- [ ] Security policy documentation
+- [ ] Incident response procedures
+- [ ] Security training and awareness
+- [ ] Regular security assessments
+- [ ] Vendor security assessments
+
+## Automated Security Testing
+
+### 1. Continuous Security Testing
+```bash
+#!/bin/bash
+# Security testing pipeline
+
+# 1. Dependency vulnerability scanning
+npm audit --audit-level high
+snyk test
+
+# 2. SAST (Static Application Security Testing)
+semgrep --config=auto .
+bandit -r backend/
+
+# 3. Secret scanning
+gitleaks detect --source .
+
+# 4. Container security scanning
+trivy image anubis-chat:latest
+
+# 5. Infrastructure as Code scanning
+checkov -d infrastructure/
+
+# 6. Web application security testing
+zap-baseline.py -t https://abubis.chat
+
+# 7. API security testing
+nuclei -u https://api.abubis.chat -t exposures/
+
+# 8. Smart contract security testing
+anchor test
+slither contracts/
+```
+
+### 2. Security Monitoring
+- [ ] Real-time vulnerability alerts
+- [ ] Security event correlation
+- [ ] Automated incident response
+- [ ] Compliance monitoring dashboards
+- [ ] Security metrics and KPIs
+
+## Post-Audit Procedures
+
+### 1. Finding Classification
+```typescript
+interface SecurityFinding {
+  id: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  category: 'authentication' | 'authorization' | 'data-protection' | 'smart-contract' | 'infrastructure';
+  title: string;
+  description: string;
+  impact: string;
+  likelihood: 'high' | 'medium' | 'low';
+  riskScore: number; // 1-10
+  remediation: {
+    shortTerm: string[];
+    longTerm: string[];
+    estimatedEffort: string;
+    priority: number;
+  };
+  evidence: {
+    screenshots: string[];
+    logs: string[];
+    codeSnippets: string[];
+  };
+  status: 'open' | 'in-progress' | 'resolved' | 'accepted' | 'false-positive';
+}
+```
+
+### 2. Remediation Planning
+- [ ] **Critical (P0)**: Fix within 24 hours
+- [ ] **High (P1)**: Fix within 1 week
+- [ ] **Medium (P2)**: Fix within 1 month
+- [ ] **Low (P3)**: Fix within next release cycle
+- [ ] **Info**: Address as part of ongoing improvement
+
+### 3. Verification and Retesting
+- [ ] Remediation verification testing
+- [ ] Regression testing for security fixes
+- [ ] Updated documentation and procedures
+- [ ] Security control effectiveness validation
+- [ ] Continuous monitoring implementation
+
+## Audit Report Template
+
+### Executive Summary
+- Overall security posture assessment
+- Critical findings summary
+- Risk matrix and prioritization
+- Compliance status overview
+- Recommendations roadmap
+
+### Technical Findings
+- Detailed vulnerability descriptions
+- Proof of concept demonstrations
+- Impact and exploitability analysis
+- Remediation guidance
+- Timeline for resolution
+
+### Compliance Assessment
+- Regulatory compliance status
+- Industry standard alignment
+- Policy and procedure gaps
+- Training and awareness needs
+
+### Strategic Recommendations
+- Security architecture improvements
+- Process and governance enhancements
+- Technology and tooling upgrades
+- Resource and capability requirements
+
+## Continuous Security Improvement
+
+### 1. Regular Assessment Schedule
+- **Monthly**: Automated vulnerability scanning
+- **Quarterly**: Security control testing
+- **Bi-annually**: Comprehensive penetration testing
+- **Annually**: Full security audit and compliance review
+
+### 2. Security Metrics
+- Time to detect security incidents
+- Time to remediate vulnerabilities
+- Security control effectiveness
+- Compliance adherence rates
+- Security training completion
+
+### 3. Threat Intelligence
+- Industry threat monitoring
+- Vulnerability disclosure tracking
+- Attack pattern analysis
+- Security community engagement

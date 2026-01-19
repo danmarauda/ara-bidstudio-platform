@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit:*)",
+      "Bash(npx tsc:*)",
+      "mcp__pica__list_pica_integrations",
+      "mcp__pica__get_pica_platform_actions",
+      "mcp__pica__get_pica_action_knowledge",
+      "WebFetch(domain:docs.picaos.com)",
+      "Bash(claude mcp add nia pipx run --no-cache nia-mcp-server)",
+      "Bash(bun update:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "claude-flow",
+    "ruv-swarm",
+    "framer"
+  ]
+}

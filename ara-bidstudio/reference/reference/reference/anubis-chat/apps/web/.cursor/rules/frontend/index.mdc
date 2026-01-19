@@ -1,0 +1,262 @@
+---
+category: frontend
+subcategory: overview
+tags: [react, nextjs, ui, ux, solana, ai-chat, typescript]
+cursor:
+  context_window: 8192
+  temperature: 0.6
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../architecture/patterns.mdc"]
+  exports: ["frontend-patterns", "ui-standards", "chat-patterns"]
+  references: ["../web3/wallet-auth.mdc", "../ai/chat-streaming.mdc"]
+---
+
+# Frontend Architecture & UI/UX Standards for abubis.chat
+
+## Project Overview
+
+abubis.chat is a Solana-native AI chat SaaS built with modern web technologies:
+
+- **Framework**: Next.js 15 with App Router
+- **Runtime**: React 19 with Server Components
+- **Language**: TypeScript (strict mode)
+- **Styling**: TailwindCSS 3.4 with dark/light modes
+- **Backend**: Convex for real-time data
+- **Web3**: Solana wallet integration
+- **AI**: Streaming chat interfaces with RAG
+
+## Core Frontend Principles (2025)
+
+### 1. **Server-First Architecture**
+```typescript
+// Prefer Server Components for data fetching
+export default async function ChatHistory() {
+  const messages = await getMessages(); // Direct database access
+  
+  return (
+    <div className="space-y-4">
+      {messages.map(message => (
+        <MessageBubble key={message.id} message={message} />
+      ))}
+    </div>
+  );
+}
+```
+
+### 2. **Streaming-First UI**
+```typescript
+// AI responses stream in real-time
+function StreamingMessage({ messageId }: { messageId: string }) {
+  const streamingContent = useStreamingMessage(messageId);
+  
+  return (
+    <div className="animate-pulse-subtle">
+      <ReactMarkdown>{streamingContent}</ReactMarkdown>
+      {!streamingContent.complete && <TypingIndicator />}
+    </div>
+  );
+}
+```
+
+### 3. **Wallet-First Experience**
+```typescript
+// Progressive wallet integration
+function ChatInterface() {
+  const { wallet, connected } = useWallet();
+  
+  if (!connected) {
+    return <WalletConnectionPrompt />;
+  }
+  
+  return <AuthenticatedChatView />;
+}
+```
+
+## Technical Stack Standards
+
+### Next.js 15 + React 19 Patterns
+- **Server Components**: Default for data fetching and static content
+- **Client Components**: Only for interactivity (`"use client"`)
+- **Parallel Routes**: For modal dialogs and dynamic layouts
+- **Intercepting Routes**: For wallet connection flows
+- **Streaming**: With Suspense boundaries for progressive loading
+
+### TailwindCSS 3.4 Architecture
+- **Utility-First**: Compose interfaces with utility classes
+- **Custom Components**: Extract reusable patterns into components
+- **Design Tokens**: Centralized theme configuration
+- **Responsive**: Mobile-first with breakpoint prefixes
+- **Dark Mode**: Class-based strategy for manual toggling
+
+### TypeScript Integration
+- **Strict Mode**: All type checks enabled
+- **Server Actions**: Properly typed with Zod validation
+- **Props Interface**: Explicit interfaces for all components
+- **Generic Components**: Type-safe reusable components
+
+## UI/UX Design System
+
+### Visual Hierarchy
+```css
+/* Typography Scale */
+.text-display   { @apply text-5xl font-bold tracking-tight; }
+.text-heading   { @apply text-3xl font-semibold; }
+.text-title     { @apply text-xl font-medium; }
+.text-body      { @apply text-base leading-relaxed; }
+.text-caption   { @apply text-sm text-muted-foreground; }
+```
+
+### Color System
+```css
+/* Semantic Colors */
+:root {
+  --primary: 262 80% 50%;      /* Solana purple */
+  --secondary: 196 100% 47%;   /* Solana cyan */
+  --success: 142 71% 45%;      /* Green */
+  --warning: 38 92% 50%;       /* Amber */
+  --destructive: 0 84% 60%;    /* Red */
+}
+```
+
+### Component Architecture
+- **Atomic Design**: Atoms → Molecules → Organisms → Templates
+- **Composition**: Favor composition over inheritance
+- **Props Interface**: Consistent prop patterns across components
+- **Ref Forwarding**: Support for ref forwarding where needed
+
+## Performance Standards
+
+### Core Web Vitals Targets
+- **LCP**: < 2.5s (Largest Contentful Paint)
+- **FID**: < 100ms (First Input Delay)
+- **CLS**: < 0.1 (Cumulative Layout Shift)
+- **TTFB**: < 800ms (Time to First Byte)
+
+### Optimization Strategies
+- **Image Optimization**: Next.js Image with lazy loading
+- **Code Splitting**: Dynamic imports for heavy components
+- **Bundle Analysis**: Regular bundle size monitoring
+- **Caching**: Aggressive caching with Cache API
+
+## Chat Interface Patterns
+
+### Message Streaming
+```typescript
+// Progressive message rendering
+function MessageStream({ messageId }: { messageId: string }) {
+  const { content, isComplete } = useMessageStream(messageId);
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="message-bubble"
+    >
+      <Markdown>{content}</Markdown>
+      {!isComplete && <StreamingCursor />}
+    </motion.div>
+  );
+}
+```
+
+### Real-time Updates
+- **WebSocket**: Persistent connection for instant updates
+- **Optimistic Updates**: Immediate UI feedback
+- **Conflict Resolution**: Handle concurrent edits gracefully
+- **Offline Support**: Queue messages when offline
+
+## Accessibility Standards
+
+### WCAG 2.1 AA Compliance
+- **Keyboard Navigation**: All interactive elements accessible via keyboard
+- **Screen Readers**: Proper ARIA labels and landmarks
+- **Color Contrast**: Minimum 4.5:1 contrast ratio
+- **Focus Management**: Visible focus indicators and logical tab order
+
+### Implementation Requirements
+```typescript
+// Accessible chat input
+function ChatInput() {
+  return (
+    <div role="region" aria-label="Message composition">
+      <textarea
+        aria-label="Type your message"
+        aria-describedby="input-help"
+        className="sr-only:focus:not-sr-only"
+      />
+      <div id="input-help" className="sr-only">
+        Press Enter to send, Shift+Enter for new line
+      </div>
+    </div>
+  );
+}
+```
+
+## Security & Web3 Integration
+
+### Wallet Connection UX
+- **Progressive Disclosure**: Show wallet options progressively
+- **Multi-Wallet Support**: Support all major Solana wallets
+- **Error Handling**: Clear error messages and recovery paths
+- **Transaction Feedback**: Real-time transaction status updates
+
+### Security Patterns
+- **Input Sanitization**: All user inputs sanitized
+- **XSS Prevention**: Content Security Policy headers
+- **CSRF Protection**: CSRF tokens for state-changing operations
+- **Secure Headers**: Security headers for all responses
+
+## File Organization
+
+```
+app/
+├── (auth)/          # Auth-gated routes
+├── (wallet)/        # Wallet-connected routes  
+├── api/             # API routes
+├── globals.css      # Global styles
+└── layout.tsx       # Root layout
+
+components/
+├── ui/              # Base UI components
+├── chat/            # Chat-specific components
+├── wallet/          # Wallet components
+└── forms/           # Form components
+
+lib/
+├── utils.ts         # Utility functions
+├── types.ts         # Type definitions
+├── constants.ts     # App constants
+└── hooks/           # Custom React hooks
+```
+
+## Development Workflow
+
+### Code Quality
+- **ESLint**: Strict linting rules
+- **Prettier**: Consistent code formatting
+- **TypeScript**: Strict type checking
+- **Husky**: Pre-commit hooks for quality gates
+
+### Testing Strategy
+- **Unit Tests**: Jest + Testing Library
+- **Integration Tests**: Playwright for E2E
+- **Visual Testing**: Chromatic for component library
+- **Accessibility Tests**: axe-core integration
+
+### Performance Monitoring
+- **Real User Metrics**: Core Web Vitals tracking
+- **Bundle Analysis**: Webpack Bundle Analyzer
+- **Performance Budgets**: CI/CD performance checks
+- **Error Tracking**: Sentry for error monitoring
+
+## Related Files
+
+- [Component Architecture](./components.mdc)
+- [Styling System](./styling.mdc)
+- [State Management](./state-management.mdc)
+- [Routing Patterns](./routing.mdc)
+- [Accessibility Guidelines](./accessibility.mdc)
+- [Animation Patterns](./animations.mdc)
+- [Wallet Integration](./wallet-integration.mdc)

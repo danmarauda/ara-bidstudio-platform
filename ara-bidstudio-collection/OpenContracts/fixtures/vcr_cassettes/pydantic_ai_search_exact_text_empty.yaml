@@ -1,0 +1,575 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are analyzing the
+      document titled 'Payment Terms Contract' (ID: 6).\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u26A0\uFE0F
+      \ ABSOLUTE REQUIREMENTS - NO EXCEPTIONS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n1.
+      You have ZERO prior knowledge of this document's contents.\\n2. You MUST use
+      tools to examine the document before answering ANY question.\\n3. NEVER say
+      you don't know what document is being discussed - you are analyzing 'Payment
+      Terms Contract'.\\n4. NEVER refuse to answer because you 'lack context' - USE
+      THE TOOLS to get context.\\n5. Every answer MUST be grounded in information
+      retrieved via tools with specific citations.\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F4CB
+      RECOMMENDED SEARCH STRATEGY:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nFor
+      most questions, follow this workflow:\\n\\nSTEP 1 - GET OVERVIEW:\\n  \u2022
+      Use `load_document_summary` to understand the document's structure and main
+      topics\\n  \u2022 Use `get_document_text_length` to check the document size\\n
+      \ \u2022 This helps you plan your detailed search strategy\\n\\nSTEP 2 - BROAD
+      SEARCH (Semantic Understanding):\\n  \u2022 Use `similarity_search` (vector
+      search) to find semantically relevant sections\\n  \u2022 Great for: conceptual
+      questions, themes, related ideas, paraphrased content\\n  \u2022 Returns: annotated
+      passages with page numbers and similarity scores\\n\\nSTEP 3 - DETAILED EXAMINATION:\\n
+      \ \u2022 Use `load_document_text` to read large sections (5K-50K chars) of relevant
+      areas\\n  \u2022 Identify the specific character ranges from Step 1-2, then
+      load those sections\\n  \u2022 Read enough context to thoroughly understand
+      the relevant passages\\n  \\n  \U0001F534 MANDATORY CITATION STEP - DO NOT SKIP:\\n
+      \ After reading ANY bulk text with `load_document_text`, you MUST:\\n  1. Identify
+      the 3-5 most relevant exact quotes/passages for your answer\\n  2. Extract the
+      EXACT text of each key passage (5-50 words each)\\n  3. Call `search_exact_text`
+      with these exact strings to create proper citations\\n  4. This converts raw
+      text into citable sources with page numbers\\n  \\n  WHY THIS MATTERS: `load_document_text`
+      returns raw text WITHOUT creating sources.\\n  Only `search_exact_text` creates
+      proper citations. Without this step, your answer\\n  will have NO SOURCES even
+      though you read the document!\\n\\nSTEP 4 - PRECISE LOCATION (Exact Matching):\\n
+      \ \u2022 Use `search_exact_text` to find specific terms, phrases, or quoted
+      language\\n  \u2022 Great for: finding exact wording, specific terminology,
+      quoted passages, defined terms\\n  \u2022 Returns: all occurrences with page
+      numbers and bounding boxes (PDFs)\\n  \u2022 Use this to provide precise citations
+      with exact page locations\\n  \u2022 CRITICAL: Always use this AFTER bulk text
+      loading to create proper source citations\\n\\nSTEP 5 - CROSS-REFERENCE:\\n
+      \ \u2022 Use `get_document_notes` to check for existing analysis or annotations\\n
+      \ \u2022 Combine findings from multiple tools to ensure completeness\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F527
+      TOOL SELECTION GUIDE:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nUse
+      `similarity_search` when:\\n  \u2192 Question asks about concepts, themes, or
+      ideas (not exact words)\\n  \u2192 You need to find related content even if
+      worded differently\\n  \u2192 Looking for passages that discuss a topic\\n\\nUse
+      `search_exact_text` when:\\n  \u2192 User asks about specific terms, phrases,
+      or exact wording\\n  \u2192 You need to verify if specific language appears
+      in the document\\n  \u2192 Providing citations that require exact page locations\\n
+      \ \u2192 Finding defined terms or quoted material\\n\\nUse `load_document_text`
+      when:\\n  \u2192 You need to read substantial sections for full context\\n  \u2192
+      Initial searches identified relevant areas to examine in detail\\n  \u2192 Question
+      requires understanding flow, structure, or relationships\\n  \u26A0\uFE0F  ALWAYS
+      follow with `search_exact_text` on key passages to create citations!\\n\\nUse
+      `load_document_summary` when:\\n  \u2192 Starting your analysis (always good
+      first step)\\n  \u2192 Need high-level overview of document structure\\n  \u2192
+      Understanding document organization before detailed search\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u2705
+      RESPONSE REQUIREMENTS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n\u2022
+      Provide complete, accurate answers based on document contents\\n\u2022 Include
+      specific citations (page numbers, quotes) from tool results\\n\u2022 \U0001F534
+      CRITICAL: If you used `load_document_text`, you MUST use `search_exact_text`\\n
+      \ on key passages to generate proper citations. Otherwise your answer will have
+      NO SOURCES.\\n\u2022 If information isn't in the document, explicitly state:
+      'This information was not found in Payment Terms Contract'\\n\u2022 Use multiple
+      search strategies to ensure thoroughness\\n\u2022 Present findings clearly with
+      proper attribution to sources\\n\"},{\"role\":\"user\",\"content\":\"Find the
+      exact text \\\"this phrase does not exist in the document xyz123\\\" in the
+      document\"}],\"model\":\"gpt-4o\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"description\":\"Load
+      the document's markdown summary (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_summary_token_length\",\"description\":\"Return
+      token length of the document's markdown summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"description\":\"Get
+      the total character length of the document's plain-text extract.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"description\":\"Return
+      a slice of the document's plain-text extract.\\n\\nIMPORTANT USAGE GUIDELINES:\\n-
+      First use get_document_text_length to check the total document size\\n- Recommended
+      chunk size: 5,000 to 50,000 characters per request\\n- DO NOT load chunks smaller
+      than 1,000 characters (inefficient, wastes tool calls)\\n- DO NOT load chunks
+      larger than 100,000 characters (may overflow context)\\n- Tool call limit is
+      50, so plan your chunking strategy accordingly\\n- For a 500K char document,
+      use ~10-20 chunks of 25-50K chars each\\n\\n\U0001F534 CRITICAL - CITATION REQUIREMENT:\\nAfter
+      reading text with this tool, you MUST:\\n1. Identify 3-5 most relevant exact
+      quotes/passages (5-50 words each)\\n2. Call search_exact_text with those EXACT
+      strings\\n3. This creates proper citations with page numbers\\n\\nWHY: This
+      tool returns raw text WITHOUT sources. Only search_exact_text\\ncreates citations.
+      Skip this and your answer will have NO SOURCES!\\n\\nExample: For a 200,000
+      character document:\\n- Good: Load in 4-8 chunks of 25,000-50,000 chars each\\n-
+      Bad: Load 100 chars at a time (would need 2000 tool calls!)\\n- Bad: Load all
+      200,000 chars at once (might overflow context)\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"start\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"end\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"refresh\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"description\":\"Search
+      for exact text matches and return source nodes with location information.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_strings\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"search_strings\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_notes\",\"description\":\"Retrieve
+      metadata & first 512-char preview of notes for this document.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_document_notes\",\"description\":\"Search
+      notes attached to this document for a keyword.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_term\":{\"type\":\"string\"},\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"required\":[\"search_term\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_document_note\",\"description\":\"Create
+      a new note attached to this document and return its id.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"title\",\"content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_note\",\"description\":\"Version-up
+      an existing note and return new version number.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"note_id\":{\"type\":\"integer\"},\"new_content\":{\"type\":\"string\"}},\"required\":[\"note_id\",\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"duplicate_annotations\",\"description\":\"<summary>Duplicate
+      existing annotations in the current document with a new label.</summary>\\n<returns>\\n<description>Dict
+      with key ``annotation_ids`` listing newly created IDs.</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"annotation_ids\":{\"description\":\"IDs
+      of annotations to duplicate.\",\"items\":{\"type\":\"integer\"},\"type\":\"array\"},\"new_label_text\":{\"description\":\"Text
+      for the new annotation label.\",\"type\":\"string\"},\"label_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"description\":\"Optional
+      label type.\"}},\"required\":[\"annotation_ids\",\"new_label_text\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_exact_string_annotations\",\"description\":\"Create
+      annotations for *exact* string matches in the current document.\\n\\nEach *entry*
+      provides ``label_text`` and ``exact_string``.  The tool\\nautomatically applies
+      all entries to the current document & corpus.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"entries\":{\"items\":{\"$ref\":\"#/$defs/ExactStringEntry\"},\"type\":\"array\"}},\"required\":[\"entries\"],\"type\":\"object\",\"$defs\":{\"ExactStringEntry\":{\"description\":\"Structured
+      entry for an exact\u2010string annotation request.\",\"properties\":{\"label_text\":{\"description\":\"Text
+      of the annotation label\",\"type\":\"string\"},\"exact_string\":{\"description\":\"Exact
+      string to annotate\",\"type\":\"string\"}},\"required\":[\"label_text\",\"exact_string\"],\"type\":\"object\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary\",\"description\":\"Return
+      the latest summary content for this document (corpus-aware).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_versions\",\"description\":\"Return
+      version history for the document summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_diff\",\"description\":\"Return
+      unified diff between two document summary versions.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"from_version\":{\"type\":\"integer\"},\"to_version\":{\"type\":\"integer\"}},\"required\":[\"from_version\",\"to_version\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_summary\",\"description\":\"Update
+      (or create) the document summary, returning version info.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '13277'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '1'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_b5oMVvrtpNSYbvmkD3E0dBc6","type":"function","function":{"name":"search_exact_text","arguments":""}}],"refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"tKn"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\""}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"zeQ"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"search"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":""}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"_strings"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"DRUuJzsLq3GIzL"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":[\""}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":""}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"this"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Uf"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        phrase"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"y1aGHyKd3xbjbvr"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        does"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"H"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        not"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"kE"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        exist"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":""}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        in"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"W7h"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        the"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"zC"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        document"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"WqQdb0bQcTxyM"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        xyz"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Iw"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"123"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"ihr"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"]"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Xn0"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"MnDKu"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"tool_calls"}],"usage":null,"obfuscation":"kQe1"}
+
+
+        data: {"id":"chatcmpl-CQoFFzrai7rGnWP4C8jK9vjhUmPJ5","object":"chat.completion.chunk","created":1760505705,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[],"usage":{"prompt_tokens":2009,"completion_tokens":26,"total_tokens":2035,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"Dw9h6OQiBmz"}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-RAY:
+      - 98ecdff45ee3d93c-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Wed, 15 Oct 2025 05:21:47 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '1371'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '1395'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '800000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '798499'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 112ms
+      x-request-id:
+      - req_7d010aa2aa7142b9809c3ae660fb1b1b
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are analyzing the
+      document titled 'Payment Terms Contract' (ID: 6).\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u26A0\uFE0F
+      \ ABSOLUTE REQUIREMENTS - NO EXCEPTIONS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n1.
+      You have ZERO prior knowledge of this document's contents.\\n2. You MUST use
+      tools to examine the document before answering ANY question.\\n3. NEVER say
+      you don't know what document is being discussed - you are analyzing 'Payment
+      Terms Contract'.\\n4. NEVER refuse to answer because you 'lack context' - USE
+      THE TOOLS to get context.\\n5. Every answer MUST be grounded in information
+      retrieved via tools with specific citations.\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F4CB
+      RECOMMENDED SEARCH STRATEGY:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nFor
+      most questions, follow this workflow:\\n\\nSTEP 1 - GET OVERVIEW:\\n  \u2022
+      Use `load_document_summary` to understand the document's structure and main
+      topics\\n  \u2022 Use `get_document_text_length` to check the document size\\n
+      \ \u2022 This helps you plan your detailed search strategy\\n\\nSTEP 2 - BROAD
+      SEARCH (Semantic Understanding):\\n  \u2022 Use `similarity_search` (vector
+      search) to find semantically relevant sections\\n  \u2022 Great for: conceptual
+      questions, themes, related ideas, paraphrased content\\n  \u2022 Returns: annotated
+      passages with page numbers and similarity scores\\n\\nSTEP 3 - DETAILED EXAMINATION:\\n
+      \ \u2022 Use `load_document_text` to read large sections (5K-50K chars) of relevant
+      areas\\n  \u2022 Identify the specific character ranges from Step 1-2, then
+      load those sections\\n  \u2022 Read enough context to thoroughly understand
+      the relevant passages\\n  \\n  \U0001F534 MANDATORY CITATION STEP - DO NOT SKIP:\\n
+      \ After reading ANY bulk text with `load_document_text`, you MUST:\\n  1. Identify
+      the 3-5 most relevant exact quotes/passages for your answer\\n  2. Extract the
+      EXACT text of each key passage (5-50 words each)\\n  3. Call `search_exact_text`
+      with these exact strings to create proper citations\\n  4. This converts raw
+      text into citable sources with page numbers\\n  \\n  WHY THIS MATTERS: `load_document_text`
+      returns raw text WITHOUT creating sources.\\n  Only `search_exact_text` creates
+      proper citations. Without this step, your answer\\n  will have NO SOURCES even
+      though you read the document!\\n\\nSTEP 4 - PRECISE LOCATION (Exact Matching):\\n
+      \ \u2022 Use `search_exact_text` to find specific terms, phrases, or quoted
+      language\\n  \u2022 Great for: finding exact wording, specific terminology,
+      quoted passages, defined terms\\n  \u2022 Returns: all occurrences with page
+      numbers and bounding boxes (PDFs)\\n  \u2022 Use this to provide precise citations
+      with exact page locations\\n  \u2022 CRITICAL: Always use this AFTER bulk text
+      loading to create proper source citations\\n\\nSTEP 5 - CROSS-REFERENCE:\\n
+      \ \u2022 Use `get_document_notes` to check for existing analysis or annotations\\n
+      \ \u2022 Combine findings from multiple tools to ensure completeness\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F527
+      TOOL SELECTION GUIDE:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nUse
+      `similarity_search` when:\\n  \u2192 Question asks about concepts, themes, or
+      ideas (not exact words)\\n  \u2192 You need to find related content even if
+      worded differently\\n  \u2192 Looking for passages that discuss a topic\\n\\nUse
+      `search_exact_text` when:\\n  \u2192 User asks about specific terms, phrases,
+      or exact wording\\n  \u2192 You need to verify if specific language appears
+      in the document\\n  \u2192 Providing citations that require exact page locations\\n
+      \ \u2192 Finding defined terms or quoted material\\n\\nUse `load_document_text`
+      when:\\n  \u2192 You need to read substantial sections for full context\\n  \u2192
+      Initial searches identified relevant areas to examine in detail\\n  \u2192 Question
+      requires understanding flow, structure, or relationships\\n  \u26A0\uFE0F  ALWAYS
+      follow with `search_exact_text` on key passages to create citations!\\n\\nUse
+      `load_document_summary` when:\\n  \u2192 Starting your analysis (always good
+      first step)\\n  \u2192 Need high-level overview of document structure\\n  \u2192
+      Understanding document organization before detailed search\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u2705
+      RESPONSE REQUIREMENTS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n\u2022
+      Provide complete, accurate answers based on document contents\\n\u2022 Include
+      specific citations (page numbers, quotes) from tool results\\n\u2022 \U0001F534
+      CRITICAL: If you used `load_document_text`, you MUST use `search_exact_text`\\n
+      \ on key passages to generate proper citations. Otherwise your answer will have
+      NO SOURCES.\\n\u2022 If information isn't in the document, explicitly state:
+      'This information was not found in Payment Terms Contract'\\n\u2022 Use multiple
+      search strategies to ensure thoroughness\\n\u2022 Present findings clearly with
+      proper attribution to sources\\n\"},{\"role\":\"user\",\"content\":\"Find the
+      exact text \\\"this phrase does not exist in the document xyz123\\\" in the
+      document\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_b5oMVvrtpNSYbvmkD3E0dBc6\",\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"arguments\":\"{\\\"search_strings\\\":[\\\"this
+      phrase does not exist in the document xyz123\\\"]}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_b5oMVvrtpNSYbvmkD3E0dBc6\",\"content\":\"[]\"}],\"model\":\"gpt-4o\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"description\":\"Load
+      the document's markdown summary (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_summary_token_length\",\"description\":\"Return
+      token length of the document's markdown summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"description\":\"Get
+      the total character length of the document's plain-text extract.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"description\":\"Return
+      a slice of the document's plain-text extract.\\n\\nIMPORTANT USAGE GUIDELINES:\\n-
+      First use get_document_text_length to check the total document size\\n- Recommended
+      chunk size: 5,000 to 50,000 characters per request\\n- DO NOT load chunks smaller
+      than 1,000 characters (inefficient, wastes tool calls)\\n- DO NOT load chunks
+      larger than 100,000 characters (may overflow context)\\n- Tool call limit is
+      50, so plan your chunking strategy accordingly\\n- For a 500K char document,
+      use ~10-20 chunks of 25-50K chars each\\n\\n\U0001F534 CRITICAL - CITATION REQUIREMENT:\\nAfter
+      reading text with this tool, you MUST:\\n1. Identify 3-5 most relevant exact
+      quotes/passages (5-50 words each)\\n2. Call search_exact_text with those EXACT
+      strings\\n3. This creates proper citations with page numbers\\n\\nWHY: This
+      tool returns raw text WITHOUT sources. Only search_exact_text\\ncreates citations.
+      Skip this and your answer will have NO SOURCES!\\n\\nExample: For a 200,000
+      character document:\\n- Good: Load in 4-8 chunks of 25,000-50,000 chars each\\n-
+      Bad: Load 100 chars at a time (would need 2000 tool calls!)\\n- Bad: Load all
+      200,000 chars at once (might overflow context)\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"start\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"end\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"refresh\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"description\":\"Search
+      for exact text matches and return source nodes with location information.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_strings\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"search_strings\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_notes\",\"description\":\"Retrieve
+      metadata & first 512-char preview of notes for this document.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_document_notes\",\"description\":\"Search
+      notes attached to this document for a keyword.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_term\":{\"type\":\"string\"},\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"required\":[\"search_term\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_document_note\",\"description\":\"Create
+      a new note attached to this document and return its id.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"title\",\"content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_note\",\"description\":\"Version-up
+      an existing note and return new version number.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"note_id\":{\"type\":\"integer\"},\"new_content\":{\"type\":\"string\"}},\"required\":[\"note_id\",\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"duplicate_annotations\",\"description\":\"<summary>Duplicate
+      existing annotations in the current document with a new label.</summary>\\n<returns>\\n<description>Dict
+      with key ``annotation_ids`` listing newly created IDs.</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"annotation_ids\":{\"description\":\"IDs
+      of annotations to duplicate.\",\"items\":{\"type\":\"integer\"},\"type\":\"array\"},\"new_label_text\":{\"description\":\"Text
+      for the new annotation label.\",\"type\":\"string\"},\"label_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"description\":\"Optional
+      label type.\"}},\"required\":[\"annotation_ids\",\"new_label_text\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_exact_string_annotations\",\"description\":\"Create
+      annotations for *exact* string matches in the current document.\\n\\nEach *entry*
+      provides ``label_text`` and ``exact_string``.  The tool\\nautomatically applies
+      all entries to the current document & corpus.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"entries\":{\"items\":{\"$ref\":\"#/$defs/ExactStringEntry\"},\"type\":\"array\"}},\"required\":[\"entries\"],\"type\":\"object\",\"$defs\":{\"ExactStringEntry\":{\"description\":\"Structured
+      entry for an exact\u2010string annotation request.\",\"properties\":{\"label_text\":{\"description\":\"Text
+      of the annotation label\",\"type\":\"string\"},\"exact_string\":{\"description\":\"Exact
+      string to annotate\",\"type\":\"string\"}},\"required\":[\"label_text\",\"exact_string\"],\"type\":\"object\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary\",\"description\":\"Return
+      the latest summary content for this document (corpus-aware).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_versions\",\"description\":\"Return
+      version history for the document summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_diff\",\"description\":\"Return
+      unified diff between two document summary versions.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"from_version\":{\"type\":\"integer\"},\"to_version\":{\"type\":\"integer\"}},\"required\":[\"from_version\",\"to_version\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_summary\",\"description\":\"Update
+      (or create) the document summary, returning version info.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '13579'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"C3atTFHCj03CQp"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"The"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"FEefV9xjLGnYq"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        phrase"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"MtlQDSQxE"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        \""},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"p2ItgFAeKxEYd"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"this"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"qOGapW2gOUho"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        phrase"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Lh8gkPAUz"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        does"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"357OfjskhHP"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        not"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"LfGgSCmKoYWF"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        exist"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"FVNPZ50Ivl"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        in"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"AOcOr6FQiaDqZ"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        the"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"m9QP3uMJZBN8"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        document"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"hehEyGG"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        xyz"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"pyK6gLKSn5XB"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"123"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"afgAjubid6bqw"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"\""},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"h7m3PttF6dRoaz"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        was"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"FnvoR2gYStWE"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        not"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"mbJyVzcSudGm"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        found"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"SeJsJUg9mw"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        in"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"TOksVZiQQp8m7"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        the"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"gIROPYkFxvwr"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        ''"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Q43A69aft1MRi7"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"Payment"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Oxi8lAEf1"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        Terms"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"GwkYPGCfOr"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"
+        Contract"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"EfarAj5"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{"content":"''."},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"LrN24vbvH0eV5Z"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"usage":null,"obfuscation":"06nBwmPZMw"}
+
+
+        data: {"id":"chatcmpl-CQoFHPcgdVWoAeumkTyhwMkDZEfoU","object":"chat.completion.chunk","created":1760505707,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_f64f290af2","choices":[],"usage":{"prompt_tokens":2045,"completion_tokens":25,"total_tokens":2070,"prompt_tokens_details":{"cached_tokens":1920,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"s5vU1Cjs"}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-RAY:
+      - 98ecdfff885ed93c-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Wed, 15 Oct 2025 05:21:47 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '336'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '349'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '800000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '798496'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 112ms
+      x-request-id:
+      - req_52ad8199521b428aa0e8c141771cb056
+    status:
+      code: 200
+      message: OK
+version: 1

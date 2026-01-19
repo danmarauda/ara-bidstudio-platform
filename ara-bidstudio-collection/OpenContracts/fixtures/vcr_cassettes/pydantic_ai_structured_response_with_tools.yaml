@@ -1,0 +1,476 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are a data extraction
+      specialist for document 'Payment Terms Contract' (ID: 10).\\n\\nEXTRACTION PROTOCOL:\\n1.
+      You have access to tools to analyze this document. Use them to find the requested
+      information.\\n2. Use vector search, summary loaders, and note access as needed
+      to locate data.\\n3. Return ONLY the raw extracted value matching the target
+      type.\\n4. No explanations, no citations, no commentary \u2013 just the data.\\n\\nIf
+      the information cannot be found using the tools, return null/None.\"},{\"role\":\"user\",\"content\":\"Extract
+      all payment information from this contract\"}],\"model\":\"gpt-4o\",\"stream\":false,\"temperature\":0.7,\"tool_choice\":\"required\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"description\":\"Load
+      the document's markdown summary (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_summary_token_length\",\"description\":\"Return
+      token length of the document's markdown summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"description\":\"Get
+      the total character length of the document's plain-text extract.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"description\":\"Return
+      a slice of the document's plain-text extract.\\n\\nIMPORTANT USAGE GUIDELINES:\\n-
+      First use get_document_text_length to check the total document size\\n- Recommended
+      chunk size: 5,000 to 50,000 characters per request\\n- DO NOT load chunks smaller
+      than 1,000 characters (inefficient, wastes tool calls)\\n- DO NOT load chunks
+      larger than 100,000 characters (may overflow context)\\n- Tool call limit is
+      50, so plan your chunking strategy accordingly\\n- For a 500K char document,
+      use ~10-20 chunks of 25-50K chars each\\n\\n\U0001F534 CRITICAL - CITATION REQUIREMENT:\\nAfter
+      reading text with this tool, you MUST:\\n1. Identify 3-5 most relevant exact
+      quotes/passages (5-50 words each)\\n2. Call search_exact_text with those EXACT
+      strings\\n3. This creates proper citations with page numbers\\n\\nWHY: This
+      tool returns raw text WITHOUT sources. Only search_exact_text\\ncreates citations.
+      Skip this and your answer will have NO SOURCES!\\n\\nExample: For a 200,000
+      character document:\\n- Good: Load in 4-8 chunks of 25,000-50,000 chars each\\n-
+      Bad: Load 100 chars at a time (would need 2000 tool calls!)\\n- Bad: Load all
+      200,000 chars at once (might overflow context)\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"start\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"end\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"refresh\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"description\":\"Search
+      for exact text matches and return source nodes with location information.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_strings\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"search_strings\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_notes\",\"description\":\"Retrieve
+      metadata & first 512-char preview of notes for this document.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_document_notes\",\"description\":\"Search
+      notes attached to this document for a keyword.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_term\":{\"type\":\"string\"},\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"required\":[\"search_term\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_document_note\",\"description\":\"Create
+      a new note attached to this document and return its id.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"title\",\"content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_note\",\"description\":\"Version-up
+      an existing note and return new version number.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"note_id\":{\"type\":\"integer\"},\"new_content\":{\"type\":\"string\"}},\"required\":[\"note_id\",\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"duplicate_annotations\",\"description\":\"<summary>Duplicate
+      existing annotations in the current document with a new label.</summary>\\n<returns>\\n<description>Dict
+      with key ``annotation_ids`` listing newly created IDs.</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"annotation_ids\":{\"description\":\"IDs
+      of annotations to duplicate.\",\"items\":{\"type\":\"integer\"},\"type\":\"array\"},\"new_label_text\":{\"description\":\"Text
+      for the new annotation label.\",\"type\":\"string\"},\"label_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"description\":\"Optional
+      label type.\"}},\"required\":[\"annotation_ids\",\"new_label_text\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_exact_string_annotations\",\"description\":\"Create
+      annotations for *exact* string matches in the current document.\\n\\nEach *entry*
+      provides ``label_text`` and ``exact_string``.  The tool\\nautomatically applies
+      all entries to the current document & corpus.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"entries\":{\"items\":{\"$ref\":\"#/$defs/ExactStringEntry\"},\"type\":\"array\"}},\"required\":[\"entries\"],\"type\":\"object\",\"$defs\":{\"ExactStringEntry\":{\"description\":\"Structured
+      entry for an exact\u2010string annotation request.\",\"properties\":{\"label_text\":{\"description\":\"Text
+      of the annotation label\",\"type\":\"string\"},\"exact_string\":{\"description\":\"Exact
+      string to annotate\",\"type\":\"string\"}},\"required\":[\"label_text\",\"exact_string\"],\"type\":\"object\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary\",\"description\":\"Return
+      the latest summary content for this document (corpus-aware).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_versions\",\"description\":\"Return
+      version history for the document summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_diff\",\"description\":\"Return
+      unified diff between two document summary versions.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"from_version\":{\"type\":\"integer\"},\"to_version\":{\"type\":\"integer\"}},\"required\":[\"from_version\",\"to_version\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_summary\",\"description\":\"Update
+      (or create) the document summary, returning version info.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"final_result\",\"description\":\"Structured
+      payment information.\",\"parameters\":{\"properties\":{\"amount\":{\"type\":\"string\"},\"deadline\":{\"type\":\"string\"},\"method\":{\"type\":\"string\"}},\"required\":[\"amount\",\"deadline\",\"method\"],\"type\":\"object\"}}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '7977'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '1'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        YwCoIQBArNRZ76a62Tr+AKt8INIo8hlFYyvJo1XTCSNibIz7plIqreruYek3uDiq6jI4Bot8h0dY
+        lAaHrboPfoZx2ipd/JLz2d+ECFUGQdClitoGk+7d+MN7427qVzXam/zc7I265WVR62c2R4xeQgS/
+        qllHTnsnxaBYeQeRby7XcQZBw/lsMB1M58Ml8Q3rMzYQhCLEdOLT0WA0SQeLdDBj1pa+0txB0FtC
+        RPR7tEKE4e+3IGjQOyuTMTIQwC8RofWGIQiq66ouKhfRA0D1ulRBbm0M8V703kitjFHOd/S3Db76
+        qzJG3nP9sn8Q7r7i5uCwuDBXD4dueny6q5OLD76DUSoRYyxG0ZYJhX1EcMry/7DgKDOv15ZdlJG/
+        oiwtMU5ehQjdfhuC8PsPqfRfB7Tph5NgaP4GykBgstn6YLP/+R+D8UVo/aqbbNS6I/K7YpMQ7rYT
+        w5gZSax79ClC622IMvqGFTeHw9HMXIKIQ4g1WuAHESDt0HC86Em1ZYE+2oVQGrTSJWcrxNu1WmeV
+        JzIu4YEJJk2Uz72wd+WKDYhDWnOInMkSj6OXDVBzLdes7SQAmNEO6hIOylhxC0F4knKA7ruLbGVe
+        uYLb0FZ3zAvIg9SrfDhfTKezOZL/xAAD
+    headers:
+      CF-RAY:
+      - 98ece04adb217281-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - br
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 15 Oct 2025 05:21:59 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '396'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '410'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '800000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '799862'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 10ms
+      x-request-id:
+      - req_7d3073856e9b4f00854708e47482faad
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are a data extraction
+      specialist for document 'Payment Terms Contract' (ID: 10).\\n\\nEXTRACTION PROTOCOL:\\n1.
+      You have access to tools to analyze this document. Use them to find the requested
+      information.\\n2. Use vector search, summary loaders, and note access as needed
+      to locate data.\\n3. Return ONLY the raw extracted value matching the target
+      type.\\n4. No explanations, no citations, no commentary \u2013 just the data.\\n\\nIf
+      the information cannot be found using the tools, return null/None.\"},{\"role\":\"user\",\"content\":\"Extract
+      all payment information from this contract\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_TejYDEpSxtvEFgMlOUFn5HJB\",\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_TejYDEpSxtvEFgMlOUFn5HJB\",\"content\":\"127\"}],\"model\":\"gpt-4o\",\"stream\":false,\"temperature\":0.7,\"tool_choice\":\"required\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"description\":\"Load
+      the document's markdown summary (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_summary_token_length\",\"description\":\"Return
+      token length of the document's markdown summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"description\":\"Get
+      the total character length of the document's plain-text extract.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"description\":\"Return
+      a slice of the document's plain-text extract.\\n\\nIMPORTANT USAGE GUIDELINES:\\n-
+      First use get_document_text_length to check the total document size\\n- Recommended
+      chunk size: 5,000 to 50,000 characters per request\\n- DO NOT load chunks smaller
+      than 1,000 characters (inefficient, wastes tool calls)\\n- DO NOT load chunks
+      larger than 100,000 characters (may overflow context)\\n- Tool call limit is
+      50, so plan your chunking strategy accordingly\\n- For a 500K char document,
+      use ~10-20 chunks of 25-50K chars each\\n\\n\U0001F534 CRITICAL - CITATION REQUIREMENT:\\nAfter
+      reading text with this tool, you MUST:\\n1. Identify 3-5 most relevant exact
+      quotes/passages (5-50 words each)\\n2. Call search_exact_text with those EXACT
+      strings\\n3. This creates proper citations with page numbers\\n\\nWHY: This
+      tool returns raw text WITHOUT sources. Only search_exact_text\\ncreates citations.
+      Skip this and your answer will have NO SOURCES!\\n\\nExample: For a 200,000
+      character document:\\n- Good: Load in 4-8 chunks of 25,000-50,000 chars each\\n-
+      Bad: Load 100 chars at a time (would need 2000 tool calls!)\\n- Bad: Load all
+      200,000 chars at once (might overflow context)\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"start\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"end\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"refresh\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"description\":\"Search
+      for exact text matches and return source nodes with location information.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_strings\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"search_strings\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_notes\",\"description\":\"Retrieve
+      metadata & first 512-char preview of notes for this document.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_document_notes\",\"description\":\"Search
+      notes attached to this document for a keyword.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_term\":{\"type\":\"string\"},\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"required\":[\"search_term\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_document_note\",\"description\":\"Create
+      a new note attached to this document and return its id.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"title\",\"content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_note\",\"description\":\"Version-up
+      an existing note and return new version number.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"note_id\":{\"type\":\"integer\"},\"new_content\":{\"type\":\"string\"}},\"required\":[\"note_id\",\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"duplicate_annotations\",\"description\":\"<summary>Duplicate
+      existing annotations in the current document with a new label.</summary>\\n<returns>\\n<description>Dict
+      with key ``annotation_ids`` listing newly created IDs.</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"annotation_ids\":{\"description\":\"IDs
+      of annotations to duplicate.\",\"items\":{\"type\":\"integer\"},\"type\":\"array\"},\"new_label_text\":{\"description\":\"Text
+      for the new annotation label.\",\"type\":\"string\"},\"label_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"description\":\"Optional
+      label type.\"}},\"required\":[\"annotation_ids\",\"new_label_text\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_exact_string_annotations\",\"description\":\"Create
+      annotations for *exact* string matches in the current document.\\n\\nEach *entry*
+      provides ``label_text`` and ``exact_string``.  The tool\\nautomatically applies
+      all entries to the current document & corpus.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"entries\":{\"items\":{\"$ref\":\"#/$defs/ExactStringEntry\"},\"type\":\"array\"}},\"required\":[\"entries\"],\"type\":\"object\",\"$defs\":{\"ExactStringEntry\":{\"description\":\"Structured
+      entry for an exact\u2010string annotation request.\",\"properties\":{\"label_text\":{\"description\":\"Text
+      of the annotation label\",\"type\":\"string\"},\"exact_string\":{\"description\":\"Exact
+      string to annotate\",\"type\":\"string\"}},\"required\":[\"label_text\",\"exact_string\"],\"type\":\"object\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary\",\"description\":\"Return
+      the latest summary content for this document (corpus-aware).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_versions\",\"description\":\"Return
+      version history for the document summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_diff\",\"description\":\"Return
+      unified diff between two document summary versions.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"from_version\":{\"type\":\"integer\"},\"to_version\":{\"type\":\"integer\"}},\"required\":[\"from_version\",\"to_version\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_summary\",\"description\":\"Update
+      (or create) the document summary, returning version info.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"final_result\",\"description\":\"Structured
+      payment information.\",\"parameters\":{\"properties\":{\"amount\":{\"type\":\"string\"},\"deadline\":{\"type\":\"string\"},\"method\":{\"type\":\"string\"}},\"required\":[\"amount\",\"deadline\",\"method\"],\"type\":\"object\"}}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '8213'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        YwBIIgBA/F636mmqeb+Gw1ZTnpgFm9XA5JHsnc//5UDgRE9szA02wlvLzhog4WEvDb/lgUY8KJtr
+        j5a/tlZyAIL1U7L3/gZEWDZQhHpR+rq1Jtq5kv27Qe7M9fmt3GxfNrvV+WJ07Y+nF48XCAMiSLXi
+        2nPyW0MM3KV0EHzmchA3UJSOR8kwGY6zhPhCKw0bKMLc+mggUZZkgyiZRMmIGbiQZc0Oil4CIqLf
+        qyMiLH/fgSJRSC0+GMOAAn6ICL0YhiKUzi2dLzuPEFDLXrerqNsYQ7zlRYyuS2OUo6f5733NV38t
+        jdGHQ5ud2mq7d0+D46Od8qqa8+3dybNOVLzybY0iBmK0YgjamlKYIUJXtvw/ZKRsdCP1puXOa89f
+        XlJAhIAfQhF+XzHr/BdfoZLwFdw1r1BpNv6Hmvl/Ta3M37xWW6s/RGlqPRXZuTdH8/8evw9G5raX
+        yrHzSH430x8au4XyPx8Yg5ixxSbED2F7aa3XXtasOE3TwVT0DF2wDsFL7Y8RNFgvjSahVF5n7Ju7
+        YOyjLusFN0eQZIPWXJWbZil0NmkBprjdqk4VqCOOl91cEuGs1q1GrNQ1W8+NTvvYbHkNCq/nFdd8
+        EHfEaAG5CsvaL7mHIrxdUQDo23lu9WzZzbm3/fIpegIzq+tqlo4nw+FojOA/MAAD
+    headers:
+      CF-RAY:
+      - 98ece04ddc807281-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - br
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 15 Oct 2025 05:22:00 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '396'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '410'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '800000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '799859'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 10ms
+      x-request-id:
+      - req_df1b08c7023f4fe7bd4ff490c77c6722
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are a data extraction
+      specialist for document 'Payment Terms Contract' (ID: 10).\\n\\nEXTRACTION PROTOCOL:\\n1.
+      You have access to tools to analyze this document. Use them to find the requested
+      information.\\n2. Use vector search, summary loaders, and note access as needed
+      to locate data.\\n3. Return ONLY the raw extracted value matching the target
+      type.\\n4. No explanations, no citations, no commentary \u2013 just the data.\\n\\nIf
+      the information cannot be found using the tools, return null/None.\"},{\"role\":\"user\",\"content\":\"Extract
+      all payment information from this contract\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_TejYDEpSxtvEFgMlOUFn5HJB\",\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_TejYDEpSxtvEFgMlOUFn5HJB\",\"content\":\"127\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_H5p2LpbBrsY4JICaQbgeTUKZ\",\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"arguments\":\"{\\\"start\\\":0,\\\"end\\\":127}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_H5p2LpbBrsY4JICaQbgeTUKZ\",\"content\":\"Test
+      contract with payment terms: Party A agrees to pay Party B $10,000 within 30
+      days. Payment shall be made by wire transfer.\"}],\"model\":\"gpt-4o\",\"stream\":false,\"temperature\":0.7,\"tool_choice\":\"required\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"description\":\"Load
+      the document's markdown summary (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_summary_token_length\",\"description\":\"Return
+      token length of the document's markdown summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"description\":\"Get
+      the total character length of the document's plain-text extract.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"description\":\"Return
+      a slice of the document's plain-text extract.\\n\\nIMPORTANT USAGE GUIDELINES:\\n-
+      First use get_document_text_length to check the total document size\\n- Recommended
+      chunk size: 5,000 to 50,000 characters per request\\n- DO NOT load chunks smaller
+      than 1,000 characters (inefficient, wastes tool calls)\\n- DO NOT load chunks
+      larger than 100,000 characters (may overflow context)\\n- Tool call limit is
+      50, so plan your chunking strategy accordingly\\n- For a 500K char document,
+      use ~10-20 chunks of 25-50K chars each\\n\\n\U0001F534 CRITICAL - CITATION REQUIREMENT:\\nAfter
+      reading text with this tool, you MUST:\\n1. Identify 3-5 most relevant exact
+      quotes/passages (5-50 words each)\\n2. Call search_exact_text with those EXACT
+      strings\\n3. This creates proper citations with page numbers\\n\\nWHY: This
+      tool returns raw text WITHOUT sources. Only search_exact_text\\ncreates citations.
+      Skip this and your answer will have NO SOURCES!\\n\\nExample: For a 200,000
+      character document:\\n- Good: Load in 4-8 chunks of 25,000-50,000 chars each\\n-
+      Bad: Load 100 chars at a time (would need 2000 tool calls!)\\n- Bad: Load all
+      200,000 chars at once (might overflow context)\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"start\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"end\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"refresh\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"description\":\"Search
+      for exact text matches and return source nodes with location information.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_strings\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"search_strings\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_notes\",\"description\":\"Retrieve
+      metadata & first 512-char preview of notes for this document.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_document_notes\",\"description\":\"Search
+      notes attached to this document for a keyword.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_term\":{\"type\":\"string\"},\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"required\":[\"search_term\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_document_note\",\"description\":\"Create
+      a new note attached to this document and return its id.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"title\",\"content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_note\",\"description\":\"Version-up
+      an existing note and return new version number.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"note_id\":{\"type\":\"integer\"},\"new_content\":{\"type\":\"string\"}},\"required\":[\"note_id\",\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"duplicate_annotations\",\"description\":\"<summary>Duplicate
+      existing annotations in the current document with a new label.</summary>\\n<returns>\\n<description>Dict
+      with key ``annotation_ids`` listing newly created IDs.</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"annotation_ids\":{\"description\":\"IDs
+      of annotations to duplicate.\",\"items\":{\"type\":\"integer\"},\"type\":\"array\"},\"new_label_text\":{\"description\":\"Text
+      for the new annotation label.\",\"type\":\"string\"},\"label_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"description\":\"Optional
+      label type.\"}},\"required\":[\"annotation_ids\",\"new_label_text\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_exact_string_annotations\",\"description\":\"Create
+      annotations for *exact* string matches in the current document.\\n\\nEach *entry*
+      provides ``label_text`` and ``exact_string``.  The tool\\nautomatically applies
+      all entries to the current document & corpus.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"entries\":{\"items\":{\"$ref\":\"#/$defs/ExactStringEntry\"},\"type\":\"array\"}},\"required\":[\"entries\"],\"type\":\"object\",\"$defs\":{\"ExactStringEntry\":{\"description\":\"Structured
+      entry for an exact\u2010string annotation request.\",\"properties\":{\"label_text\":{\"description\":\"Text
+      of the annotation label\",\"type\":\"string\"},\"exact_string\":{\"description\":\"Exact
+      string to annotate\",\"type\":\"string\"}},\"required\":[\"label_text\",\"exact_string\"],\"type\":\"object\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary\",\"description\":\"Return
+      the latest summary content for this document (corpus-aware).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_versions\",\"description\":\"Return
+      version history for the document summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_diff\",\"description\":\"Return
+      unified diff between two document summary versions.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"from_version\":{\"type\":\"integer\"},\"to_version\":{\"type\":\"integer\"}},\"required\":[\"from_version\",\"to_version\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_summary\",\"description\":\"Update
+      (or create) the document summary, returning version info.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"final_result\",\"description\":\"Structured
+      payment information.\",\"parameters\":{\"properties\":{\"amount\":{\"type\":\"string\"},\"deadline\":{\"type\":\"string\"},\"method\":{\"type\":\"string\"}},\"required\":[\"amount\",\"deadline\",\"method\"],\"type\":\"object\"}}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '8590'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        YwDAIwBArNRVuZNoqutD+w3LSh8IVFppvNbdCAwHNP+XUzjCEz2xMWZrWJtvLTs7wMa0Xhp+Kw40
+        4jDfrT1IeQsi2++pq5tN++5dQQTvoAh2MIsNWaonn9Lz76+Gbj74tPv0e3Mub16Z+GP6Ll8+fkRZ
+        ECEdz9guksLjIQYtnyIL8eVyEDsoanfbZtNsdl1L/CAkxwJFOOWlWqeqa7p11eyrZisMHJK3PEPR
+        n4KI6O6qQYTl78+gqCnvEoMxTCjGHxFhSsJQBDPPfl5MXFAyBKLXXVUUL0SI95aURFsjYhw7Fe/K
+        gbb6qxHRN+nNm9uPv+R6/vGl//7u15NPL3+H3Q9nE1Ov3mRQ5ECMSB6SVqUMbhAhmiC/5aMRPZ3Z
+        KB1dInT1NSjC3V/MWPX9v1B/8ahtyqZp/qL8C8fGiY9MhK4acuZmXgu8DMnl7Ss/MS0N8XbP0188
+        AFXxAWOgXPzXyIGl/cMYCTg2uvP/xIQH+ccg6ZSndJw3AbHyCnpesnWo7hIKYCiMOi484inylEJe
+        9JLO2fCo7Zod3AI8NsAidDnwgwkCtENtt1qXWgUd4K84u+A1WGMHdse0bTddbbbMhfOJzjU1wA1H
+        o4o1gTVE08eTpmQpYNtnLeeFnY4SGa55gBXZxGdshcIHUNAiQht69eJ5giK8jDEG0M28cNC9jyee
+        8uQfuhfQZ22PfbvbbzbbHYqHwgAD
+    headers:
+      CF-RAY:
+      - 98ece050ddf67281-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - br
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 15 Oct 2025 05:22:01 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '520'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '777'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '800000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '799826'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 13ms
+      x-request-id:
+      - req_025a68d63e0346279c8ae8c4d9e3c390
+    status:
+      code: 200
+      message: OK
+version: 1

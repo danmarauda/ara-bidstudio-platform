@@ -1,0 +1,243 @@
+---
+category: documentation
+subcategory: overview
+tags: [documentation, technical-writing, markdown, api-docs, overview, navigation]
+cursor:
+  context_window: 16384
+  temperature: 0.2
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: []
+  exports: ["documentation-standards", "api-documentation", "code-documentation"]
+  references: ["../index.mdc"]
+---
+
+# Documentation Guidelines
+
+Comprehensive documentation standards and practices for ANUBIS Chat.
+
+## Documentation Structure
+
+### Core Documentation Files
+- **README.md**: Project overview and quick start guide
+- **CLAUDE.md**: AI assistant context and development guidance
+- **CHANGELOG.md**: Version history and release notes
+- **CONTRIBUTING.md**: Contribution guidelines and code of conduct
+
+### Technical Documentation
+- **API Documentation**: OpenAPI/Swagger specs for all endpoints
+- **Architecture Diagrams**: System design and data flow visualizations
+- **Database Schema**: Entity relationships and migration guides
+- **Component Library**: Storybook documentation for UI components
+
+## Documentation Standards
+
+### Writing Style
+- **Clear and Concise**: Use simple language, avoid jargon
+- **Action-Oriented**: Start with verbs for instructions
+- **Consistent Voice**: Use active voice and present tense
+- **Structured Format**: Use headings, lists, and code blocks
+
+### Code Examples
+```typescript
+// Always include complete, runnable examples
+import { ChatClient } from '@anubis/client'
+
+const client = new ChatClient({
+  apiKey: process.env.ANUBIS_API_KEY,
+  model: 'claude-3.5-sonnet'
+})
+
+// Show both success and error handling
+try {
+  const response = await client.chat({
+    message: 'Hello, ANUBIS!',
+    context: previousMessages
+  })
+  console.log(response)
+} catch (error) {
+  console.error('Chat failed:', error)
+}
+```
+
+## API Documentation
+
+### OpenAPI Specification
+- **Version**: OpenAPI 3.1.0
+- **Format**: YAML with JSON Schema
+- **Validation**: Automated with spectral
+- **Generation**: Auto-generated from TypeScript types
+
+### Documentation Requirements
+- Every endpoint must have description and examples
+- Request/response schemas with validation rules
+- Error responses with status codes and messages
+- Authentication and rate limiting details
+
+## Component Documentation
+
+### Storybook Integration
+```typescript
+// Component stories with all variations
+export default {
+  title: 'Components/ChatMessage',
+  component: ChatMessage,
+  parameters: {
+    docs: {
+      description: {
+        component: 'Chat message display with AI responses'
+      }
+    }
+  }
+}
+
+// Document all props and variations
+export const Default = {
+  args: {
+    message: 'Hello, how can I help you?',
+    role: 'assistant',
+    timestamp: new Date()
+  }
+}
+```
+
+## Inline Documentation
+
+### JSDoc Standards
+```typescript
+/**
+ * Processes user chat message with AI model
+ * @param {ChatRequest} request - User message and context
+ * @param {ChatOptions} options - Model and streaming configuration
+ * @returns {Promise<ChatResponse>} AI response with metadata
+ * @throws {RateLimitError} When user exceeds rate limits
+ * @throws {ModelError} When AI model fails to respond
+ * @example
+ * const response = await processChat(
+ *   { message: 'Hello', userId: '123' },
+ *   { model: 'claude-3.5', stream: true }
+ * )
+ */
+export async function processChat(
+  request: ChatRequest,
+  options: ChatOptions = {}
+): Promise<ChatResponse> {
+  // Implementation
+}
+```
+
+## Markdown Documentation
+
+### File Structure
+```markdown
+# Feature Name
+
+## Overview
+Brief description of the feature
+
+## Installation
+```bash
+bun add @anubis/feature
+```
+
+## Usage
+### Basic Example
+```typescript
+// Code example
+```
+
+## API Reference
+### Methods
+- `methodName(params)`: Description
+
+## Configuration
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| option1 | string | 'default' | Description |
+
+## Troubleshooting
+Common issues and solutions
+```
+
+## Documentation Generation
+
+### Automated Tools
+- **TypeDoc**: Generate API docs from TypeScript
+- **Docusaurus**: Build documentation website
+- **Swagger UI**: Interactive API documentation
+- **Compodoc**: Angular-style documentation
+
+### CI/CD Integration
+```yaml
+# GitHub Actions workflow
+name: Documentation
+on:
+  push:
+    branches: [main]
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun run docs:generate
+      - run: bun run docs:deploy
+```
+
+## Documentation Review Process
+
+### Review Checklist
+- [ ] Technical accuracy verified
+- [ ] Code examples tested and working
+- [ ] Links and references validated
+- [ ] Grammar and spelling checked
+- [ ] Formatting consistent with style guide
+- [ ] Accessibility considerations met
+
+## Version Documentation
+
+### Changelog Format
+```markdown
+## [1.2.0] - 2025-08-06
+
+### Added
+- New feature description
+- Enhancement details
+
+### Changed
+- Breaking change explanation
+- Migration instructions
+
+### Fixed
+- Bug fix description
+- Issue reference (#123)
+
+### Deprecated
+- Feature deprecation notice
+- Removal timeline
+```
+
+## Accessibility in Documentation
+
+### Requirements
+- Alt text for all images and diagrams
+- Proper heading hierarchy (h1 → h2 → h3)
+- Descriptive link text (not "click here")
+- Code blocks with language specification
+- Tables with headers and captions
+
+## Localization
+
+### Supported Languages
+- English (primary)
+- Spanish (planned)
+- French (planned)
+- Japanese (planned)
+
+### Translation Process
+- Use i18n keys for all user-facing text
+- Maintain separate docs folders per language
+- Automated translation validation
+- Native speaker review required

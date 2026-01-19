@@ -1,0 +1,1404 @@
+---
+category: deployment
+subcategory: overview
+tags: [deployment, devops, vercel, convex, production, ci-cd, overview, navigation]
+cursor:
+  context_window: 16384
+  temperature: 0.2
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["../backend/index.mdc", "../monitoring/index.mdc"]
+  exports: ["deployment-strategies", "production-checklist", "ci-cd-pipelines"]
+  references: ["../monitoring/index.mdc", "../security/index.mdc"]
+---
+
+# ANUBIS Chat Deployment & DevOps Guide
+
+Complete production deployment guidelines for ANUBIS Chat, covering Vercel deployment, CI/CD pipelines, monitoring, and operational procedures.
+
+## Table of Contents
+
+1. [Vercel Deployment Configuration](#vercel-deployment-configuration)
+2. [Environment Variable Management](#environment-variable-management)
+3. [CI/CD with GitHub Actions](#cicd-with-github-actions)
+4. [Preview Deployments](#preview-deployments)
+5. [Production Deployment Checklist](#production-deployment-checklist)
+6. [Rollback Strategies](#rollback-strategies)
+7. [Database Migrations with Convex](#database-migrations-with-convex)
+8. [Monitoring Setup](#monitoring-setup)
+9. [Performance Monitoring](#performance-monitoring)
+10. [Error Tracking](#error-tracking)
+11. [Blue-Green Deployments](#blue-green-deployments)
+12. [A/B Testing Setup](#ab-testing-setup)
+13. [CDN Configuration](#cdn-configuration)
+14. [SSL/TLS Setup](#ssltls-setup)
+15. [Domain Management](#domain-management)
+16. [Deployment Scripts](#deployment-scripts)
+
+---
+
+## Vercel Deployment Configuration
+
+### Project Configuration
+
+**vercel.json**
+```json
+{
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm ci",
+  "devCommand": "npm run dev",
+  "regions": ["sfo1", "iad1", "sin1"],
+  "functions": {
+    "app/api/**/*.ts": {
+      "runtime": "nodejs20.x",
+      "maxDuration": 30
+    },
+    "app/api/ai/**/*.ts": {
+      "runtime": "nodejs20.x",
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/old-dashboard",
+      "destination": "/dashboard",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/webhook/:path*",
+      "destination": "/api/webhooks/:path*"
+    }
+  ]
+}
+```
+
+### Edge Runtime Configuration
+
+**middleware.ts**
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { validateApiKey } from '@/lib/auth'
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // API protection
+  if (pathname.startsWith('/api/')) {
+    const apiKey = request.headers.get('authorization')
+    const isValid = await validateApiKey(apiKey)
+    
+    if (!isValid) {
+      return new NextResponse('Unauthorized', { status: 401 })
+    }
+  }
+
+  // Solana RPC optimization
+  if (pathname.startsWith('/api/solana/')) {
+    const response = NextResponse.next()
+    response.headers.set('Cache-Control', 'public, max-age=30')
+    return response
+  }
+
+  return NextResponse.next()
+}
+
+export const config = {
+  matcher: ['/api/:path*', '/dashboard/:path*'],
+  runtime: 'edge',
+  regions: ['sfo1', 'iad1', 'sin1']
+}
+```
+
+---
+
+## Environment Variable Management
+
+### Environment Structure
+
+**Development (.env.local)**
+```bash
+# Core Application
+NODE_ENV=development
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3000/api
+
+# AI Models & APIs
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+DEEPSEEK_API_KEY=sk-...
+GOOGLE_API_KEY=...
+
+# Vector Database
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=...
+
+# Database
+DATABASE_URL="postgresql://..."
+CONVEX_DEPLOYMENT=dev:...
+
+# Authentication
+NEXTAUTH_SECRET=...
+NEXTAUTH_URL=http://localhost:3000
+
+# Solana
+NEXT_PUBLIC_SOLANA_CLUSTER=devnet
+NEXT_PUBLIC_RPC_URL=https://api.devnet.solana.com
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+
+# Monitoring
+SENTRY_DSN=...
+LOGROCKET_APP_ID=...
+```
+
+**Production (.env.production)**
+```bash
+# Core Application
+NODE_ENV=production
+NEXT_PUBLIC_APP_URL=https://anubis-chat.vercel.app
+NEXT_PUBLIC_API_URL=https://anubis-chat.vercel.app/api
+
+# AI Models & APIs (encrypted)
+OPENAI_API_KEY=${OPENAI_API_KEY}
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+GOOGLE_API_KEY=${GOOGLE_API_KEY}
+
+# Vector Database
+QDRANT_URL=https://qdrant.anubis-chat.com
+QDRANT_API_KEY=${QDRANT_API_KEY}
+
+# Database
+DATABASE_URL=${DATABASE_URL}
+CONVEX_DEPLOYMENT=production
+
+# Authentication
+NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+NEXTAUTH_URL=https://anubis-chat.vercel.app
+
+# Solana
+NEXT_PUBLIC_SOLANA_CLUSTER=mainnet-beta
+NEXT_PUBLIC_RPC_URL=https://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}
+ANCHOR_PROVIDER_URL=https://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}
+
+# Monitoring
+SENTRY_DSN=${SENTRY_DSN}
+LOGROCKET_APP_ID=${LOGROCKET_APP_ID}
+VERCEL_ANALYTICS_ID=${VERCEL_ANALYTICS_ID}
+```
+
+### Environment Validation
+
+**lib/env.ts**
+```typescript
+import { z } from 'zod'
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']),
+  NEXT_PUBLIC_APP_URL: z.string().url(),
+  NEXT_PUBLIC_API_URL: z.string().url(),
+  
+  // AI APIs
+  OPENAI_API_KEY: z.string().min(1),
+  ANTHROPIC_API_KEY: z.string().min(1),
+  
+  // Vector DB
+  QDRANT_URL: z.string().url(),
+  QDRANT_API_KEY: z.string().min(1),
+  
+  // Solana
+  NEXT_PUBLIC_SOLANA_CLUSTER: z.enum(['devnet', 'testnet', 'mainnet-beta']),
+  NEXT_PUBLIC_RPC_URL: z.string().url(),
+})
+
+export const env = envSchema.parse(process.env)
+```
+
+---
+
+## CI/CD with GitHub Actions
+
+### Main Workflow
+
+**.github/workflows/deploy.yml**
+```yaml
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run type check
+        run: npm run type-check
+        
+      - name: Run linting
+        run: npm run lint
+        
+      - name: Run unit tests
+        run: npm run test
+        
+      - name: Run build test
+        run: npm run build
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          
+      - name: Run npm audit
+        run: npm audit --audit-level moderate
+
+  deploy-preview:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Install Vercel CLI
+        run: npm install --global vercel@canary
+        
+      - name: Pull Vercel Environment
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        
+      - name: Build Project Artifacts
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        
+      - name: Deploy to Vercel
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "preview-url=$url" >> $GITHUB_OUTPUT
+          
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            🚀 **Preview Deployment Ready**
+            
+            URL: ${{ steps.deploy.outputs.preview-url }}
+            
+            - ✅ Tests passing
+            - ✅ Security scan complete
+            - ✅ Build successful
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Install Vercel CLI
+        run: npm install --global vercel@canary
+        
+      - name: Pull Vercel Environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        
+      - name: Deploy to Vercel Production
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        
+      - name: Run smoke tests
+        run: npm run test:smoke -- --baseUrl=https://anubis-chat.vercel.app
+        
+      - name: Notify deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: "ANUBIS Chat production deployment ${{ job.status }}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+### Performance Testing Workflow
+
+**.github/workflows/performance.yml**
+```yaml
+name: Performance Tests
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # Daily at 6 AM UTC
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          configPath: './lighthouserc.js'
+          uploadArtifacts: true
+          
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-results
+          path: .lighthouseci/
+
+  load-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Install Artillery
+        run: npm install -g artillery@latest
+        
+      - name: Run load tests
+        run: artillery run tests/load/api-endpoints.yml
+        
+      - name: Run AI model load tests
+        run: artillery run tests/load/ai-models.yml
+```
+
+---
+
+## Preview Deployments
+
+### Automatic PR Previews
+
+**vercel.json preview configuration**
+```json
+{
+  "git": {
+    "deploymentEnabled": {
+      "main": false,
+      "develop": true
+    }
+  },
+  "github": {
+    "enabled": true,
+    "autoAlias": true,
+    "silent": false
+  }
+}
+```
+
+### Preview Environment Setup
+
+**lib/config/preview.ts**
+```typescript
+export const previewConfig = {
+  database: {
+    // Use staging database for previews
+    url: process.env.PREVIEW_DATABASE_URL || process.env.DATABASE_URL,
+  },
+  ai: {
+    // Lower rate limits for preview
+    rateLimit: {
+      requests: 10,
+      window: 60
+    }
+  },
+  solana: {
+    // Always use devnet for previews
+    cluster: 'devnet' as const,
+    rpcUrl: 'https://api.devnet.solana.com'
+  },
+  features: {
+    // Enable feature flags for testing
+    enableExperimentalFeatures: true,
+    enableDebugMode: true
+  }
+}
+```
+
+---
+
+## Production Deployment Checklist
+
+### Pre-Deployment
+
+- [ ] **Code Quality**
+  - [ ] All tests passing (unit, integration, E2E)
+  - [ ] Code review completed and approved
+  - [ ] No critical security vulnerabilities
+  - [ ] Performance benchmarks met
+  - [ ] Accessibility standards verified
+
+- [ ] **Environment Setup**
+  - [ ] Production environment variables configured
+  - [ ] API keys and secrets rotated
+  - [ ] Database backups verified
+  - [ ] CDN cache invalidation rules set
+
+- [ ] **Dependencies**
+  - [ ] All dependencies updated and audited
+  - [ ] No vulnerable packages
+  - [ ] Build artifacts verified
+  - [ ] Docker images scanned (if applicable)
+
+### Deployment Process
+
+- [ ] **Infrastructure**
+  - [ ] Health checks configured
+  - [ ] Monitoring alerts active
+  - [ ] Rate limiting configured
+  - [ ] SSL certificates valid
+  - [ ] Domain configuration verified
+
+- [ ] **Application**
+  - [ ] Feature flags configured
+  - [ ] A/B tests setup
+  - [ ] Error tracking enabled
+  - [ ] Performance monitoring active
+  - [ ] User analytics configured
+
+### Post-Deployment
+
+- [ ] **Verification**
+  - [ ] Smoke tests executed
+  - [ ] Critical user paths tested
+  - [ ] API endpoints responding
+  - [ ] AI models functioning
+  - [ ] Solana integration working
+
+- [ ] **Monitoring**
+  - [ ] Error rates within normal range
+  - [ ] Response times acceptable
+  - [ ] Resource utilization normal
+  - [ ] User engagement metrics stable
+  - [ ] Revenue metrics tracked
+
+---
+
+## Rollback Strategies
+
+### Immediate Rollback
+
+**scripts/rollback.sh**
+```bash
+#!/bin/bash
+
+set -e
+
+# Rollback to previous deployment
+echo "🔄 Rolling back ANUBIS Chat deployment..."
+
+# Get previous deployment
+PREVIOUS_DEPLOYMENT=$(vercel ls --token="$VERCEL_TOKEN" | grep production | head -2 | tail -1 | awk '{print $1}')
+
+if [ -z "$PREVIOUS_DEPLOYMENT" ]; then
+  echo "❌ No previous deployment found"
+  exit 1
+fi
+
+echo "📦 Previous deployment: $PREVIOUS_DEPLOYMENT"
+
+# Promote previous deployment
+vercel promote "$PREVIOUS_DEPLOYMENT" --token="$VERCEL_TOKEN"
+
+echo "✅ Rollback completed"
+
+# Run post-rollback tests
+npm run test:smoke
+
+# Notify team
+curl -X POST -H 'Content-type: application/json' \
+  --data '{"text":"🚨 ANUBIS Chat rolled back to previous deployment"}' \
+  "$SLACK_WEBHOOK_URL"
+```
+
+### Gradual Rollback
+
+**lib/rollback/gradual.ts**
+```typescript
+interface RollbackConfig {
+  percentage: number
+  duration: number // minutes
+}
+
+export class GradualRollback {
+  async execute(config: RollbackConfig) {
+    // Start with small percentage
+    await this.routeTraffic(config.percentage)
+    
+    // Monitor metrics
+    const isHealthy = await this.monitorHealth(config.duration)
+    
+    if (isHealthy) {
+      // Increase traffic gradually
+      await this.routeTraffic(100)
+    } else {
+      // Full rollback
+      await this.fullRollback()
+    }
+  }
+  
+  private async routeTraffic(percentage: number) {
+    // Configure edge routing
+    await fetch('/api/admin/routing', {
+      method: 'POST',
+      body: JSON.stringify({ percentage })
+    })
+  }
+  
+  private async monitorHealth(duration: number): Promise<boolean> {
+    const start = Date.now()
+    
+    while (Date.now() - start < duration * 60000) {
+      const metrics = await this.getHealthMetrics()
+      
+      if (metrics.errorRate > 0.01 || metrics.responseTime > 1000) {
+        return false
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 30000)) // 30s
+    }
+    
+    return true
+  }
+}
+```
+
+---
+
+## Database Migrations with Convex
+
+### Migration Strategy
+
+**convex/migrations/001_initial.ts**
+```typescript
+import { mutation } from './_generated/server'
+
+export const migrateInitialSchema = mutation({
+  handler: async (ctx) => {
+    // Create initial tables
+    await ctx.db.insert('users', {
+      email: 'admin@anubis-chat.com',
+      role: 'admin',
+      createdAt: Date.now()
+    })
+    
+    // Create indexes
+    await ctx.db.query('users')
+      .withIndex('by_email', q => q.eq('email', 'admin@anubis-chat.com'))
+      .first()
+  }
+})
+```
+
+### Migration Runner
+
+**scripts/migrate.ts**
+```typescript
+import { ConvexClient } from 'convex/browser'
+import { api } from '../convex/_generated/api'
+
+const client = new ConvexClient(process.env.CONVEX_URL!)
+
+async function runMigrations() {
+  const migrations = [
+    'migrateInitialSchema',
+    'addUserProfiles',
+    'addChatHistory',
+    'addVectorEmbeddings'
+  ]
+  
+  for (const migration of migrations) {
+    console.log(`Running migration: ${migration}`)
+    
+    try {
+      await client.mutation(api.migrations[migration])
+      console.log(`✅ ${migration} completed`)
+    } catch (error) {
+      console.error(`❌ ${migration} failed:`, error)
+      process.exit(1)
+    }
+  }
+  
+  console.log('🎉 All migrations completed')
+}
+
+runMigrations()
+```
+
+---
+
+## Monitoring Setup
+
+### Sentry Configuration
+
+**lib/monitoring/sentry.ts**
+```typescript
+import * as Sentry from '@sentry/nextjs'
+import { env } from '@/lib/env'
+
+Sentry.init({
+  dsn: env.SENTRY_DSN,
+  environment: env.NODE_ENV,
+  tracesSampleRate: env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  
+  beforeSend(event, hint) {
+    // Filter out known issues
+    if (event.exception?.values?.[0]?.value?.includes('ResizeObserver')) {
+      return null
+    }
+    
+    // Add user context
+    event.user = {
+      id: event.user?.id,
+      // Don't log PII
+    }
+    
+    return event
+  },
+  
+  integrations: [
+    new Sentry.BrowserTracing({
+      tracingOrigins: ['localhost', env.NEXT_PUBLIC_APP_URL],
+    }),
+  ],
+})
+
+// Custom error boundary
+export function withSentry<T extends object>(Component: React.ComponentType<T>) {
+  return Sentry.withErrorBoundary(Component, {
+    fallback: ({ error, resetError }) => (
+      <div className="error-boundary">
+        <h2>Something went wrong</h2>
+        <button onClick={resetError}>Try again</button>
+      </div>
+    )
+  })
+}
+```
+
+### LogRocket Integration
+
+**lib/monitoring/logrocket.ts**
+```typescript
+import LogRocket from 'logrocket'
+import setupLogRocketReact from 'logrocket-react'
+import { env } from '@/lib/env'
+
+if (typeof window !== 'undefined' && env.NODE_ENV === 'production') {
+  LogRocket.init(env.LOGROCKET_APP_ID, {
+    network: {
+      requestSanitizer: (request) => {
+        // Sanitize sensitive data
+        if (request.url.includes('/api/auth/')) {
+          request.body = '[Sanitized]'
+        }
+        return request
+      }
+    },
+    console: {
+      shouldAggregateConsoleErrors: true
+    }
+  })
+  
+  setupLogRocketReact(LogRocket)
+}
+
+export { LogRocket }
+```
+
+---
+
+## Performance Monitoring
+
+### Web Vitals Tracking
+
+**lib/monitoring/vitals.ts**
+```typescript
+import { getCLS, getFID, getFCP, getLCP, getTTFB } from 'web-vitals'
+
+function sendToAnalytics(metric: any) {
+  const body = JSON.stringify(metric)
+  
+  // Send to Vercel Analytics
+  if ('sendBeacon' in navigator) {
+    navigator.sendBeacon('/api/analytics/vitals', body)
+  } else {
+    fetch('/api/analytics/vitals', {
+      method: 'POST',
+      body,
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true
+    })
+  }
+}
+
+// Track all Web Vitals
+getCLS(sendToAnalytics)
+getFID(sendToAnalytics)
+getFCP(sendToAnalytics)
+getLCP(sendToAnalytics)
+getTTFB(sendToAnalytics)
+```
+
+### API Performance Monitoring
+
+**lib/monitoring/api-performance.ts**
+```typescript
+export function withPerformanceMonitoring<T extends any[], R>(
+  fn: (...args: T) => Promise<R>,
+  name: string
+) {
+  return async (...args: T): Promise<R> => {
+    const start = performance.now()
+    const startMemory = process.memoryUsage()
+    
+    try {
+      const result = await fn(...args)
+      const duration = performance.now() - start
+      const endMemory = process.memoryUsage()
+      
+      // Log performance metrics
+      console.log(`${name} performance:`, {
+        duration: `${duration.toFixed(2)}ms`,
+        memoryUsed: `${(endMemory.heapUsed - startMemory.heapUsed) / 1024 / 1024}MB`
+      })
+      
+      // Send to monitoring
+      if (duration > 1000) { // Slow query threshold
+        await fetch('/api/monitoring/slow-query', {
+          method: 'POST',
+          body: JSON.stringify({
+            name,
+            duration,
+            args: args.length
+          })
+        })
+      }
+      
+      return result
+    } catch (error) {
+      const duration = performance.now() - start
+      
+      // Log error with context
+      console.error(`${name} failed after ${duration.toFixed(2)}ms:`, error)
+      
+      throw error
+    }
+  }
+}
+```
+
+---
+
+## Error Tracking
+
+### Custom Error Handler
+
+**lib/monitoring/error-handler.ts**
+```typescript
+import * as Sentry from '@sentry/nextjs'
+import { LogRocket } from './logrocket'
+
+export class ErrorHandler {
+  static async handle(error: Error, context?: any) {
+    // Log locally for development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error:', error)
+      console.error('Context:', context)
+    }
+    
+    // Add context to Sentry
+    Sentry.withScope((scope) => {
+      if (context) {
+        scope.setContext('errorContext', context)
+      }
+      
+      scope.setTag('component', context?.component || 'unknown')
+      scope.setLevel('error')
+      
+      Sentry.captureException(error)
+    })
+    
+    // Tag LogRocket session
+    if (typeof window !== 'undefined') {
+      LogRocket.captureException(error)
+      LogRocket.getSessionURL((sessionURL) => {
+        Sentry.configureScope((scope) => {
+          scope.setContext('LogRocket', { sessionURL })
+        })
+      })
+    }
+  }
+  
+  static createBoundary = (fallback: React.ComponentType) => {
+    return class ErrorBoundary extends React.Component {
+      componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+        this.handle(error, errorInfo)
+      }
+      
+      render() {
+        return React.createElement(fallback)
+      }
+    }
+  }
+}
+```
+
+---
+
+## Blue-Green Deployments
+
+### Traffic Routing
+
+**lib/deployment/blue-green.ts**
+```typescript
+export class BlueGreenDeployment {
+  private currentEnvironment: 'blue' | 'green' = 'blue'
+  
+  async deploy(version: string) {
+    const targetEnv = this.currentEnvironment === 'blue' ? 'green' : 'blue'
+    
+    // Deploy to inactive environment
+    await this.deployToEnvironment(targetEnv, version)
+    
+    // Run health checks
+    const isHealthy = await this.healthCheck(targetEnv)
+    
+    if (!isHealthy) {
+      throw new Error(`Health checks failed for ${targetEnv} environment`)
+    }
+    
+    // Switch traffic
+    await this.switchTraffic(targetEnv)
+    
+    // Update current environment
+    this.currentEnvironment = targetEnv
+    
+    return {
+      previousEnvironment: this.currentEnvironment === 'blue' ? 'green' : 'blue',
+      currentEnvironment: this.currentEnvironment,
+      version
+    }
+  }
+  
+  private async switchTraffic(targetEnv: 'blue' | 'green') {
+    // Gradual traffic switch
+    const percentages = [10, 25, 50, 75, 100]
+    
+    for (const percentage of percentages) {
+      await this.routeTraffic(targetEnv, percentage)
+      await this.sleep(30000) // Wait 30 seconds
+      
+      const metrics = await this.getMetrics(targetEnv)
+      if (metrics.errorRate > 0.01) {
+        // Rollback traffic
+        await this.routeTraffic(
+          targetEnv === 'blue' ? 'green' : 'blue',
+          100
+        )
+        throw new Error('High error rate detected, rolling back')
+      }
+    }
+  }
+}
+```
+
+---
+
+## A/B Testing Setup
+
+### Feature Flag Configuration
+
+**lib/ab-testing/feature-flags.ts**
+```typescript
+export interface FeatureFlag {
+  key: string
+  enabled: boolean
+  rolloutPercentage: number
+  conditions?: {
+    userSegment?: string[]
+    country?: string[]
+    platform?: string[]
+  }
+}
+
+export class FeatureFlagManager {
+  private flags: Map<string, FeatureFlag> = new Map()
+  
+  constructor() {
+    this.loadFlags()
+  }
+  
+  isEnabled(flagKey: string, userId?: string, context?: any): boolean {
+    const flag = this.flags.get(flagKey)
+    
+    if (!flag || !flag.enabled) {
+      return false
+    }
+    
+    // Check rollout percentage
+    if (userId) {
+      const hash = this.hash(userId + flagKey)
+      if (hash % 100 >= flag.rolloutPercentage) {
+        return false
+      }
+    }
+    
+    // Check conditions
+    if (flag.conditions && context) {
+      if (flag.conditions.userSegment && 
+          !flag.conditions.userSegment.includes(context.userSegment)) {
+        return false
+      }
+      
+      if (flag.conditions.country && 
+          !flag.conditions.country.includes(context.country)) {
+        return false
+      }
+    }
+    
+    return true
+  }
+  
+  private hash(str: string): number {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // Convert to 32-bit integer
+    }
+    return Math.abs(hash)
+  }
+}
+```
+
+### A/B Test Implementation
+
+**components/ab-testing/ABTest.tsx**
+```typescript
+import { useEffect, useState } from 'react'
+import { FeatureFlagManager } from '@/lib/ab-testing/feature-flags'
+
+interface ABTestProps {
+  testKey: string
+  userId?: string
+  context?: any
+  children: {
+    variant: React.ReactNode
+    control: React.ReactNode
+  }
+}
+
+export function ABTest({ testKey, userId, context, children }: ABTestProps) {
+  const [showVariant, setShowVariant] = useState<boolean | null>(null)
+  
+  useEffect(() => {
+    const flagManager = new FeatureFlagManager()
+    const enabled = flagManager.isEnabled(testKey, userId, context)
+    setShowVariant(enabled)
+    
+    // Track assignment
+    if (typeof window !== 'undefined') {
+      window.gtag?.('event', 'ab_test_assignment', {
+        test_key: testKey,
+        variant: enabled ? 'variant' : 'control',
+        user_id: userId
+      })
+    }
+  }, [testKey, userId, context])
+  
+  if (showVariant === null) {
+    return null // Loading state
+  }
+  
+  return <>{showVariant ? children.variant : children.control}</>
+}
+```
+
+---
+
+## CDN Configuration
+
+### Vercel Edge Network
+
+**vercel.json CDN settings**
+```json
+{
+  "headers": [
+    {
+      "source": "/static/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/api/static/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
+      ]
+    }
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false
+}
+```
+
+### Image Optimization
+
+**next.config.js**
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    domains: ['anubis-chat-assets.vercel.app'],
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 60,
+  },
+  
+  async headers() {
+    return [
+      {
+        source: '/_next/image(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ]
+  },
+}
+
+module.exports = nextConfig
+```
+
+---
+
+## SSL/TLS Setup
+
+### Automatic SSL with Vercel
+
+Vercel automatically provides SSL certificates for all deployments. For custom domains:
+
+**Domain Configuration**
+```bash
+# Add custom domain
+vercel domains add anubis-chat.com
+
+# Verify DNS configuration
+vercel domains ls
+
+# Check SSL certificate
+curl -I https://anubis-chat.com
+```
+
+### Security Headers
+
+**middleware.ts security headers**
+```typescript
+export function middleware(request: NextRequest) {
+  const response = NextResponse.next()
+  
+  // Security headers
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  response.headers.set(
+    'Strict-Transport-Security',
+    'max-age=31536000; includeSubDomains; preload'
+  )
+  
+  // Content Security Policy
+  response.headers.set(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https:",
+      "connect-src 'self' https://api.openai.com https://api.anthropic.com",
+      "font-src 'self'",
+      "frame-src 'none'"
+    ].join('; ')
+  )
+  
+  return response
+}
+```
+
+---
+
+## Domain Management
+
+### DNS Configuration
+
+**DNS Records for anubis-chat.com**
+```
+A     @     76.76.19.61        (Vercel)
+AAAA  @     2606:4700:10::6   (Vercel IPv6)
+CNAME www   cname.vercel-dns.com
+CNAME api   cname.vercel-dns.com
+TXT   @     v=spf1 include:_spf.google.com ~all
+```
+
+### Domain Verification
+
+**scripts/verify-domain.sh**
+```bash
+#!/bin/bash
+
+DOMAIN="anubis-chat.com"
+
+echo "🔍 Verifying domain configuration for $DOMAIN"
+
+# Check A record
+A_RECORD=$(dig +short A $DOMAIN)
+echo "A Record: $A_RECORD"
+
+# Check CNAME for www
+WWW_RECORD=$(dig +short CNAME www.$DOMAIN)
+echo "WWW CNAME: $WWW_RECORD"
+
+# Check SSL certificate
+echo "📋 SSL Certificate:"
+openssl s_client -connect $DOMAIN:443 -servername $DOMAIN < /dev/null 2>/dev/null | \
+  openssl x509 -noout -dates -subject -issuer
+
+# Check security headers
+echo "🛡️ Security Headers:"
+curl -sI https://$DOMAIN | grep -E "(X-Frame-Options|X-Content-Type-Options|Strict-Transport-Security)"
+
+echo "✅ Domain verification complete"
+```
+
+---
+
+## Deployment Scripts
+
+### Build and Deploy Script
+
+**scripts/deploy.sh**
+```bash
+#!/bin/bash
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Configuration
+PROJECT_NAME="ANUBIS Chat"
+ENVIRONMENT=${1:-production}
+
+echo -e "${GREEN}🚀 Deploying $PROJECT_NAME to $ENVIRONMENT${NC}"
+
+# Pre-deployment checks
+echo -e "${YELLOW}📋 Running pre-deployment checks...${NC}"
+
+# Check Node.js version
+NODE_VERSION=$(node --version)
+echo "Node.js version: $NODE_VERSION"
+
+if ! node --version | grep -q "v20"; then
+  echo -e "${RED}❌ Node.js 20.x is required${NC}"
+  exit 1
+fi
+
+# Check npm version
+npm --version
+
+# Install dependencies
+echo -e "${YELLOW}📦 Installing dependencies...${NC}"
+npm ci
+
+# Run type checking
+echo -e "${YELLOW}🔍 Running type checks...${NC}"
+npm run type-check
+
+# Run linting
+echo -e "${YELLOW}🧹 Running linter...${NC}"
+npm run lint
+
+# Run tests
+echo -e "${YELLOW}🧪 Running tests...${NC}"
+npm run test
+
+# Build application
+echo -e "${YELLOW}🏗️ Building application...${NC}"
+npm run build
+
+# Security scan
+echo -e "${YELLOW}🔒 Running security scan...${NC}"
+npm audit --audit-level moderate
+
+# Deploy to Vercel
+echo -e "${YELLOW}☁️ Deploying to Vercel...${NC}"
+
+if [ "$ENVIRONMENT" = "production" ]; then
+  vercel --prod --token="$VERCEL_TOKEN"
+else
+  vercel --token="$VERCEL_TOKEN"
+fi
+
+# Post-deployment verification
+echo -e "${YELLOW}✅ Running post-deployment checks...${NC}"
+
+if [ "$ENVIRONMENT" = "production" ]; then
+  # Run smoke tests
+  npm run test:smoke -- --baseUrl="https://anubis-chat.vercel.app"
+  
+  # Check health endpoint
+  curl -f https://anubis-chat.vercel.app/api/health || {
+    echo -e "${RED}❌ Health check failed${NC}"
+    exit 1
+  }
+fi
+
+echo -e "${GREEN}🎉 Deployment completed successfully!${NC}"
+
+# Send notification
+if [ "$SLACK_WEBHOOK_URL" ]; then
+  curl -X POST -H 'Content-type: application/json' \
+    --data "{\"text\":\"✅ $PROJECT_NAME deployed to $ENVIRONMENT successfully\"}" \
+    "$SLACK_WEBHOOK_URL"
+fi
+```
+
+### Health Check Script
+
+**scripts/health-check.sh**
+```bash
+#!/bin/bash
+
+URL=${1:-"https://anubis-chat.vercel.app"}
+
+echo "🏥 Running health checks for $URL"
+
+# Basic connectivity
+echo "🔗 Testing connectivity..."
+if ! curl -f "$URL/api/health" > /dev/null 2>&1; then
+  echo "❌ Health endpoint failed"
+  exit 1
+fi
+
+# AI endpoints
+echo "🤖 Testing AI endpoints..."
+if ! curl -f "$URL/api/ai/models" > /dev/null 2>&1; then
+  echo "❌ AI models endpoint failed"
+  exit 1
+fi
+
+# Database connection
+echo "💾 Testing database connection..."
+if ! curl -f "$URL/api/health/database" > /dev/null 2>&1; then
+  echo "❌ Database health check failed"
+  exit 1
+fi
+
+# Solana RPC
+echo "⚡ Testing Solana RPC..."
+if ! curl -f "$URL/api/health/solana" > /dev/null 2>&1; then
+  echo "❌ Solana RPC health check failed"
+  exit 1
+fi
+
+echo "✅ All health checks passed"
+```
+
+---
+
+## Related Files
+
+- **[main.mdc](main.mdc)** - Core development guidelines and technology stack
+- **[security/index.mdc](../security/index.mdc)** - Security implementation and best practices
+- **[architecture/performance.mdc](../architecture/performance.mdc)** - Performance optimization patterns
+
+---
+
+## Quick Commands
+
+```bash
+# Deploy to production
+npm run deploy
+
+# Deploy to preview
+npm run deploy:preview
+
+# Run health checks
+npm run health-check
+
+# Rollback deployment
+npm run rollback
+
+# Check deployment status
+vercel ls --token="$VERCEL_TOKEN"
+
+# View deployment logs
+vercel logs --token="$VERCEL_TOKEN"
+```
+
+---
+
+*This deployment guide ensures reliable, secure, and performant deployments of ANUBIS Chat with comprehensive monitoring and rollback capabilities.*

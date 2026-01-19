@@ -1,0 +1,86 @@
+volumes:
+  test_postgres_data: {}
+  test_postgres_data_backups: {}
+
+services:
+
+  vector-embedder:
+    image: jscrudato/vector-embedder-microservice
+    # build:
+    #   context: .
+    #   dockerfile: ./compose/local/vector-embedder/Dockerfile
+    container_name: vector-embedder
+    environment:
+      PORT: 8000
+      TRANSFORMERS_OFFLINE: 1
+      HF_DATASETS_OFFLINE: 1
+
+  docling-parser:
+    image: jscrudato/docsling-local
+    container_name: docling-parser
+
+  django: &django
+    build:
+      context: .
+      args:
+        - GITHUB_ACTIONS=${GITHUB_ACTIONS:-true}
+      dockerfile: ./compose/local/django/Dockerfile
+    image: opencontractserver_local_django
+    container_name: django
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # - vector-embedder  # Temporarily disabled - connection issues
+      # Note: celeryworker removed from here to avoid circular dependency
+      docling-parser:
+        condition: service_started
+    volumes:
+      - .:/app:z
+    env_file:
+      - ./.envs/.test/.django
+      - ./.envs/.test/.postgres
+    ports:
+      - "8000:8000"
+    command: /start
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/production/postgres/Dockerfile
+    image: opencontractserver_production_postgres
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data:Z
+      - test_postgres_data_backups:/backups:z
+      - ./compose/production/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    env_file:
+      - ./.envs/.test/.postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oc_user -d opencontractserver"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:6
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  celeryworker:
+    <<: *django
+    image: opencontractserver_local_celeryworker
+    container_name: celeryworker
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports: []
+    command: /start-celeryworker

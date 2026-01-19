@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+
+
+watchfiles --target-type command "celery -A config.celery_app worker -l INFO --concurrency=1"

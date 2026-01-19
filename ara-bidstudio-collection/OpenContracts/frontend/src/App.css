@@ -1,0 +1,91 @@
+#components-layout-demo-side .logo {
+  height: 32px;
+  margin: 16px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.site-layout .site-layout-background {
+  background: #fff;
+}
+
+#AppContainer {
+  margin: 0px !important;
+}
+
+.glowable_icon {
+  transition: 1s ease-in-out;
+}
+
+.glowable_icon::before {
+  background: #ffee10;
+  transition: 0.5s;
+  transform: scale(0.9);
+}
+
+.glowable_icon:hover::before {
+  transform: scale(1.1);
+  box-shadow: 0 0 15px #ffee10;
+}
+
+.glowable_icon:hover {
+  color: #ffee10;
+  box-shadow: 0 0 5px #ffee10;
+  text-shadow: 0 0 5px #ffee10;
+}
+
+.ui.page.modals.dimmer.transition.visible.active:has(.AnnotatorModal) {
+  z-index: 2000 !important;
+}
+
+div > .SettingsPopup {
+  z-index: 2100 !important;
+}
+
+@media screen and (max-width: 600px) {
+  #SelectedCorpusTabDiv .ui.menu .item {
+    padding: 0.5em !important;
+  }
+
+  #SelectedCorpusTabDiv .ui.menu .item .icon:only-child {
+    margin: 0 !important;
+  }
+
+  #SelectedCorpusTabDiv .ui.menu .item > .content {
+    display: none !important;
+  }
+}
+
+#ConfirmModal > div.ui.page.modals.dimmer.transition.visible.active {
+  z-index: 20000 !important;
+}
+
+#ConfirmModal {
+  z-index: 20001 !important;
+}
+
+.ui.dimmer.modals.page:has(.high-z-index-modal) {
+  z-index: 99996 !important;
+}
+
+.custom-data-grid {
+  border: none !important;
+  height: calc(100% - 50px) !important;
+}
+
+.rdg-cell {
+  border-right: 1px solid #f0f0f0 !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  padding: 8px 16px !important;
+}
+
+.rdg-header-row {
+  background-color: #f8f9fa !important;
+}
+
+.rdg-row:hover {
+  background-color: #f8f9fa !important;
+}
+
+.rdg-row.rdg-row-selected {
+  background-color: #e8f4ff !important;
+}

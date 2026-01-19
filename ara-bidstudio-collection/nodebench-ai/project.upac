@@ -1,0 +1,33 @@
+# ALIAS PROJECT CONTEXT (.upac)
+# "This file entangles the project with the Global Alias Ontology."
+# ----------------------------------------------------------------
+
+META:
+  project_name: "flex-template"
+  entanglement_id: "077AF8C7-088C-4CF6-9DC6-DC5BDC20954D"
+  last_audit: "Nov 23, 2025"
+  connected_global: true
+
+# The "Phone Home" Data (Inherited)
+GLOBAL_INHERITANCE:
+  axioms: ["\"Functional Code - Write pure functions when possible, avoid side effects\"","\"No .env commits - Never commit environment variables or secrets\"","\"TypeScript Safety - Use strict typing, proper interfaces, avoid 'any'\"","\"Component-First Architecture - Build reusable, composable components\"","\"Performance First - Optimize for runtime performance and bundle size\"","\"Security by Default - Validate inputs, sanitize outputs, use HTTPS\""]
+
+# The Forensic Data (Local)
+LOCAL_REALITY:
+  stack: ["React","TypeScript","Vite","Convex","Tailwind CSS"]
+  project_type: "Full-stack Application"
+  
+  # CRITICAL: The commands an Agent needs to survive here
+  operations:
+    build: "npm run build"
+    test: "npm test"
+    run: "npm run dev"
+    
+  # Observed Coding Patterns
+  style_guide: ["Uses React hooks","Uses React hooks","Uses React hooks","Uses Convex backend"]
+
+  # Things that break (Gotchas)
+  hazards: ["Never use filter() in Convex queries - use indexes instead","Actions cannot access ctx.db - only queries/mutations can","Contains .env file - ensure not committed"]
+
+# Memory of previous Agents (If .upac or AGENTS.md existed)
+SHARED_MEMORY: ["Found AGENTS.md: 212 lines","Project Identity: NodeBench AI","Found .cursor/rules: directory with multiple files","Found README.md: 344 lines"]

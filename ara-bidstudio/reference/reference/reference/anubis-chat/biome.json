@@ -1,0 +1,40 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.1.2/schema.json",
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**",
+      "!**/.next",
+      "!**/dist",
+      "!**/.turbo",
+      "!**/dev-dist",
+      "!**/.zed",
+      "!**/.vscode",
+      "!**/routeTree.gen.ts",
+      "!**/src-tauri",
+      "!**/.nuxt",
+      "!bts.jsonc",
+      "!**/.expo",
+      "!**/.wrangler",
+      "!**/.source",
+      "!**/convex/tsconfig.json",
+      "!**/convex/_generated/**"
+    ]
+  },
+  "extends": ["ultracite"],
+  "linter": {
+    "rules": {
+      "nursery": {
+        "noUnknownAtRule": "error"
+      },
+      "style": {
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "filenameCases": ["camelCase"]
+          }
+        }
+      }
+    }
+  }
+}

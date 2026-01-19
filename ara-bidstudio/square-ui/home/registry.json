@@ -1,0 +1,272 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "square-ui",
+  "homepage": "https://square.lndev.me",
+  "author": "LN <https://github.com/ln-dev7>",
+  "items": [
+    {
+      "name": "emails",
+      "type": "registry:block",
+      "title": "Emails Template",
+      "description": "Modern email client interface with inbox, folders, and email details. Built with Next.js and shadcn/ui.",
+      "files": [
+        {
+          "path": "emails.json",
+          "type": "registry:block"
+        }
+      ]
+    },
+    {
+      "name": "task-management",
+      "type": "registry:block",
+      "title": "Task Management Template",
+      "description": "Simple board interface for managing tasks. Built with Next.js and shadcn/ui.",
+      "files": [
+        {
+          "path": "task-management.json",
+          "type": "registry:block"
+        }
+      ]
+    },
+    {
+      "name": "email-detail",
+      "type": "registry:component",
+      "title": "Email Detail",
+      "description": "Email detail view component with full email content display.",
+      "files": [
+        {
+          "path": "email-detail.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "email-list",
+      "type": "registry:component",
+      "title": "Email List",
+      "description": "Email list component displaying inbox messages.",
+      "files": [
+        {
+          "path": "email-list.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "emails-header",
+      "type": "registry:component",
+      "title": "Emails Header",
+      "description": "Header component for the email interface.",
+      "files": [
+        {
+          "path": "emails-header.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "emails-horizontal-nav",
+      "type": "registry:component",
+      "title": "Emails Horizontal Navigation",
+      "description": "Horizontal navigation for email categories.",
+      "files": [
+        {
+          "path": "emails-horizontal-nav.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "emails-vertical-sidebar",
+      "type": "registry:component",
+      "title": "Emails Vertical Sidebar",
+      "description": "Vertical sidebar navigation for desktop email interface.",
+      "files": [
+        {
+          "path": "emails-vertical-sidebar.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "emails-vertical-sidebar-mobile",
+      "type": "registry:component",
+      "title": "Emails Vertical Sidebar Mobile",
+      "description": "Mobile-optimized vertical sidebar for email interface.",
+      "files": [
+        {
+          "path": "emails-vertical-sidebar-mobile.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "task-board",
+      "type": "registry:component",
+      "title": "Task Board",
+      "description": "Main task board component with drag and drop functionality.",
+      "files": [
+        {
+          "path": "task-board.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "task-card",
+      "type": "registry:component",
+      "title": "Task Card",
+      "description": "Individual task card component.",
+      "files": [
+        {
+          "path": "task-card.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "task-column",
+      "type": "registry:component",
+      "title": "Task Column",
+      "description": "Task column component for organizing tasks by status.",
+      "files": [
+        {
+          "path": "task-column.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "task-header",
+      "type": "registry:component",
+      "title": "Task Header",
+      "description": "Header component for the task management interface.",
+      "files": [
+        {
+          "path": "task-header.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "task-sidebar",
+      "type": "registry:component",
+      "title": "Task Sidebar",
+      "description": "Sidebar navigation for task management.",
+      "files": [
+        {
+          "path": "task-sidebar.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "task-filters",
+      "type": "registry:component",
+      "title": "Task Filters",
+      "description": "Filtering component for tasks.",
+      "files": [
+        {
+          "path": "task-filters.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "task-sort",
+      "type": "registry:component",
+      "title": "Task Sort",
+      "description": "Sorting component for tasks.",
+      "files": [
+        {
+          "path": "task-sort.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "type": "registry:block",
+      "title": "Chat Application",
+      "description": "A complete chat application interface with sidebar, conversation view, and AI chat features. Built with Next.js and shadcn/ui.",
+      "files": [
+        {
+          "path": "chat.json",
+          "type": "registry:block"
+        }
+      ]
+    },
+    {
+      "name": "chat-main",
+      "type": "registry:component",
+      "title": "Chat Main",
+      "description": "Main chat component that handles conversation state.",
+      "files": [
+        {
+          "path": "chat-main.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "chat-sidebar",
+      "type": "registry:component",
+      "title": "Chat Sidebar",
+      "description": "Chat sidebar with navigation and conversation list.",
+      "files": [
+        {
+          "path": "chat-sidebar.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "chat-conversation-view",
+      "type": "registry:component",
+      "title": "Chat Conversation View",
+      "description": "Chat conversation view displaying messages.",
+      "files": [
+        {
+          "path": "chat-conversation-view.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "chat-message",
+      "type": "registry:component",
+      "title": "Chat Message",
+      "description": "Individual chat message component.",
+      "files": [
+        {
+          "path": "chat-message.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "chat-input-box",
+      "type": "registry:component",
+      "title": "Chat Input Box",
+      "description": "Chat input component with AI model selection.",
+      "files": [
+        {
+          "path": "chat-input-box.json",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "chat-welcome-screen",
+      "type": "registry:component",
+      "title": "Chat Welcome Screen",
+      "description": "Welcome screen for chat application.",
+      "files": [
+        {
+          "path": "chat-welcome-screen.json",
+          "type": "registry:component"
+        }
+      ]
+    }
+  ]
+}

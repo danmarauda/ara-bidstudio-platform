@@ -1,0 +1,129 @@
+name: Backend CI
+
+# Enable Buildkit and let compose use it to speed up image building
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+  SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL: True
+
+defaults:
+ run:
+  working-directory: ./
+
+on:
+  pull_request:
+    branches: [ "master", "main" ]
+    paths-ignore: [ "docs/**" ]
+
+  push:
+    branches: [ "master", "main" ]
+    paths-ignore: [ "docs/**" ]
+
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  linter:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v5.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements/base.txt
+            requirements/local.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements/local.txt
+
+      - name: Run pre-commit
+        run: pre-commit run --all-files
+
+  pytest:
+    runs-on: larger
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v5.0.0
+
+      - name: Store Codecov Env Flags
+        run: |
+          # use bash variable expression to get the substring
+          ci_env=`bash <(curl -s https://codecov.io/env)`
+          echo "$ci_env"
+
+      - name: Build the Stack
+        run:  docker compose -f test.yml build
+
+      - name: Run DB Migrations
+        run:  docker compose -f test.yml run --rm django python manage.py migrate
+
+      - name: Collect Static Files
+        run: docker compose -f test.yml run --rm django python manage.py collectstatic
+
+      - name: Verify Docker Containers
+        run: |
+          docker compose -f test.yml ps
+
+      - name: Capture Docker Compose Logs
+        if: failure()
+        run: |
+          docker compose -f test.yml logs --no-color > docker-compose-logs.txt
+
+      - name: Upload Docker Compose Logs
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: docker-compose-logs
+          path: docker-compose-logs.txt
+
+      - name: Check Container Health
+        run: |
+          echo "=== Docker containers status ==="
+          docker compose -f test.yml ps
+          echo "=== Container logs (last 20 lines each) ==="
+          for container in $(docker compose -f test.yml ps -q); do
+            name=$(docker inspect -f '{{.Name}}' $container | sed 's/^\///')
+            echo "--- Logs for $name ---"
+            docker logs --tail 20 $container 2>&1 || true
+          done
+          echo "=== Memory usage ==="
+          docker stats --no-stream
+          free -h
+
+      - name: Build Pytest Coverage File
+        timeout-minutes: 100
+        run: |
+          # Run the full test suite with coverage
+          docker compose -f test.yml run django coverage run -m pytest -x -v
+          # Generate XML coverage report (configuration in setup.cfg handles temporary files)
+          docker compose -f test.yml run django coverage xml
+
+      - name: Verify Coverage File Exists
+        run: |
+          # Verify coverage.xml exists in the working directory
+          ls -la coverage.xml
+
+      - name: Upload Coverage Reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+
+      - name: Tear down the Stack
+        run:  docker compose -f test.yml down

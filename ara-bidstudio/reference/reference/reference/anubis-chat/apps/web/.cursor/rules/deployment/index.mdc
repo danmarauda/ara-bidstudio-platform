@@ -1,0 +1,220 @@
+---
+category: deployment
+subcategory: overview
+tags: [deployment, ci-cd, infrastructure]
+cursor:
+  context_window: 8192
+  temperature: 0.5
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../architecture/scalability.mdc", "../backend/edge-functions.mdc"]
+  exports: ["deployment-strategies", "infrastructure-patterns"]
+  references: ["../monitoring/observability.mdc", "../security/audit-checklist.mdc"]
+---
+
+# Deployment Architecture
+
+::alert{type="info"}
+This document defines deployment strategies and infrastructure patterns for abubis.chat.
+::
+
+## Overview
+
+abubis.chat follows a modern edge-first deployment architecture optimized for global distribution and real-time performance.
+
+## Deployment Strategy
+
+### Environments
+
+::tabs
+::tab{label="Development"}
+```yaml
+environment: development
+url: https://dev.abubis.chat
+branch: develop
+auto_deploy: true
+preview_deployments: true
+```
+::
+
+::tab{label="Staging"}
+```yaml
+environment: staging
+url: https://staging.abubis.chat
+branch: staging
+auto_deploy: true
+manual_promotion: true
+```
+::
+
+::tab{label="Production"}
+```yaml
+environment: production
+url: https://abubis.chat
+branch: main
+manual_deploy: true
+rollback_enabled: true
+```
+::
+::
+
+### Infrastructure Components
+
+1. **Frontend (Vercel)**
+   - Next.js 15 with App Router
+   - Edge Functions globally distributed
+   - Automatic preview deployments
+   - CDN with 15+ edge locations
+
+2. **Backend (Convex Cloud)**
+   - Real-time database and functions
+   - Automatic scaling
+   - Built-in WebSocket support
+   - Global data replication
+
+3. **Vector Database (Qdrant)**
+   - Containerized deployment on Fly.io
+   - Multi-region replication
+   - Automatic backups
+   - Performance monitoring
+
+4. **Blockchain (Solana)**
+   - Mainnet deployment
+   - Helius RPC (primary)
+   - Shyft RPC (fallback)
+   - Program upgradability
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflow
+
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main, staging, develop]
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun test
+      - run: bun run type-check
+      - run: bun run lint
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+```
+
+## Deployment Checklist
+
+::card
+### Pre-Deployment
+- [ ] All tests passing (unit, integration, e2e)
+- [ ] Type checking successful
+- [ ] Linting rules satisfied
+- [ ] Security scan completed
+- [ ] Performance benchmarks met
+- [ ] Database migrations reviewed
+- [ ] Environment variables verified
+::
+
+::card
+### Post-Deployment
+- [ ] Smoke tests executed
+- [ ] Monitoring alerts configured
+- [ ] Error tracking enabled
+- [ ] Performance metrics validated
+- [ ] Rollback plan tested
+- [ ] Documentation updated
+::
+
+## Infrastructure as Code
+
+### Vercel Configuration
+
+```json
+{
+  "framework": "nextjs",
+  "buildCommand": "bun run build",
+  "outputDirectory": ".next",
+  "devCommand": "bun dev",
+  "installCommand": "bun install",
+  "regions": ["iad1", "sfo1", "fra1", "sin1"],
+  "functions": {
+    "app/api/chat/route.ts": {
+      "maxDuration": 60,
+      "runtime": "edge"
+    }
+  }
+}
+```
+
+### Docker Configuration
+
+```dockerfile
+# Qdrant Vector Database
+FROM qdrant/qdrant:v1.9.0
+
+ENV QDRANT__SERVICE__HTTP_PORT=6333
+ENV QDRANT__SERVICE__GRPC_PORT=6334
+ENV QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
+
+EXPOSE 6333 6334
+
+VOLUME ["/qdrant/storage"]
+```
+
+## Zero-Downtime Deployment
+
+1. **Blue-Green Strategy**
+   - Deploy to green environment
+   - Run health checks
+   - Switch traffic
+   - Keep blue for rollback
+
+2. **Canary Releases**
+   - Deploy to 5% of traffic
+   - Monitor metrics for 30 minutes
+   - Gradually increase to 100%
+   - Automatic rollback on errors
+
+## Rollback Procedures
+
+::alert{type="warning"}
+Always maintain last 3 successful deployments for instant rollback capability.
+::
+
+```bash
+# Vercel rollback
+vercel rollback
+
+# Convex rollback
+npx convex deploy --prod --version [previous-version]
+
+# Solana program rollback
+anchor upgrade [program-id] --provider.cluster mainnet
+```
+
+## Related Documentation
+
+- [Scalability Patterns](../architecture/scalability.mdc)
+- [Edge Functions](../backend/edge-functions.mdc)
+- [Monitoring & Observability](../monitoring/observability.mdc)
+- [Security Checklist](../security/audit-checklist.mdc)

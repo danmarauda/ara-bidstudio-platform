@@ -1,0 +1,4 @@
+id,jedi,lightsaber_color
+1,Obi-Wan Kenobi,blue
+2,Yoda,green
+3,Ahoska Tano,white

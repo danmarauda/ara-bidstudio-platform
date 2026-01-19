@@ -1,0 +1,1441 @@
+interactions:
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are an expert assistant
+      designed to analyze and answer queries about a collection of documents called
+      'Edge Case Corpus'.\\n\\n**Available Tools:**\\nYou have access to comprehensive
+      tools for analyzing documents in this corpus:\\n\\n1. **Document-Specific Tools**
+      \u2013 available *per* document via the `ask_document` helper:\\n   - Vector
+      search inside that document\\n   - Summary & note access\\n   - Annotation manipulation
+      (subject to approval)\\n   - Token length calculations for context management\\n2.
+      **Corpus-Level Coordination Tools** \u2013 orchestrate multi-document reasoning:\\n
+      \  - `list_documents()`\u2003\u2192 returns `[{document_id, title, description}]`
+      for discovery\\n   - `ask_document(document_id, question)`\u2003\u2192 runs
+      a **document agent** and yields a rich object:\\n       \u2022 `answer`\u2003str
+      \u2013 the assistant's final answer\\n       \u2022 `sources`\u2003list \u2013
+      flattened citation objects (annotation_id, page, rawText \u2026)\\n       \u2022
+      `timeline`\u2003list \u2013 detailed reasoning & tool calls from the sub-agent
+      run\\n   Use these keys to compile thorough, well-cited corpus-level answers.\\n3.
+      **Cross-Document Vector Search** \u2013 semantic search across the entire corpus
+      for broad context\\n\\n**Important**: Always check what tools are available
+      to you, as additional specialized tools may be provided dynamically beyond the
+      core set. The exact tools available will depend on the documents in this corpus.\\n\\n**Guidelines:**\\n-
+      Always use the provided tools to gather information before answering\\n- Do
+      not rely on prior knowledge about the documents\\n- When appropriate, search
+      across multiple documents for comprehensive answers\\n- Cite specific documents
+      and sources when presenting information\\n- Prefer using `sources` returned
+      by `ask_document` or vector search to justify claims\\n- Present your findings
+      in clear, well-structured markdown format, using footnote-style citations\"},{\"role\":\"user\",\"content\":\"Query
+      the Minimal Doc document\"}],\"model\":\"gpt-4o\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_corpus_description\",\"description\":\"Return
+      the current corpus markdown description (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"update_corpus_description\",\"description\":\"Update
+      the corpus description and return new version number (if changed).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"list_documents\",\"description\":\"Return
+      basic metadata for all documents in the current corpus.\\n\\nEach list entry
+      contains ``document_id``, ``title`` and ``description`` so\\nthe coordinator
+      LLM can decide which document-specific agent to consult.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"ask_document\",\"description\":\"<summary>Ask
+      a question to a **document-specific** agent inside this corpus.\\n\\nThe call
+      transparently streams the document agent so we can capture\\nits *full* reasoning
+      timeline (tool calls, vector-search citations\u2026)\\nand surface that back
+      to the coordinator LLM.</summary>\\n<returns>\\n<type>An object with keys</type>\\n<description>\\n
+      \   answer (str)   \u2013 final assistant answer\\n    sources (list) \u2013
+      flattened source dicts\\n    timeline (list) \u2013 detailed reasoning/events
+      emitted by the sub-agent</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"document_id\":{\"description\":\"ID
+      of the target document (must belong to this corpus).\",\"type\":\"integer\"},\"question\":{\"description\":\"The
+      natural-language question to forward.\",\"type\":\"string\"}},\"required\":[\"document_id\",\"question\"],\"type\":\"object\"},\"strict\":true}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '4593'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-CQoEhKJqVxJl0iQJxSqg3woirqQoT","object":"chat.completion.chunk","created":1760505671,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_u8scpTZvWBMA9eJm6pi3Ekfu","type":"function","function":{"name":"list_documents","arguments":""}}],"refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"aQDBt3"}
+
+
+        data: {"id":"chatcmpl-CQoEhKJqVxJl0iQJxSqg3woirqQoT","object":"chat.completion.chunk","created":1760505671,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"UjTx"}
+
+
+        data: {"id":"chatcmpl-CQoEhKJqVxJl0iQJxSqg3woirqQoT","object":"chat.completion.chunk","created":1760505671,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"tool_calls"}],"usage":null,"obfuscation":"eIfs"}
+
+
+        data: {"id":"chatcmpl-CQoEhKJqVxJl0iQJxSqg3woirqQoT","object":"chat.completion.chunk","created":1760505671,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[],"usage":{"prompt_tokens":776,"completion_tokens":10,"total_tokens":786,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"OXr6OGJ7OlbT0"}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-RAY:
+      - 98ecdf1bbbc3c327-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Wed, 15 Oct 2025 05:21:12 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        path=/; expires=Wed, 15-Oct-25 05:51:12 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '548'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '831'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '800000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '799524'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 35ms
+      x-request-id:
+      - req_9e270727b0b74ac19b7bf9d9bc140c76
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are an expert assistant
+      designed to analyze and answer queries about a collection of documents called
+      'Edge Case Corpus'.\\n\\n**Available Tools:**\\nYou have access to comprehensive
+      tools for analyzing documents in this corpus:\\n\\n1. **Document-Specific Tools**
+      \u2013 available *per* document via the `ask_document` helper:\\n   - Vector
+      search inside that document\\n   - Summary & note access\\n   - Annotation manipulation
+      (subject to approval)\\n   - Token length calculations for context management\\n2.
+      **Corpus-Level Coordination Tools** \u2013 orchestrate multi-document reasoning:\\n
+      \  - `list_documents()`\u2003\u2192 returns `[{document_id, title, description}]`
+      for discovery\\n   - `ask_document(document_id, question)`\u2003\u2192 runs
+      a **document agent** and yields a rich object:\\n       \u2022 `answer`\u2003str
+      \u2013 the assistant's final answer\\n       \u2022 `sources`\u2003list \u2013
+      flattened citation objects (annotation_id, page, rawText \u2026)\\n       \u2022
+      `timeline`\u2003list \u2013 detailed reasoning & tool calls from the sub-agent
+      run\\n   Use these keys to compile thorough, well-cited corpus-level answers.\\n3.
+      **Cross-Document Vector Search** \u2013 semantic search across the entire corpus
+      for broad context\\n\\n**Important**: Always check what tools are available
+      to you, as additional specialized tools may be provided dynamically beyond the
+      core set. The exact tools available will depend on the documents in this corpus.\\n\\n**Guidelines:**\\n-
+      Always use the provided tools to gather information before answering\\n- Do
+      not rely on prior knowledge about the documents\\n- When appropriate, search
+      across multiple documents for comprehensive answers\\n- Cite specific documents
+      and sources when presenting information\\n- Prefer using `sources` returned
+      by `ask_document` or vector search to justify claims\\n- Present your findings
+      in clear, well-structured markdown format, using footnote-style citations\"},{\"role\":\"user\",\"content\":\"Query
+      the Minimal Doc document\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_u8scpTZvWBMA9eJm6pi3Ekfu\",\"type\":\"function\",\"function\":{\"name\":\"list_documents\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_u8scpTZvWBMA9eJm6pi3Ekfu\",\"content\":\"[{\\\"document_id\\\":1,\\\"title\\\":\\\"Minimal
+      Doc\\\",\\\"description\\\":\\\"Minimal document for edge cases\\\"}]\"}],\"model\":\"gpt-4o\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_corpus_description\",\"description\":\"Return
+      the current corpus markdown description (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"update_corpus_description\",\"description\":\"Update
+      the corpus description and return new version number (if changed).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"list_documents\",\"description\":\"Return
+      basic metadata for all documents in the current corpus.\\n\\nEach list entry
+      contains ``document_id``, ``title`` and ``description`` so\\nthe coordinator
+      LLM can decide which document-specific agent to consult.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"ask_document\",\"description\":\"<summary>Ask
+      a question to a **document-specific** agent inside this corpus.\\n\\nThe call
+      transparently streams the document agent so we can capture\\nits *full* reasoning
+      timeline (tool calls, vector-search citations\u2026)\\nand surface that back
+      to the coordinator LLM.</summary>\\n<returns>\\n<type>An object with keys</type>\\n<description>\\n
+      \   answer (str)   \u2013 final assistant answer\\n    sources (list) \u2013
+      flattened source dicts\\n    timeline (list) \u2013 detailed reasoning/events
+      emitted by the sub-agent</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"document_id\":{\"description\":\"ID
+      of the target document (must belong to this corpus).\",\"type\":\"integer\"},\"question\":{\"description\":\"The
+      natural-language question to forward.\",\"type\":\"string\"}},\"required\":[\"document_id\",\"question\"],\"type\":\"object\"},\"strict\":true}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '4915'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_RVneXllXtNwqo1WtZ5tLiHeL","type":"function","function":{"name":"ask_document","arguments":""}}],"refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"LcFSHIIf"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\""}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"7BB"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"document"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"oyT1epnE81YYRd"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"_id"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"hW4"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"IWR"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"1"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"6c1bE"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":",\""}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"2iJ"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"question"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"TjYPbjk457U7Z9"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\""}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"2"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"What"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"7I"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        are"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"HR"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        the"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"s7"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        contents"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"qwsgKrRCuzKUT"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        of"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"2Bq"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        the"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"BJ"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        Minimal"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"O7oEFqcEaiiuMR"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        Doc"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Fr"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"
+        document"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"xbq8eXV9SxO5y"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"?\""}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"nqR"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"fgRM1"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"tool_calls"}],"usage":null,"obfuscation":"myYT"}
+
+
+        data: {"id":"chatcmpl-CQoEjtuItbIlFWDfdjVWVz3DP9A36","object":"chat.completion.chunk","created":1760505673,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[],"usage":{"prompt_tokens":815,"completion_tokens":28,"total_tokens":843,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"YscLAiHlGOp8A"}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-RAY:
+      - 98ecdf244ed4c327-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Wed, 15 Oct 2025 05:21:13 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '378'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '688'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '800000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '799500'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 37ms
+      x-request-id:
+      - req_04c0bbc594044532b3680ab247359f99
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are analyzing the
+      document titled 'Minimal Doc' (ID: 1).\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u26A0\uFE0F
+      \ ABSOLUTE REQUIREMENTS - NO EXCEPTIONS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n1.
+      You have ZERO prior knowledge of this document's contents.\\n2. You MUST use
+      tools to examine the document before answering ANY question.\\n3. NEVER say
+      you don't know what document is being discussed - you are analyzing 'Minimal
+      Doc'.\\n4. NEVER refuse to answer because you 'lack context' - USE THE TOOLS
+      to get context.\\n5. Every answer MUST be grounded in information retrieved
+      via tools with specific citations.\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F4CB
+      RECOMMENDED SEARCH STRATEGY:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nFor
+      most questions, follow this workflow:\\n\\nSTEP 1 - GET OVERVIEW:\\n  \u2022
+      Use `load_document_summary` to understand the document's structure and main
+      topics\\n  \u2022 Use `get_document_text_length` to check the document size\\n
+      \ \u2022 This helps you plan your detailed search strategy\\n\\nSTEP 2 - BROAD
+      SEARCH (Semantic Understanding):\\n  \u2022 Use `similarity_search` (vector
+      search) to find semantically relevant sections\\n  \u2022 Great for: conceptual
+      questions, themes, related ideas, paraphrased content\\n  \u2022 Returns: annotated
+      passages with page numbers and similarity scores\\n\\nSTEP 3 - DETAILED EXAMINATION:\\n
+      \ \u2022 Use `load_document_text` to read large sections (5K-50K chars) of relevant
+      areas\\n  \u2022 Identify the specific character ranges from Step 1-2, then
+      load those sections\\n  \u2022 Read enough context to thoroughly understand
+      the relevant passages\\n  \\n  \U0001F534 MANDATORY CITATION STEP - DO NOT SKIP:\\n
+      \ After reading ANY bulk text with `load_document_text`, you MUST:\\n  1. Identify
+      the 3-5 most relevant exact quotes/passages for your answer\\n  2. Extract the
+      EXACT text of each key passage (5-50 words each)\\n  3. Call `search_exact_text`
+      with these exact strings to create proper citations\\n  4. This converts raw
+      text into citable sources with page numbers\\n  \\n  WHY THIS MATTERS: `load_document_text`
+      returns raw text WITHOUT creating sources.\\n  Only `search_exact_text` creates
+      proper citations. Without this step, your answer\\n  will have NO SOURCES even
+      though you read the document!\\n\\nSTEP 4 - PRECISE LOCATION (Exact Matching):\\n
+      \ \u2022 Use `search_exact_text` to find specific terms, phrases, or quoted
+      language\\n  \u2022 Great for: finding exact wording, specific terminology,
+      quoted passages, defined terms\\n  \u2022 Returns: all occurrences with page
+      numbers and bounding boxes (PDFs)\\n  \u2022 Use this to provide precise citations
+      with exact page locations\\n  \u2022 CRITICAL: Always use this AFTER bulk text
+      loading to create proper source citations\\n\\nSTEP 5 - CROSS-REFERENCE:\\n
+      \ \u2022 Use `get_document_notes` to check for existing analysis or annotations\\n
+      \ \u2022 Combine findings from multiple tools to ensure completeness\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F527
+      TOOL SELECTION GUIDE:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nUse
+      `similarity_search` when:\\n  \u2192 Question asks about concepts, themes, or
+      ideas (not exact words)\\n  \u2192 You need to find related content even if
+      worded differently\\n  \u2192 Looking for passages that discuss a topic\\n\\nUse
+      `search_exact_text` when:\\n  \u2192 User asks about specific terms, phrases,
+      or exact wording\\n  \u2192 You need to verify if specific language appears
+      in the document\\n  \u2192 Providing citations that require exact page locations\\n
+      \ \u2192 Finding defined terms or quoted material\\n\\nUse `load_document_text`
+      when:\\n  \u2192 You need to read substantial sections for full context\\n  \u2192
+      Initial searches identified relevant areas to examine in detail\\n  \u2192 Question
+      requires understanding flow, structure, or relationships\\n  \u26A0\uFE0F  ALWAYS
+      follow with `search_exact_text` on key passages to create citations!\\n\\nUse
+      `load_document_summary` when:\\n  \u2192 Starting your analysis (always good
+      first step)\\n  \u2192 Need high-level overview of document structure\\n  \u2192
+      Understanding document organization before detailed search\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u2705
+      RESPONSE REQUIREMENTS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n\u2022
+      Provide complete, accurate answers based on document contents\\n\u2022 Include
+      specific citations (page numbers, quotes) from tool results\\n\u2022 \U0001F534
+      CRITICAL: If you used `load_document_text`, you MUST use `search_exact_text`\\n
+      \ on key passages to generate proper citations. Otherwise your answer will have
+      NO SOURCES.\\n\u2022 If information isn't in the document, explicitly state:
+      'This information was not found in Minimal Doc'\\n\u2022 Use multiple search
+      strategies to ensure thoroughness\\n\u2022 Present findings clearly with proper
+      attribution to sources\\n\"},{\"role\":\"user\",\"content\":\"What are the contents
+      of the Minimal Doc document?\"}],\"model\":\"gpt-4o-mini\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"description\":\"Load
+      the document's markdown summary (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_summary_token_length\",\"description\":\"Return
+      token length of the document's markdown summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"description\":\"Get
+      the total character length of the document's plain-text extract.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"description\":\"Return
+      a slice of the document's plain-text extract.\\n\\nIMPORTANT USAGE GUIDELINES:\\n-
+      First use get_document_text_length to check the total document size\\n- Recommended
+      chunk size: 5,000 to 50,000 characters per request\\n- DO NOT load chunks smaller
+      than 1,000 characters (inefficient, wastes tool calls)\\n- DO NOT load chunks
+      larger than 100,000 characters (may overflow context)\\n- Tool call limit is
+      50, so plan your chunking strategy accordingly\\n- For a 500K char document,
+      use ~10-20 chunks of 25-50K chars each\\n\\n\U0001F534 CRITICAL - CITATION REQUIREMENT:\\nAfter
+      reading text with this tool, you MUST:\\n1. Identify 3-5 most relevant exact
+      quotes/passages (5-50 words each)\\n2. Call search_exact_text with those EXACT
+      strings\\n3. This creates proper citations with page numbers\\n\\nWHY: This
+      tool returns raw text WITHOUT sources. Only search_exact_text\\ncreates citations.
+      Skip this and your answer will have NO SOURCES!\\n\\nExample: For a 200,000
+      character document:\\n- Good: Load in 4-8 chunks of 25,000-50,000 chars each\\n-
+      Bad: Load 100 chars at a time (would need 2000 tool calls!)\\n- Bad: Load all
+      200,000 chars at once (might overflow context)\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"start\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"end\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"refresh\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"description\":\"Search
+      for exact text matches and return source nodes with location information.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_strings\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"search_strings\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_notes\",\"description\":\"Retrieve
+      metadata & first 512-char preview of notes for this document.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_document_notes\",\"description\":\"Search
+      notes attached to this document for a keyword.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_term\":{\"type\":\"string\"},\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"required\":[\"search_term\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_document_note\",\"description\":\"Create
+      a new note attached to this document and return its id.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"title\",\"content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_note\",\"description\":\"Version-up
+      an existing note and return new version number.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"note_id\":{\"type\":\"integer\"},\"new_content\":{\"type\":\"string\"}},\"required\":[\"note_id\",\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"duplicate_annotations\",\"description\":\"<summary>Duplicate
+      existing annotations in the current document with a new label.</summary>\\n<returns>\\n<description>Dict
+      with key ``annotation_ids`` listing newly created IDs.</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"annotation_ids\":{\"description\":\"IDs
+      of annotations to duplicate.\",\"items\":{\"type\":\"integer\"},\"type\":\"array\"},\"new_label_text\":{\"description\":\"Text
+      for the new annotation label.\",\"type\":\"string\"},\"label_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"description\":\"Optional
+      label type.\"}},\"required\":[\"annotation_ids\",\"new_label_text\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_exact_string_annotations\",\"description\":\"Create
+      annotations for *exact* string matches in the current document.\\n\\nEach *entry*
+      provides ``label_text`` and ``exact_string``.  The tool\\nautomatically applies
+      all entries to the current document & corpus.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"entries\":{\"items\":{\"$ref\":\"#/$defs/ExactStringEntry\"},\"type\":\"array\"}},\"required\":[\"entries\"],\"type\":\"object\",\"$defs\":{\"ExactStringEntry\":{\"description\":\"Structured
+      entry for an exact\u2010string annotation request.\",\"properties\":{\"label_text\":{\"description\":\"Text
+      of the annotation label\",\"type\":\"string\"},\"exact_string\":{\"description\":\"Exact
+      string to annotate\",\"type\":\"string\"}},\"required\":[\"label_text\",\"exact_string\"],\"type\":\"object\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary\",\"description\":\"Return
+      the latest summary content for this document (corpus-aware).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_versions\",\"description\":\"Return
+      version history for the document summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_diff\",\"description\":\"Return
+      unified diff between two document summary versions.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"from_version\":{\"type\":\"integer\"},\"to_version\":{\"type\":\"integer\"}},\"required\":[\"from_version\",\"to_version\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_summary\",\"description\":\"Update
+      (or create) the document summary, returning version info.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '13210'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_fgbRfD0RV870Qa4xdAeO3REg","type":"function","function":{"name":"load_document_summary","arguments":""}}],"refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"6B0YdcYJSn"}
+
+
+        data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\""}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"sNJrJz1Wi8irpm"}
+
+
+        data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"truncate"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"22dIPq63s"}
+
+
+        data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"_length"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"LgXz7N0aCd"}
+
+
+        data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"aciL2BW0RrhaWC"}
+
+
+        data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"200"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"HIPtiQv5O59UKi"}
+
+
+        data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":""}
+
+
+        data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"tool_calls"}],"usage":null,"obfuscation":"i7RB161KeIsHV93"}
+
+
+        data: {"id":"chatcmpl-CQoEkIZswSwXeaxShHT9piqgavfKQ","object":"chat.completion.chunk","created":1760505674,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[],"usage":{"prompt_tokens":1997,"completion_tokens":16,"total_tokens":2013,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"9mPf3W"}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-RAY:
+      - 98ecdf2ebaf4c327-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Wed, 15 Oct 2025 05:21:15 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '516'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '728'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '4000000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '3998516'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 22ms
+      x-request-id:
+      - req_b3465c7200604346a206f4739aefb699
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are analyzing the
+      document titled 'Minimal Doc' (ID: 1).\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u26A0\uFE0F
+      \ ABSOLUTE REQUIREMENTS - NO EXCEPTIONS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n1.
+      You have ZERO prior knowledge of this document's contents.\\n2. You MUST use
+      tools to examine the document before answering ANY question.\\n3. NEVER say
+      you don't know what document is being discussed - you are analyzing 'Minimal
+      Doc'.\\n4. NEVER refuse to answer because you 'lack context' - USE THE TOOLS
+      to get context.\\n5. Every answer MUST be grounded in information retrieved
+      via tools with specific citations.\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F4CB
+      RECOMMENDED SEARCH STRATEGY:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nFor
+      most questions, follow this workflow:\\n\\nSTEP 1 - GET OVERVIEW:\\n  \u2022
+      Use `load_document_summary` to understand the document's structure and main
+      topics\\n  \u2022 Use `get_document_text_length` to check the document size\\n
+      \ \u2022 This helps you plan your detailed search strategy\\n\\nSTEP 2 - BROAD
+      SEARCH (Semantic Understanding):\\n  \u2022 Use `similarity_search` (vector
+      search) to find semantically relevant sections\\n  \u2022 Great for: conceptual
+      questions, themes, related ideas, paraphrased content\\n  \u2022 Returns: annotated
+      passages with page numbers and similarity scores\\n\\nSTEP 3 - DETAILED EXAMINATION:\\n
+      \ \u2022 Use `load_document_text` to read large sections (5K-50K chars) of relevant
+      areas\\n  \u2022 Identify the specific character ranges from Step 1-2, then
+      load those sections\\n  \u2022 Read enough context to thoroughly understand
+      the relevant passages\\n  \\n  \U0001F534 MANDATORY CITATION STEP - DO NOT SKIP:\\n
+      \ After reading ANY bulk text with `load_document_text`, you MUST:\\n  1. Identify
+      the 3-5 most relevant exact quotes/passages for your answer\\n  2. Extract the
+      EXACT text of each key passage (5-50 words each)\\n  3. Call `search_exact_text`
+      with these exact strings to create proper citations\\n  4. This converts raw
+      text into citable sources with page numbers\\n  \\n  WHY THIS MATTERS: `load_document_text`
+      returns raw text WITHOUT creating sources.\\n  Only `search_exact_text` creates
+      proper citations. Without this step, your answer\\n  will have NO SOURCES even
+      though you read the document!\\n\\nSTEP 4 - PRECISE LOCATION (Exact Matching):\\n
+      \ \u2022 Use `search_exact_text` to find specific terms, phrases, or quoted
+      language\\n  \u2022 Great for: finding exact wording, specific terminology,
+      quoted passages, defined terms\\n  \u2022 Returns: all occurrences with page
+      numbers and bounding boxes (PDFs)\\n  \u2022 Use this to provide precise citations
+      with exact page locations\\n  \u2022 CRITICAL: Always use this AFTER bulk text
+      loading to create proper source citations\\n\\nSTEP 5 - CROSS-REFERENCE:\\n
+      \ \u2022 Use `get_document_notes` to check for existing analysis or annotations\\n
+      \ \u2022 Combine findings from multiple tools to ensure completeness\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F527
+      TOOL SELECTION GUIDE:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nUse
+      `similarity_search` when:\\n  \u2192 Question asks about concepts, themes, or
+      ideas (not exact words)\\n  \u2192 You need to find related content even if
+      worded differently\\n  \u2192 Looking for passages that discuss a topic\\n\\nUse
+      `search_exact_text` when:\\n  \u2192 User asks about specific terms, phrases,
+      or exact wording\\n  \u2192 You need to verify if specific language appears
+      in the document\\n  \u2192 Providing citations that require exact page locations\\n
+      \ \u2192 Finding defined terms or quoted material\\n\\nUse `load_document_text`
+      when:\\n  \u2192 You need to read substantial sections for full context\\n  \u2192
+      Initial searches identified relevant areas to examine in detail\\n  \u2192 Question
+      requires understanding flow, structure, or relationships\\n  \u26A0\uFE0F  ALWAYS
+      follow with `search_exact_text` on key passages to create citations!\\n\\nUse
+      `load_document_summary` when:\\n  \u2192 Starting your analysis (always good
+      first step)\\n  \u2192 Need high-level overview of document structure\\n  \u2192
+      Understanding document organization before detailed search\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u2705
+      RESPONSE REQUIREMENTS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n\u2022
+      Provide complete, accurate answers based on document contents\\n\u2022 Include
+      specific citations (page numbers, quotes) from tool results\\n\u2022 \U0001F534
+      CRITICAL: If you used `load_document_text`, you MUST use `search_exact_text`\\n
+      \ on key passages to generate proper citations. Otherwise your answer will have
+      NO SOURCES.\\n\u2022 If information isn't in the document, explicitly state:
+      'This information was not found in Minimal Doc'\\n\u2022 Use multiple search
+      strategies to ensure thoroughness\\n\u2022 Present findings clearly with proper
+      attribution to sources\\n\"},{\"role\":\"user\",\"content\":\"What are the contents
+      of the Minimal Doc document?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_fgbRfD0RV870Qa4xdAeO3REg\",\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"arguments\":\"{\\\"truncate_length\\\":200}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_fgbRfD0RV870Qa4xdAeO3REg\",\"content\":\"NO
+      SUMMARY PREPARED\"}],\"model\":\"gpt-4o-mini\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"description\":\"Load
+      the document's markdown summary (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_summary_token_length\",\"description\":\"Return
+      token length of the document's markdown summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"description\":\"Get
+      the total character length of the document's plain-text extract.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"description\":\"Return
+      a slice of the document's plain-text extract.\\n\\nIMPORTANT USAGE GUIDELINES:\\n-
+      First use get_document_text_length to check the total document size\\n- Recommended
+      chunk size: 5,000 to 50,000 characters per request\\n- DO NOT load chunks smaller
+      than 1,000 characters (inefficient, wastes tool calls)\\n- DO NOT load chunks
+      larger than 100,000 characters (may overflow context)\\n- Tool call limit is
+      50, so plan your chunking strategy accordingly\\n- For a 500K char document,
+      use ~10-20 chunks of 25-50K chars each\\n\\n\U0001F534 CRITICAL - CITATION REQUIREMENT:\\nAfter
+      reading text with this tool, you MUST:\\n1. Identify 3-5 most relevant exact
+      quotes/passages (5-50 words each)\\n2. Call search_exact_text with those EXACT
+      strings\\n3. This creates proper citations with page numbers\\n\\nWHY: This
+      tool returns raw text WITHOUT sources. Only search_exact_text\\ncreates citations.
+      Skip this and your answer will have NO SOURCES!\\n\\nExample: For a 200,000
+      character document:\\n- Good: Load in 4-8 chunks of 25,000-50,000 chars each\\n-
+      Bad: Load 100 chars at a time (would need 2000 tool calls!)\\n- Bad: Load all
+      200,000 chars at once (might overflow context)\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"start\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"end\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"refresh\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"description\":\"Search
+      for exact text matches and return source nodes with location information.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_strings\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"search_strings\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_notes\",\"description\":\"Retrieve
+      metadata & first 512-char preview of notes for this document.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_document_notes\",\"description\":\"Search
+      notes attached to this document for a keyword.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_term\":{\"type\":\"string\"},\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"required\":[\"search_term\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_document_note\",\"description\":\"Create
+      a new note attached to this document and return its id.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"title\",\"content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_note\",\"description\":\"Version-up
+      an existing note and return new version number.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"note_id\":{\"type\":\"integer\"},\"new_content\":{\"type\":\"string\"}},\"required\":[\"note_id\",\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"duplicate_annotations\",\"description\":\"<summary>Duplicate
+      existing annotations in the current document with a new label.</summary>\\n<returns>\\n<description>Dict
+      with key ``annotation_ids`` listing newly created IDs.</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"annotation_ids\":{\"description\":\"IDs
+      of annotations to duplicate.\",\"items\":{\"type\":\"integer\"},\"type\":\"array\"},\"new_label_text\":{\"description\":\"Text
+      for the new annotation label.\",\"type\":\"string\"},\"label_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"description\":\"Optional
+      label type.\"}},\"required\":[\"annotation_ids\",\"new_label_text\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_exact_string_annotations\",\"description\":\"Create
+      annotations for *exact* string matches in the current document.\\n\\nEach *entry*
+      provides ``label_text`` and ``exact_string``.  The tool\\nautomatically applies
+      all entries to the current document & corpus.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"entries\":{\"items\":{\"$ref\":\"#/$defs/ExactStringEntry\"},\"type\":\"array\"}},\"required\":[\"entries\"],\"type\":\"object\",\"$defs\":{\"ExactStringEntry\":{\"description\":\"Structured
+      entry for an exact\u2010string annotation request.\",\"properties\":{\"label_text\":{\"description\":\"Text
+      of the annotation label\",\"type\":\"string\"},\"exact_string\":{\"description\":\"Exact
+      string to annotate\",\"type\":\"string\"}},\"required\":[\"label_text\",\"exact_string\"],\"type\":\"object\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary\",\"description\":\"Return
+      the latest summary content for this document (corpus-aware).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_versions\",\"description\":\"Return
+      version history for the document summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_diff\",\"description\":\"Return
+      unified diff between two document summary versions.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"from_version\":{\"type\":\"integer\"},\"to_version\":{\"type\":\"integer\"}},\"required\":[\"from_version\",\"to_version\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_summary\",\"description\":\"Update
+      (or create) the document summary, returning version info.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '13482'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-CQoEljqSK8cCOKVtACQd4rNVIkj0S","object":"chat.completion.chunk","created":1760505675,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_JRbkkeIWRJljUpYFMBZvXlUh","type":"function","function":{"name":"get_document_text_length","arguments":""}}],"refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"ktTjth0"}
+
+
+        data: {"id":"chatcmpl-CQoEljqSK8cCOKVtACQd4rNVIkj0S","object":"chat.completion.chunk","created":1760505675,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"0O640m2oo0YJZJM"}
+
+
+        data: {"id":"chatcmpl-CQoEljqSK8cCOKVtACQd4rNVIkj0S","object":"chat.completion.chunk","created":1760505675,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"tool_calls"}],"usage":null,"obfuscation":"LlVoVbTwuRztYBG"}
+
+
+        data: {"id":"chatcmpl-CQoEljqSK8cCOKVtACQd4rNVIkj0S","object":"chat.completion.chunk","created":1760505675,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[],"usage":{"prompt_tokens":2027,"completion_tokens":12,"total_tokens":2039,"prompt_tokens_details":{"cached_tokens":1920,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"leE"}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-RAY:
+      - 98ecdf36dd6fc327-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Wed, 15 Oct 2025 05:21:15 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '494'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '507'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '4000000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '3998510'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 22ms
+      x-request-id:
+      - req_1a18f330fd584f5dbd55566b0bee8664
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are analyzing the
+      document titled 'Minimal Doc' (ID: 1).\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u26A0\uFE0F
+      \ ABSOLUTE REQUIREMENTS - NO EXCEPTIONS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n1.
+      You have ZERO prior knowledge of this document's contents.\\n2. You MUST use
+      tools to examine the document before answering ANY question.\\n3. NEVER say
+      you don't know what document is being discussed - you are analyzing 'Minimal
+      Doc'.\\n4. NEVER refuse to answer because you 'lack context' - USE THE TOOLS
+      to get context.\\n5. Every answer MUST be grounded in information retrieved
+      via tools with specific citations.\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F4CB
+      RECOMMENDED SEARCH STRATEGY:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nFor
+      most questions, follow this workflow:\\n\\nSTEP 1 - GET OVERVIEW:\\n  \u2022
+      Use `load_document_summary` to understand the document's structure and main
+      topics\\n  \u2022 Use `get_document_text_length` to check the document size\\n
+      \ \u2022 This helps you plan your detailed search strategy\\n\\nSTEP 2 - BROAD
+      SEARCH (Semantic Understanding):\\n  \u2022 Use `similarity_search` (vector
+      search) to find semantically relevant sections\\n  \u2022 Great for: conceptual
+      questions, themes, related ideas, paraphrased content\\n  \u2022 Returns: annotated
+      passages with page numbers and similarity scores\\n\\nSTEP 3 - DETAILED EXAMINATION:\\n
+      \ \u2022 Use `load_document_text` to read large sections (5K-50K chars) of relevant
+      areas\\n  \u2022 Identify the specific character ranges from Step 1-2, then
+      load those sections\\n  \u2022 Read enough context to thoroughly understand
+      the relevant passages\\n  \\n  \U0001F534 MANDATORY CITATION STEP - DO NOT SKIP:\\n
+      \ After reading ANY bulk text with `load_document_text`, you MUST:\\n  1. Identify
+      the 3-5 most relevant exact quotes/passages for your answer\\n  2. Extract the
+      EXACT text of each key passage (5-50 words each)\\n  3. Call `search_exact_text`
+      with these exact strings to create proper citations\\n  4. This converts raw
+      text into citable sources with page numbers\\n  \\n  WHY THIS MATTERS: `load_document_text`
+      returns raw text WITHOUT creating sources.\\n  Only `search_exact_text` creates
+      proper citations. Without this step, your answer\\n  will have NO SOURCES even
+      though you read the document!\\n\\nSTEP 4 - PRECISE LOCATION (Exact Matching):\\n
+      \ \u2022 Use `search_exact_text` to find specific terms, phrases, or quoted
+      language\\n  \u2022 Great for: finding exact wording, specific terminology,
+      quoted passages, defined terms\\n  \u2022 Returns: all occurrences with page
+      numbers and bounding boxes (PDFs)\\n  \u2022 Use this to provide precise citations
+      with exact page locations\\n  \u2022 CRITICAL: Always use this AFTER bulk text
+      loading to create proper source citations\\n\\nSTEP 5 - CROSS-REFERENCE:\\n
+      \ \u2022 Use `get_document_notes` to check for existing analysis or annotations\\n
+      \ \u2022 Combine findings from multiple tools to ensure completeness\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\U0001F527
+      TOOL SELECTION GUIDE:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\nUse
+      `similarity_search` when:\\n  \u2192 Question asks about concepts, themes, or
+      ideas (not exact words)\\n  \u2192 You need to find related content even if
+      worded differently\\n  \u2192 Looking for passages that discuss a topic\\n\\nUse
+      `search_exact_text` when:\\n  \u2192 User asks about specific terms, phrases,
+      or exact wording\\n  \u2192 You need to verify if specific language appears
+      in the document\\n  \u2192 Providing citations that require exact page locations\\n
+      \ \u2192 Finding defined terms or quoted material\\n\\nUse `load_document_text`
+      when:\\n  \u2192 You need to read substantial sections for full context\\n  \u2192
+      Initial searches identified relevant areas to examine in detail\\n  \u2192 Question
+      requires understanding flow, structure, or relationships\\n  \u26A0\uFE0F  ALWAYS
+      follow with `search_exact_text` on key passages to create citations!\\n\\nUse
+      `load_document_summary` when:\\n  \u2192 Starting your analysis (always good
+      first step)\\n  \u2192 Need high-level overview of document structure\\n  \u2192
+      Understanding document organization before detailed search\\n\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\u2705
+      RESPONSE REQUIREMENTS:\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n\u2022
+      Provide complete, accurate answers based on document contents\\n\u2022 Include
+      specific citations (page numbers, quotes) from tool results\\n\u2022 \U0001F534
+      CRITICAL: If you used `load_document_text`, you MUST use `search_exact_text`\\n
+      \ on key passages to generate proper citations. Otherwise your answer will have
+      NO SOURCES.\\n\u2022 If information isn't in the document, explicitly state:
+      'This information was not found in Minimal Doc'\\n\u2022 Use multiple search
+      strategies to ensure thoroughness\\n\u2022 Present findings clearly with proper
+      attribution to sources\\n\"},{\"role\":\"user\",\"content\":\"What are the contents
+      of the Minimal Doc document?\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_fgbRfD0RV870Qa4xdAeO3REg\",\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"arguments\":\"{\\\"truncate_length\\\":200}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_fgbRfD0RV870Qa4xdAeO3REg\",\"content\":\"NO
+      SUMMARY PREPARED\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_JRbkkeIWRJljUpYFMBZvXlUh\",\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_JRbkkeIWRJljUpYFMBZvXlUh\",\"content\":\"11\"}],\"model\":\"gpt-4o-mini\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_summary\",\"description\":\"Load
+      the document's markdown summary (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_summary_token_length\",\"description\":\"Return
+      token length of the document's markdown summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_text_length\",\"description\":\"Get
+      the total character length of the document's plain-text extract.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"load_document_text\",\"description\":\"Return
+      a slice of the document's plain-text extract.\\n\\nIMPORTANT USAGE GUIDELINES:\\n-
+      First use get_document_text_length to check the total document size\\n- Recommended
+      chunk size: 5,000 to 50,000 characters per request\\n- DO NOT load chunks smaller
+      than 1,000 characters (inefficient, wastes tool calls)\\n- DO NOT load chunks
+      larger than 100,000 characters (may overflow context)\\n- Tool call limit is
+      50, so plan your chunking strategy accordingly\\n- For a 500K char document,
+      use ~10-20 chunks of 25-50K chars each\\n\\n\U0001F534 CRITICAL - CITATION REQUIREMENT:\\nAfter
+      reading text with this tool, you MUST:\\n1. Identify 3-5 most relevant exact
+      quotes/passages (5-50 words each)\\n2. Call search_exact_text with those EXACT
+      strings\\n3. This creates proper citations with page numbers\\n\\nWHY: This
+      tool returns raw text WITHOUT sources. Only search_exact_text\\ncreates citations.
+      Skip this and your answer will have NO SOURCES!\\n\\nExample: For a 200,000
+      character document:\\n- Good: Load in 4-8 chunks of 25,000-50,000 chars each\\n-
+      Bad: Load 100 chars at a time (would need 2000 tool calls!)\\n- Bad: Load all
+      200,000 chars at once (might overflow context)\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"start\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"end\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"refresh\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_exact_text\",\"description\":\"Search
+      for exact text matches and return source nodes with location information.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_strings\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"search_strings\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_notes\",\"description\":\"Retrieve
+      metadata & first 512-char preview of notes for this document.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"search_document_notes\",\"description\":\"Search
+      notes attached to this document for a keyword.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"search_term\":{\"type\":\"string\"},\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"required\":[\"search_term\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_document_note\",\"description\":\"Create
+      a new note attached to this document and return its id.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"title\",\"content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_note\",\"description\":\"Version-up
+      an existing note and return new version number.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"note_id\":{\"type\":\"integer\"},\"new_content\":{\"type\":\"string\"}},\"required\":[\"note_id\",\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"duplicate_annotations\",\"description\":\"<summary>Duplicate
+      existing annotations in the current document with a new label.</summary>\\n<returns>\\n<description>Dict
+      with key ``annotation_ids`` listing newly created IDs.</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"annotation_ids\":{\"description\":\"IDs
+      of annotations to duplicate.\",\"items\":{\"type\":\"integer\"},\"type\":\"array\"},\"new_label_text\":{\"description\":\"Text
+      for the new annotation label.\",\"type\":\"string\"},\"label_type\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"description\":\"Optional
+      label type.\"}},\"required\":[\"annotation_ids\",\"new_label_text\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"add_exact_string_annotations\",\"description\":\"Create
+      annotations for *exact* string matches in the current document.\\n\\nEach *entry*
+      provides ``label_text`` and ``exact_string``.  The tool\\nautomatically applies
+      all entries to the current document & corpus.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"entries\":{\"items\":{\"$ref\":\"#/$defs/ExactStringEntry\"},\"type\":\"array\"}},\"required\":[\"entries\"],\"type\":\"object\",\"$defs\":{\"ExactStringEntry\":{\"description\":\"Structured
+      entry for an exact\u2010string annotation request.\",\"properties\":{\"label_text\":{\"description\":\"Text
+      of the annotation label\",\"type\":\"string\"},\"exact_string\":{\"description\":\"Exact
+      string to annotate\",\"type\":\"string\"}},\"required\":[\"label_text\",\"exact_string\"],\"type\":\"object\"}}}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary\",\"description\":\"Return
+      the latest summary content for this document (corpus-aware).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_versions\",\"description\":\"Return
+      version history for the document summary.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"limit\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_document_summary_diff\",\"description\":\"Return
+      unified diff between two document summary versions.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"from_version\":{\"type\":\"integer\"},\"to_version\":{\"type\":\"integer\"}},\"required\":[\"from_version\",\"to_version\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"update_document_summary\",\"description\":\"Update
+      (or create) the document summary, returning version info.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '13717'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"qa97vzH15"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"The"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"KQ9xcNEt"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        document"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"gX"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        titled"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"4FRo"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        ''"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"izyPlKDBl"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"Minimal"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"uxOT"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        Doc"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"fEs32ZA"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"''"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"cKdRskJmGU"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        contains"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Cm"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        a"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"LbLSYLUiG"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        total"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"d7bjr"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        of"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"JDrgc6xo"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"vZUgnPTsHd"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"11"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"pLZmrhKGA"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        characters"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":""}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"eaZrqhhYPn"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        Given"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"XtFGJ"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        its"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"AbHHy2d"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        extremely"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"C"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        brief"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Gkp2e"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        length"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"X5C6"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"G2nPcoZSf4"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        it"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"LknQ7WGS"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        likely"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Ffm9"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        does"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"5lWXAm"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        not"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"7F2Dya9"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        contain"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"HEE"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        any"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"1caX94w"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        substantial"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"ig3dz6tMWbcCpC2"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        content"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"1Bw"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        or"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Be3r6b6a"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        structured"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":""}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"
+        information"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"9B0v7rnEejGUFx2"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"Fx1RjSqAkf"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"usage":null,"obfuscation":"jSXWy"}
+
+
+        data: {"id":"chatcmpl-CQoEmNEgxZ9dhMEIhqiZBAOY0vxD5","object":"chat.completion.chunk","created":1760505676,"model":"gpt-4o-mini-2024-07-18","service_tier":"default","system_fingerprint":"fp_560af6e559","choices":[],"usage":{"prompt_tokens":2050,"completion_tokens":34,"total_tokens":2084,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"fyKO0w"}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-RAY:
+      - 98ecdf3a9ed9c327-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Wed, 15 Oct 2025 05:21:16 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '314'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '325'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '4000000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '3998507'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 22ms
+      x-request-id:
+      - req_45a8fdaec8344c3d921322ab9f2a6726
+    status:
+      code: 200
+      message: OK
+- request:
+    body: "{\"messages\":[{\"role\":\"system\",\"content\":\"You are an expert assistant
+      designed to analyze and answer queries about a collection of documents called
+      'Edge Case Corpus'.\\n\\n**Available Tools:**\\nYou have access to comprehensive
+      tools for analyzing documents in this corpus:\\n\\n1. **Document-Specific Tools**
+      \u2013 available *per* document via the `ask_document` helper:\\n   - Vector
+      search inside that document\\n   - Summary & note access\\n   - Annotation manipulation
+      (subject to approval)\\n   - Token length calculations for context management\\n2.
+      **Corpus-Level Coordination Tools** \u2013 orchestrate multi-document reasoning:\\n
+      \  - `list_documents()`\u2003\u2192 returns `[{document_id, title, description}]`
+      for discovery\\n   - `ask_document(document_id, question)`\u2003\u2192 runs
+      a **document agent** and yields a rich object:\\n       \u2022 `answer`\u2003str
+      \u2013 the assistant's final answer\\n       \u2022 `sources`\u2003list \u2013
+      flattened citation objects (annotation_id, page, rawText \u2026)\\n       \u2022
+      `timeline`\u2003list \u2013 detailed reasoning & tool calls from the sub-agent
+      run\\n   Use these keys to compile thorough, well-cited corpus-level answers.\\n3.
+      **Cross-Document Vector Search** \u2013 semantic search across the entire corpus
+      for broad context\\n\\n**Important**: Always check what tools are available
+      to you, as additional specialized tools may be provided dynamically beyond the
+      core set. The exact tools available will depend on the documents in this corpus.\\n\\n**Guidelines:**\\n-
+      Always use the provided tools to gather information before answering\\n- Do
+      not rely on prior knowledge about the documents\\n- When appropriate, search
+      across multiple documents for comprehensive answers\\n- Cite specific documents
+      and sources when presenting information\\n- Prefer using `sources` returned
+      by `ask_document` or vector search to justify claims\\n- Present your findings
+      in clear, well-structured markdown format, using footnote-style citations\"},{\"role\":\"user\",\"content\":\"Query
+      the Minimal Doc document\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_u8scpTZvWBMA9eJm6pi3Ekfu\",\"type\":\"function\",\"function\":{\"name\":\"list_documents\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_u8scpTZvWBMA9eJm6pi3Ekfu\",\"content\":\"[{\\\"document_id\\\":1,\\\"title\\\":\\\"Minimal
+      Doc\\\",\\\"description\\\":\\\"Minimal document for edge cases\\\"}]\"},{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_RVneXllXtNwqo1WtZ5tLiHeL\",\"type\":\"function\",\"function\":{\"name\":\"ask_document\",\"arguments\":\"{\\\"document_id\\\":1,\\\"question\\\":\\\"What
+      are the contents of the Minimal Doc document?\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_RVneXllXtNwqo1WtZ5tLiHeL\",\"content\":\"{\\\"answer\\\":\\\"The
+      document titled 'Minimal Doc' contains a total of 11 characters. Given its extremely
+      brief length, it likely does not contain any substantial content or structured
+      information.\\\",\\\"sources\\\":[],\\\"timeline\\\":[{\\\"type\\\":\\\"thought\\\",\\\"text\\\":\\\"Received
+      user prompt; beginning reasoning cycle\u2026\\\"},{\\\"type\\\":\\\"thought\\\",\\\"text\\\":\\\"Sending
+      request to language model\u2026\\\"},{\\\"type\\\":\\\"thought\\\",\\\"text\\\":\\\"Processing
+      model response \u2013 may invoke tools\u2026\\\"},{\\\"type\\\":\\\"tool_call\\\",\\\"tool\\\":\\\"load_document_summary\\\",\\\"args\\\":\\\"{\\\\\\\"truncate_length\\\\\\\":200}\\\"},{\\\"type\\\":\\\"tool_result\\\",\\\"tool\\\":\\\"load_document_summary\\\"},{\\\"type\\\":\\\"thought\\\",\\\"text\\\":\\\"Sending
+      request to language model\u2026\\\"},{\\\"type\\\":\\\"thought\\\",\\\"text\\\":\\\"Processing
+      model response \u2013 may invoke tools\u2026\\\"},{\\\"type\\\":\\\"tool_call\\\",\\\"tool\\\":\\\"get_document_text_length\\\",\\\"args\\\":\\\"{}\\\"},{\\\"type\\\":\\\"tool_result\\\",\\\"tool\\\":\\\"get_document_text_length\\\"},{\\\"type\\\":\\\"thought\\\",\\\"text\\\":\\\"Sending
+      request to language model\u2026\\\"},{\\\"type\\\":\\\"thought\\\",\\\"text\\\":\\\"Processing
+      model response \u2013 may invoke tools\u2026\\\"},{\\\"type\\\":\\\"thought\\\",\\\"text\\\":\\\"Run
+      finished; aggregating final results\u2026\\\"},{\\\"type\\\":\\\"status\\\",\\\"msg\\\":\\\"run_finished\\\"}]}\"}],\"model\":\"gpt-4o\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"similarity_search\",\"description\":\"Async
+      wrapper that adapts to pydantic-ai's expected signature.\\n\\nVectorStoreSearchTool
+      looks for a coroutine / function\\n`vector_store.similarity_search(query, k=\u2026)`
+      and returns a raw list\\nof dicts.  We delegate to ``search_annotations`` and
+      then expose the\\nlist of hits so that the tool can feed them directly to the
+      model\\n(and propagate them to ``result.sources``).\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"},\"k\":{\"type\":\"integer\"}},\"required\":[\"query\"],\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"get_corpus_description\",\"description\":\"Return
+      the current corpus markdown description (optionally truncated).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"truncate_length\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}]},\"from_start\":{\"type\":\"boolean\"}},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"update_corpus_description\",\"description\":\"Update
+      the corpus description and return new version number (if changed).\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"new_content\":{\"type\":\"string\"}},\"required\":[\"new_content\"],\"type\":\"object\"},\"strict\":true}},{\"type\":\"function\",\"function\":{\"name\":\"list_documents\",\"description\":\"Return
+      basic metadata for all documents in the current corpus.\\n\\nEach list entry
+      contains ``document_id``, ``title`` and ``description`` so\\nthe coordinator
+      LLM can decide which document-specific agent to consult.\",\"parameters\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"ask_document\",\"description\":\"<summary>Ask
+      a question to a **document-specific** agent inside this corpus.\\n\\nThe call
+      transparently streams the document agent so we can capture\\nits *full* reasoning
+      timeline (tool calls, vector-search citations\u2026)\\nand surface that back
+      to the coordinator LLM.</summary>\\n<returns>\\n<type>An object with keys</type>\\n<description>\\n
+      \   answer (str)   \u2013 final assistant answer\\n    sources (list) \u2013
+      flattened source dicts\\n    timeline (list) \u2013 detailed reasoning/events
+      emitted by the sub-agent</description>\\n</returns>\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"document_id\":{\"description\":\"ID
+      of the target document (must belong to this corpus).\",\"type\":\"integer\"},\"question\":{\"description\":\"The
+      natural-language question to forward.\",\"type\":\"string\"}},\"required\":[\"document_id\",\"question\"],\"type\":\"object\"},\"strict\":true}}]}"
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br, zstd
+      connection:
+      - keep-alive
+      content-length:
+      - '6447'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=.b0dQD91W14qExVtjmH_RAAeLKPWFcceEKgxAfvDDdA-1760505672-1.0.1.1-soVxoMtAbjgORpvpkAwHFcjuyTi6aaoXwkElyFPONTmz7SE3nkw.iQs24J3FfiJyPyfk76VUbzrBtQq7CtaopsqEL2Uuf6Xoe01lcQvXpCs;
+        _cfuvid=KMmy.qbLOkcl6ZEdWqt4cX0BVEVJ1A48msH1Gya94.o-1760505672306-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - pydantic-ai/0.2.20
+      x-stainless-arch:
+      - x64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - Linux
+      x-stainless-package-version:
+      - 1.81.0
+      x-stainless-read-timeout:
+      - '600'
+      x-stainless-retry-count:
+      - '0'
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.13
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"8pUopgyZmzzodK"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"The"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"kgGGBijITHiTd"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        document"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"folFiM3"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        titled"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"QAVQp184m"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        \""},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"FuG9WsETp3t4O"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"Minimal"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"AZovfMzlo"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        Doc"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"A9LWD6HJCiSv"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"\""},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"vUHYEIZsYXQv4x"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        is"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"XZ7RfNlytW3RA"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        extremely"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"1py5Xf"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        brief"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"bURBjszFzk"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":","},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"GFH6jOpx6Hs3SZU"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        containing"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"DxOSE"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        a"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"anAjscCY2MydP6"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        total"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"RbmB6pi57P"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        of"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"MrOXsymMYMSY0"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        "},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"HrgfmNu8ui5bo4w"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"11"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"RcRSufJmZ10TER"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        characters"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"oqZwX"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"wvOXLB71ngm4nXM"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        It"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"g9drMxFdOkTsa"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        likely"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"fRwPftASk"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        does"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"oMDAJVl3iGU"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        not"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"soINwATbpgC9"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        contain"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"5Xdhluin"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        any"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"OLYYkVqjSBnf"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        substantial"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"ngPc"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        content"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"nUyiimnL"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        or"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"bXTR0BS9mph4Y"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        structured"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"cHeEH"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"
+        information"},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"HiJq"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}],"usage":null,"obfuscation":"OEypF5ChBD9Ov0F"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"usage":null,"obfuscation":"6LqPaTho8J"}
+
+
+        data: {"id":"chatcmpl-CQoEn5449Az7PtvwVY3pQGirxD5dA","object":"chat.completion.chunk","created":1760505677,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_cbf1785567","choices":[],"usage":{"prompt_tokens":1076,"completion_tokens":32,"total_tokens":1108,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"6FKVEKm6vRK"}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-RAY:
+      - 98ecdf415953c327-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Wed, 15 Oct 2025 05:21:18 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - user-54labie7aicgek5urzpgydpm
+      openai-processing-ms:
+      - '461'
+      openai-project:
+      - proj_Wkl0VCdAkNrtc9OOB7W3YCq9
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '674'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '5000'
+      x-ratelimit-limit-tokens:
+      - '800000'
+      x-ratelimit-remaining-requests:
+      - '4999'
+      x-ratelimit-remaining-tokens:
+      - '799223'
+      x-ratelimit-reset-requests:
+      - 12ms
+      x-ratelimit-reset-tokens:
+      - 58ms
+      x-request-id:
+      - req_04367d9bf8fa41ad85f4987fe6ab89f5
+    status:
+      code: 200
+      message: OK
+version: 1

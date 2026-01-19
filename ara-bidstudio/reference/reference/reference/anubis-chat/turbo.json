@@ -1,0 +1,59 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "globalEnv": [
+    "NODE_ENV",
+    "SUBSCRIPTION_FREE_MESSAGE_LIMIT",
+    "SUBSCRIPTION_PRO_MESSAGE_LIMIT",
+    "SUBSCRIPTION_PRO_PLUS_MESSAGE_LIMIT",
+    "SUBSCRIPTION_PRO_PREMIUM_LIMIT",
+    "SUBSCRIPTION_PRO_PLUS_PREMIUM_LIMIT",
+    "OPENROUTER_API_KEY",
+    "CONVEX_DEPLOYMENT",
+    "CONVEX_URL",
+    "JWT_SECRET",
+    "JWT_EXPIRES_IN",
+    "OPENAI_API_KEY",
+    "ALLOWED_ORIGINS",
+    "CORS_CREDENTIALS",
+    "RATE_LIMIT_MAX_REQUESTS",
+    "RATE_LIMIT_WINDOW_MS",
+    "STORAGE_TYPE",
+    "LOG_LEVEL"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**", ".next/**"],
+      "env": [
+        "NODE_ENV",
+        "NEXT_PUBLIC_*",
+        "SUBSCRIPTION_*",
+        "OPENROUTER_API_KEY",
+        "CONVEX_*",
+        "JWT_*",
+        "OPENAI_API_KEY",
+        "ALLOWED_ORIGINS",
+        "CORS_CREDENTIALS",
+        "RATE_LIMIT_*",
+        "STORAGE_TYPE",
+        "LOG_LEVEL"
+      ]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "dev:setup": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

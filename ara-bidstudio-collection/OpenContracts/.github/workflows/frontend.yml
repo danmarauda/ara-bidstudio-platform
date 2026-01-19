@@ -1,0 +1,105 @@
+name: Frontend CI
+
+defaults:
+ run:
+  working-directory: ./frontend
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Lint Prettier
+        run: yarn run lint
+
+  component-test:
+    name: Component Tests
+    runs-on: ubuntu-latest
+    needs: lint # Run only if lint job passes
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install Yarn
+        run: npm install -g yarn # Still need global yarn
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile # Use frozen lockfile for CI
+
+      - name: Install Playwright Browsers
+        run: yarn playwright install --with-deps
+
+      - name: Run Playwright Component Tests
+        run: yarn run test:ct
+
+      - name: Run Metadata Component Tests
+        run: |
+          yarn run test:ct tests/*Metadata*.ct.tsx
+        continue-on-error: true
+
+  unit-test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install Yarn
+        run: npm install -g yarn
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+      - name: Run Unit Tests
+        run: yarn run test:unit
+
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: lint
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+      - name: Build Docker Image
+        run: docker build -t opencontracts-frontend .

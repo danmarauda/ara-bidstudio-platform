@@ -1,0 +1,4 @@
+# Model preloader dependencies
+# These are required for the model preloader scripts that run during Docker build
+docling
+easyocr

@@ -1,0 +1,817 @@
+---
+category: security
+subcategory: web-security
+tags: [csp, headers, xss-prevention, security-headers]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../web3/wallet-auth.mdc"]
+  exports: ["security-headers", "csp-policies"]
+  references: ["../frontend/wallet-integration.mdc"]
+---
+
+# Content Security Policy & Security Headers
+
+## Comprehensive CSP Configuration
+
+### 1. abubis.chat CSP Policy
+```typescript
+export interface CSPDirectives {
+  'default-src': string[];
+  'script-src': string[];
+  'style-src': string[];
+  'img-src': string[];
+  'connect-src': string[];
+  'font-src': string[];
+  'media-src': string[];
+  'object-src': string[];
+  'frame-src': string[];
+  'worker-src': string[];
+  'manifest-src': string[];
+  'base-uri': string[];
+  'form-action': string[];
+  'frame-ancestors': string[];
+  'upgrade-insecure-requests'?: boolean;
+  'block-all-mixed-content'?: boolean;
+}
+
+export class CSPHeaderManager {
+  private readonly NONCE_LENGTH = 32;
+  private readonly environment = process.env.NODE_ENV || 'development';
+
+  public generateCSPHeader(nonce: string): string {
+    const directives = this.getCSPDirectives(nonce);
+    return this.directivesToString(directives);
+  }
+
+  public generateNonce(): string {
+    return crypto.randomBytes(this.NONCE_LENGTH).toString('base64');
+  }
+
+  private getCSPDirectives(nonce: string): CSPDirectives {
+    const isProduction = this.environment === 'production';
+    
+    return {
+      'default-src': ["'self'"],
+      
+      'script-src': [
+        "'self'",
+        `'nonce-${nonce}'`,
+        // Wallet adapter scripts (specific to known CDNs)
+        'https://unpkg.com/@solana/',
+        'https://cdn.jsdelivr.net/@solana/',
+        // Vercel Analytics
+        'https://va.vercel-scripts.com',
+        // Allow specific inline scripts in development only
+        ...(isProduction ? [] : ["'unsafe-inline'"]),
+        // Web3 wallet extensions
+        'https://phantom.app',
+        'https://backpack.app'
+      ],
+      
+      'style-src': [
+        "'self'",
+        `'nonce-${nonce}'`,
+        "'unsafe-inline'", // Required for dynamic styles from wallet adapters
+        // Fonts and CSS CDNs
+        'https://fonts.googleapis.com',
+        'https://cdn.jsdelivr.net'
+      ],
+      
+      'img-src': [
+        "'self'",
+        'data:', // For base64 images
+        'blob:', // For generated images (chat exports)
+        'https:', // Allow HTTPS images
+        // Specific wallet and crypto services
+        'https://phantom.app',
+        'https://backpack.app',
+        'https://solana.com',
+        'https://solscan.io',
+        'https://explorer.solana.com'
+      ],
+      
+      'connect-src': [
+        "'self'",
+        // Solana RPC endpoints
+        'https://api.mainnet-beta.solana.com',
+        'https://mainnet.helius-rpc.com',
+        'https://rpc.shyft.to',
+        // Convex backend
+        process.env.NEXT_PUBLIC_CONVEX_URL!,
+        // WebSocket connections
+        'wss://api.mainnet-beta.solana.com',
+        'wss://mainnet.helius-rpc.com',
+        'wss://rpc.shyft.to',
+        // AI API endpoints
+        'https://api.openai.com',
+        'https://api.anthropic.com',
+        'https://api.deepseek.com',
+        // Vercel Analytics
+        'https://vitals.vercel-insights.com',
+        // Qdrant vector database
+        process.env.NEXT_PUBLIC_QDRANT_URL!,
+        // Wallet connection endpoints
+        'https://phantom.app',
+        'https://backpack.app'
+      ],
+      
+      'font-src': [
+        "'self'",
+        'https://fonts.gstatic.com',
+        'https://cdn.jsdelivr.net',
+        'data:' // For base64 fonts
+      ],
+      
+      'media-src': [
+        "'self'",
+        'data:',
+        'blob:' // For generated audio/video content
+      ],
+      
+      'object-src': ["'none'"], // Disallow plugins
+      
+      'frame-src': [
+        "'self'",
+        // Only allow specific trusted domains for iframes
+        'https://phantom.app',
+        'https://backpack.app'
+      ],
+      
+      'worker-src': [
+        "'self'",
+        'blob:' // For Web Workers
+      ],
+      
+      'manifest-src': ["'self'"],
+      
+      'base-uri': ["'self'"], // Prevent base tag injection
+      
+      'form-action': [
+        "'self'",
+        // Only allow form submissions to our domain
+      ],
+      
+      'frame-ancestors': ["'none'"], // Prevent clickjacking
+      
+      'upgrade-insecure-requests': isProduction,
+      'block-all-mixed-content': isProduction
+    };
+  }
+
+  private directivesToString(directives: CSPDirectives): string {
+    const policyParts: string[] = [];
+
+    for (const [directive, values] of Object.entries(directives)) {
+      if (typeof values === 'boolean') {
+        if (values) {
+          policyParts.push(directive.replace(/([A-Z])/g, '-$1').toLowerCase());
+        }
+      } else if (Array.isArray(values) && values.length > 0) {
+        const directiveName = directive.replace(/([A-Z])/g, '-$1').toLowerCase();
+        policyParts.push(`${directiveName} ${values.join(' ')}`);
+      }
+    }
+
+    return policyParts.join('; ');
+  }
+
+  public validateCSPViolation(violationReport: any): {
+    isValid: boolean;
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    action: 'log' | 'alert' | 'block';
+    reason?: string;
+  } {
+    const blockedURI = violationReport['blocked-uri'];
+    const violatedDirective = violationReport['violated-directive'];
+    const sourceFile = violationReport['source-file'];
+
+    // Critical violations that should be blocked immediately
+    if (violatedDirective?.includes('script-src') && 
+        blockedURI && 
+        !this.isAllowedScriptSource(blockedURI)) {
+      return {
+        isValid: false,
+        severity: 'critical',
+        action: 'block',
+        reason: 'Unauthorized script execution attempt'
+      };
+    }
+
+    // Medium severity violations
+    if (violatedDirective?.includes('connect-src') && 
+        !this.isAllowedConnectSource(blockedURI)) {
+      return {
+        isValid: false,
+        severity: 'medium',
+        action: 'alert',
+        reason: 'Unauthorized network connection attempt'
+      };
+    }
+
+    // Low severity violations (often false positives)
+    if (violatedDirective?.includes('style-src') || 
+        violatedDirective?.includes('img-src')) {
+      return {
+        isValid: false,
+        severity: 'low',
+        action: 'log',
+        reason: 'Style or image resource blocked'
+      };
+    }
+
+    return {
+      isValid: true,
+      severity: 'low',
+      action: 'log'
+    };
+  }
+
+  private isAllowedScriptSource(uri: string): boolean {
+    const allowedScriptSources = [
+      'self',
+      'https://unpkg.com/@solana/',
+      'https://cdn.jsdelivr.net/@solana/',
+      'https://va.vercel-scripts.com',
+      'https://phantom.app',
+      'https://backpack.app'
+    ];
+
+    return allowedScriptSources.some(source => 
+      source === 'self' ? uri.includes(process.env.NEXT_PUBLIC_DOMAIN!) : uri.startsWith(source)
+    );
+  }
+
+  private isAllowedConnectSource(uri: string): boolean {
+    const allowedConnectSources = [
+      process.env.NEXT_PUBLIC_CONVEX_URL!,
+      process.env.NEXT_PUBLIC_QDRANT_URL!,
+      'https://api.mainnet-beta.solana.com',
+      'https://mainnet.helius-rpc.com',
+      'https://rpc.shyft.to',
+      'https://api.openai.com',
+      'https://api.anthropic.com',
+      'https://vitals.vercel-insights.com'
+    ];
+
+    return allowedConnectSources.some(source => uri.startsWith(source));
+  }
+}
+```
+
+### 2. Comprehensive Security Headers
+```typescript
+export interface SecurityHeaders {
+  'Content-Security-Policy': string;
+  'X-Frame-Options': string;
+  'X-Content-Type-Options': string;
+  'Referrer-Policy': string;
+  'Permissions-Policy': string;
+  'Strict-Transport-Security': string;
+  'X-XSS-Protection': string;
+  'Cross-Origin-Embedder-Policy': string;
+  'Cross-Origin-Opener-Policy': string;
+  'Cross-Origin-Resource-Policy': string;
+}
+
+export class SecurityHeaderManager {
+  private cspManager: CSPHeaderManager;
+
+  constructor() {
+    this.cspManager = new CSPHeaderManager();
+  }
+
+  public generateSecurityHeaders(nonce?: string): SecurityHeaders {
+    const cspNonce = nonce || this.cspManager.generateNonce();
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    return {
+      'Content-Security-Policy': this.cspManager.generateCSPHeader(cspNonce),
+      
+      'X-Frame-Options': 'DENY', // Prevent clickjacking
+      
+      'X-Content-Type-Options': 'nosniff', // Prevent MIME type sniffing
+      
+      'Referrer-Policy': 'strict-origin-when-cross-origin', // Control referrer information
+      
+      'Permissions-Policy': this.generatePermissionsPolicy(),
+      
+      'Strict-Transport-Security': isProduction 
+        ? 'max-age=31536000; includeSubDomains; preload' 
+        : 'max-age=0',
+      
+      'X-XSS-Protection': '1; mode=block', // Legacy XSS protection
+      
+      'Cross-Origin-Embedder-Policy': 'credentialless', // Control cross-origin isolation
+      
+      'Cross-Origin-Opener-Policy': 'same-origin', // Control cross-origin window references
+      
+      'Cross-Origin-Resource-Policy': 'same-site' // Control cross-origin resource access
+    };
+  }
+
+  private generatePermissionsPolicy(): string {
+    // Restrict browser APIs that abubis.chat doesn't need
+    const policies = [
+      'accelerometer=()', // Disable accelerometer
+      'ambient-light-sensor=()', // Disable ambient light sensor
+      'autoplay=()', // Disable autoplay
+      'battery=()', // Disable battery API
+      'camera=()', // Disable camera access
+      'display-capture=()', // Disable screen capture
+      'document-domain=()', // Disable document.domain
+      'encrypted-media=()', // Disable encrypted media
+      'execution-while-not-rendered=()', // Disable background execution
+      'execution-while-out-of-viewport=()', // Disable out-of-viewport execution
+      'fullscreen=self', // Allow fullscreen on same origin only
+      'geolocation=()', // Disable geolocation
+      'gyroscope=()', // Disable gyroscope
+      'magnetometer=()', // Disable magnetometer
+      'microphone=()', // Disable microphone access
+      'midi=()', // Disable MIDI access
+      'navigation-override=()', // Disable navigation override
+      'payment=self', // Allow payment API on same origin (for future crypto payments)
+      'picture-in-picture=()', // Disable picture-in-picture
+      'publickey-credentials-get=self', // Allow WebAuthn on same origin
+      'screen-wake-lock=()', // Disable screen wake lock
+      'sync-xhr=()', // Disable synchronous XHR
+      'usb=()', // Disable USB access
+      'web-share=self', // Allow Web Share API on same origin
+      'xr-spatial-tracking=()' // Disable XR spatial tracking
+    ];
+
+    return policies.join(', ');
+  }
+
+  public validateSecurityHeaders(headers: Record<string, string>): {
+    isSecure: boolean;
+    missingHeaders: string[];
+    weakHeaders: Array<{ header: string; issue: string; recommendation: string }>;
+    score: number; // 0-100
+  } {
+    const requiredHeaders = [
+      'Content-Security-Policy',
+      'X-Frame-Options',
+      'X-Content-Type-Options',
+      'Strict-Transport-Security'
+    ];
+
+    const missingHeaders = requiredHeaders.filter(header => !headers[header]);
+    const weakHeaders: Array<{ header: string; issue: string; recommendation: string }> = [];
+
+    // Check CSP strength
+    const csp = headers['Content-Security-Policy'];
+    if (csp) {
+      if (csp.includes("'unsafe-eval'")) {
+        weakHeaders.push({
+          header: 'Content-Security-Policy',
+          issue: 'Contains unsafe-eval',
+          recommendation: 'Remove unsafe-eval and use safe alternatives'
+        });
+      }
+      if (csp.includes("'unsafe-inline'") && !csp.includes('nonce-')) {
+        weakHeaders.push({
+          header: 'Content-Security-Policy',
+          issue: 'Contains unsafe-inline without nonce',
+          recommendation: 'Use nonce-based CSP instead of unsafe-inline'
+        });
+      }
+      if (!csp.includes('frame-ancestors')) {
+        weakHeaders.push({
+          header: 'Content-Security-Policy',
+          issue: 'Missing frame-ancestors directive',
+          recommendation: 'Add frame-ancestors directive to prevent clickjacking'
+        });
+      }
+    }
+
+    // Check HSTS strength
+    const hsts = headers['Strict-Transport-Security'];
+    if (hsts) {
+      const maxAge = hsts.match(/max-age=(\d+)/)?.[1];
+      if (!maxAge || parseInt(maxAge) < 31536000) { // Less than 1 year
+        weakHeaders.push({
+          header: 'Strict-Transport-Security',
+          issue: 'max-age is too low',
+          recommendation: 'Set max-age to at least 31536000 (1 year)'
+        });
+      }
+      if (!hsts.includes('includeSubDomains')) {
+        weakHeaders.push({
+          header: 'Strict-Transport-Security',
+          issue: 'Missing includeSubDomains',
+          recommendation: 'Add includeSubDomains directive'
+        });
+      }
+    }
+
+    // Calculate security score
+    const baseScore = 100;
+    const missingHeaderPenalty = missingHeaders.length * 15;
+    const weakHeaderPenalty = weakHeaders.length * 5;
+    const score = Math.max(0, baseScore - missingHeaderPenalty - weakHeaderPenalty);
+
+    return {
+      isSecure: missingHeaders.length === 0 && weakHeaders.length === 0,
+      missingHeaders,
+      weakHeaders,
+      score
+    };
+  }
+}
+```
+
+### 3. Next.js Integration
+```typescript
+// next.config.ts
+export const securityHeaders = [
+  {
+    key: 'X-DNS-Prefetch-Control',
+    value: 'on'
+  },
+  {
+    key: 'X-Frame-Options',
+    value: 'DENY'
+  },
+  {
+    key: 'X-Content-Type-Options',
+    value: 'nosniff'
+  },
+  {
+    key: 'Referrer-Policy',
+    value: 'strict-origin-when-cross-origin'
+  },
+  {
+    key: 'Permissions-Policy',
+    value: 'accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=self, geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=self, picture-in-picture=(), publickey-credentials-get=self, screen-wake-lock=(), sync-xhr=(), usb=(), web-share=self, xr-spatial-tracking=()'
+  }
+];
+
+// CSP will be set dynamically via middleware
+const nextConfig = {
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: securityHeaders
+      }
+    ];
+  },
+  
+  async redirects() {
+    return [
+      // Force HTTPS in production
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'header',
+            key: 'x-forwarded-proto',
+            value: 'http'
+          }
+        ],
+        destination: 'https://abubis.chat/:path*',
+        permanent: true
+      }
+    ];
+  }
+};
+
+export default nextConfig;
+```
+
+### 4. CSP Middleware Implementation
+```typescript
+// middleware.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { SecurityHeaderManager } from './lib/security/csp-headers';
+
+const securityManager = new SecurityHeaderManager();
+
+export function middleware(request: NextRequest) {
+  const response = NextResponse.next();
+  
+  // Generate unique nonce for each request
+  const nonce = securityManager.generateNonce();
+  
+  // Set nonce in request headers for use in components
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  
+  // Generate and set security headers
+  const securityHeaders = securityManager.generateSecurityHeaders(nonce);
+  
+  for (const [key, value] of Object.entries(securityHeaders)) {
+    response.headers.set(key, value);
+  }
+  
+  // Set additional security headers
+  response.headers.set('X-Robots-Tag', 'noindex, nofollow, nosnippet, noarchive');
+  
+  // Remove server information
+  response.headers.delete('Server');
+  response.headers.delete('X-Powered-By');
+  
+  return response;
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+};
+```
+
+### 5. CSP Violation Reporting
+```typescript
+export interface CSPViolationReport {
+  'document-uri': string;
+  'referrer': string;
+  'violated-directive': string;
+  'effective-directive': string;
+  'original-policy': string;
+  'blocked-uri': string;
+  'status-code': number;
+  'source-file': string;
+  'line-number': number;
+  'column-number': number;
+}
+
+export class CSPViolationHandler {
+  private violations: CSPViolationReport[] = [];
+  private readonly MAX_VIOLATIONS = 10000;
+  private cspManager: CSPHeaderManager;
+
+  constructor() {
+    this.cspManager = new CSPHeaderManager();
+  }
+
+  public handleViolation(report: CSPViolationReport): void {
+    // Validate and process the violation
+    const validation = this.cspManager.validateCSPViolation(report);
+    
+    // Store violation for analysis
+    this.violations.push({
+      ...report,
+      timestamp: Date.now(),
+      severity: validation.severity,
+      action: validation.action
+    } as any);
+
+    // Maintain violation log size
+    if (this.violations.length > this.MAX_VIOLATIONS) {
+      this.violations = this.violations.slice(-this.MAX_VIOLATIONS / 2);
+    }
+
+    // Take action based on severity
+    switch (validation.action) {
+      case 'block':
+        this.alertSecurityTeam(report, validation);
+        this.blockRequestSource(report['blocked-uri']);
+        break;
+      
+      case 'alert':
+        this.alertSecurityTeam(report, validation);
+        break;
+      
+      case 'log':
+        console.warn('CSP Violation:', {
+          directive: report['violated-directive'],
+          blockedUri: report['blocked-uri'],
+          sourceFile: report['source-file'],
+          reason: validation.reason
+        });
+        break;
+    }
+  }
+
+  private alertSecurityTeam(report: CSPViolationReport, validation: any): void {
+    console.error('SECURITY ALERT - CSP Violation:', {
+      severity: validation.severity,
+      violatedDirective: report['violated-directive'],
+      blockedUri: report['blocked-uri'],
+      sourceFile: report['source-file'],
+      documentUri: report['document-uri'],
+      reason: validation.reason,
+      timestamp: new Date().toISOString()
+    });
+
+    // In production, this would:
+    // 1. Send alert to security monitoring system
+    // 2. Create incident ticket for investigation
+    // 3. Potentially block the IP/user temporarily
+    // 4. Update WAF rules if needed
+  }
+
+  private blockRequestSource(blockedUri: string): void {
+    // Implementation would add the source to a block list
+    console.error(`Blocking request source: ${blockedUri}`);
+  }
+
+  public getViolationStats(): {
+    totalViolations: number;
+    violationsByDirective: Record<string, number>;
+    topBlockedURIs: Array<{ uri: string; count: number }>;
+    severityBreakdown: Record<string, number>;
+  } {
+    const violationsByDirective = this.violations.reduce((breakdown, violation) => {
+      const directive = violation['violated-directive'];
+      breakdown[directive] = (breakdown[directive] || 0) + 1;
+      return breakdown;
+    }, {} as Record<string, number>);
+
+    const uriCounts = this.violations.reduce((counts, violation) => {
+      const uri = violation['blocked-uri'];
+      counts[uri] = (counts[uri] || 0) + 1;
+      return counts;
+    }, {} as Record<string, number>);
+
+    const topBlockedURIs = Object.entries(uriCounts)
+      .map(([uri, count]) => ({ uri, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const severityBreakdown = this.violations.reduce((breakdown, violation) => {
+      const severity = (violation as any).severity || 'unknown';
+      breakdown[severity] = (breakdown[severity] || 0) + 1;
+      return breakdown;
+    }, {} as Record<string, number>);
+
+    return {
+      totalViolations: this.violations.length,
+      violationsByDirective,
+      topBlockedURIs,
+      severityBreakdown
+    };
+  }
+
+  public generateCSPReport(): string {
+    const stats = this.getViolationStats();
+    
+    return `
+# CSP Violation Report
+
+## Summary
+- Total Violations: ${stats.totalViolations}
+- Most Violated Directive: ${Object.entries(stats.violationsByDirective)
+      .sort(([,a], [,b]) => b - a)[0]?.[0] || 'None'}
+
+## Top Blocked URIs
+${stats.topBlockedURIs.map(({ uri, count }) => `- ${uri}: ${count} violations`).join('\n')}
+
+## Severity Breakdown
+${Object.entries(stats.severityBreakdown)
+  .map(([severity, count]) => `- ${severity}: ${count}`)
+  .join('\n')}
+
+## Recommendations
+${this.generateRecommendations(stats)}
+`;
+  }
+
+  private generateRecommendations(stats: any): string {
+    const recommendations = [];
+
+    if (stats.violationsByDirective['script-src'] > 10) {
+      recommendations.push('- Consider tightening script-src policy');
+    }
+
+    if (stats.violationsByDirective['style-src'] > 20) {
+      recommendations.push('- Review inline styles and consider using nonce-based CSP');
+    }
+
+    if (stats.severityBreakdown.critical > 0) {
+      recommendations.push('- URGENT: Investigate critical violations immediately');
+    }
+
+    return recommendations.length > 0 
+      ? recommendations.join('\n') 
+      : '- No specific recommendations at this time';
+  }
+}
+
+// API route for receiving CSP violation reports
+// pages/api/csp-report.ts
+export default function handler(req: any, res: any) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  try {
+    const report = req.body;
+    const handler = new CSPViolationHandler();
+    
+    handler.handleViolation(report);
+    
+    res.status(204).end();
+  } catch (error) {
+    console.error('Error processing CSP violation report:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+```
+
+### 6. Security Header Testing
+```typescript
+export class SecurityHeaderTester {
+  public async testHeaders(url: string): Promise<{
+    score: number;
+    passed: string[];
+    failed: string[];
+    warnings: string[];
+    recommendations: string[];
+  }> {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      const headers = Object.fromEntries(response.headers.entries());
+      
+      const securityManager = new SecurityHeaderManager();
+      const validation = securityManager.validateSecurityHeaders(headers);
+      
+      const tests = [
+        {
+          name: 'CSP Present',
+          check: () => !!headers['content-security-policy'],
+          critical: true
+        },
+        {
+          name: 'HSTS Enabled',
+          check: () => !!headers['strict-transport-security'],
+          critical: true
+        },
+        {
+          name: 'X-Frame-Options Set',
+          check: () => !!headers['x-frame-options'],
+          critical: false
+        },
+        {
+          name: 'X-Content-Type-Options Set',
+          check: () => headers['x-content-type-options'] === 'nosniff',
+          critical: false
+        },
+        {
+          name: 'Referrer Policy Set',
+          check: () => !!headers['referrer-policy'],
+          critical: false
+        },
+        {
+          name: 'Permissions Policy Set',
+          check: () => !!headers['permissions-policy'],
+          critical: false
+        },
+        {
+          name: 'No Server Header',
+          check: () => !headers['server'],
+          critical: false
+        },
+        {
+          name: 'No X-Powered-By Header',
+          check: () => !headers['x-powered-by'],
+          critical: false
+        }
+      ];
+
+      const passed = tests.filter(test => test.check()).map(test => test.name);
+      const failed = tests.filter(test => !test.check()).map(test => test.name);
+      const criticalFailed = tests.filter(test => !test.check() && test.critical);
+
+      const recommendations = [
+        ...validation.weakHeaders.map(weak => `${weak.header}: ${weak.recommendation}`),
+        ...validation.missingHeaders.map(missing => `Add ${missing} header`)
+      ];
+
+      const warnings = criticalFailed.length > 0 
+        ? [`Critical security headers missing: ${criticalFailed.map(t => t.name).join(', ')}`]
+        : [];
+
+      return {
+        score: validation.score,
+        passed,
+        failed,
+        warnings,
+        recommendations
+      };
+
+    } catch (error) {
+      console.error('Error testing security headers:', error);
+      return {
+        score: 0,
+        passed: [],
+        failed: ['Network Error'],
+        warnings: ['Unable to test security headers'],
+        recommendations: ['Fix network connectivity and retry']
+      };
+    }
+  }
+}
+```

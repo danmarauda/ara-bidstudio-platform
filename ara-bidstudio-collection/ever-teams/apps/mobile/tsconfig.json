@@ -1,0 +1,26 @@
+{
+	"compilerOptions": {
+		"allowJs": false,
+		"allowSyntheticDefaultImports": true,
+		"experimentalDecorators": true,
+		"jsx": "react-native",
+		"module": "es2015",
+		"moduleResolution": "bundler",
+		"noImplicitAny": false,
+		"noImplicitReturns": false,
+		"noImplicitThis": true,
+		"noUnusedLocals": false,
+		"sourceMap": true,
+		"target": "esnext",
+		"lib": ["esnext", "dom"],
+		"skipLibCheck": true,
+		"resolveJsonModule": true,
+		"types": ["@hapi/shot", "jest"],
+		"paths": {
+			"@env": ["./node_modules/react-native-dotenv"]
+		}
+	},
+	"exclude": ["node_modules"],
+	"include": ["index.js", "App.js", "app", "assets", "test", "*.js", "*.ts", "app.config.ts"],
+	"extends": "expo/tsconfig.base"
+}

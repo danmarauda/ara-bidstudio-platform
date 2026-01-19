@@ -1,0 +1,298 @@
+---
+category: web3
+subcategory: authentication
+tags: [wallet, auth, solana, siwe, phantom]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../security/authentication.mdc"]
+  exports: ["wallet-patterns", "auth-flows"]
+  references: ["../frontend/wallet-integration.mdc"]
+---
+
+# Wallet Authentication Patterns
+
+## Authentication Flow
+
+### 1. Wallet Connection
+```typescript
+import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+
+export function WalletAuth() {
+  const wallet = useAnchorWallet();
+  const { connection } = useConnection();
+  
+  // Use useAnchorWallet instead of useWallet for Anchor compatibility
+  // Some wallets don't support signing transactions
+  
+  if (!wallet) {
+    return <WalletMultiButton />;
+  }
+  
+  return <AuthenticatedApp wallet={wallet} />;
+}
+```
+
+### 2. Message Signing (SIWE Pattern)
+```typescript
+import { SigninMessage } from '@solana/wallet-adapter-base';
+import bs58 from 'bs58';
+
+export async function authenticateWallet(wallet: AnchorWallet) {
+  const domain = window.location.host;
+  const origin = window.location.origin;
+  const statement = 'Sign in to abubis.chat';
+  
+  // Create SIWE-compatible message
+  const message = new SigninMessage({
+    domain,
+    publicKey: wallet.publicKey,
+    statement,
+    uri: origin,
+    version: '1',
+    chainId: 1, // Solana mainnet
+    nonce: generateSecureNonce(),
+    issuedAt: new Date().toISOString(),
+    expirationTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+  });
+  
+  const messageBytes = message.prepare();
+  const signature = await wallet.signMessage(messageBytes);
+  
+  return {
+    message: bs58.encode(messageBytes),
+    signature: bs58.encode(signature),
+    publicKey: wallet.publicKey.toString()
+  };
+}
+```
+
+### 3. Server-Side Verification
+```typescript
+import { PublicKey } from '@solana/web3.js';
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
+
+export function verifyWalletSignature(
+  message: string,
+  signature: string,
+  publicKey: string
+): boolean {
+  try {
+    const messageBytes = bs58.decode(message);
+    const signatureBytes = bs58.decode(signature);
+    const publicKeyBytes = new PublicKey(publicKey).toBytes();
+    
+    return nacl.sign.detached.verify(
+      messageBytes,
+      signatureBytes,
+      publicKeyBytes
+    );
+  } catch (error) {
+    console.error('Signature verification failed:', error);
+    return false;
+  }
+}
+```
+
+## Security Best Practices
+
+### 1. Nonce Generation
+```typescript
+import { randomBytes } from 'crypto';
+
+function generateSecureNonce(): string {
+  // Generate cryptographically secure random nonce
+  return bs58.encode(randomBytes(32));
+}
+
+// Store nonce server-side with expiration
+const nonces = new Map<string, { nonce: string; expires: number }>();
+
+export function createNonce(publicKey: string): string {
+  const nonce = generateSecureNonce();
+  const expires = Date.now() + 5 * 60 * 1000; // 5 minutes
+  
+  nonces.set(publicKey, { nonce, expires });
+  
+  // Cleanup expired nonces
+  setTimeout(() => {
+    const stored = nonces.get(publicKey);
+    if (stored && stored.expires <= Date.now()) {
+      nonces.delete(publicKey);
+    }
+  }, 5 * 60 * 1000);
+  
+  return nonce;
+}
+```
+
+### 2. Session Management
+```typescript
+interface WalletSession {
+  publicKey: string;
+  issuedAt: number;
+  expiresAt: number;
+  nonce: string;
+}
+
+export function createWalletSession(publicKey: string): string {
+  const session: WalletSession = {
+    publicKey,
+    issuedAt: Date.now(),
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+    nonce: generateSecureNonce()
+  };
+  
+  // Store session (use secure HTTP-only cookie or JWT)
+  const token = jwt.sign(session, process.env.JWT_SECRET!, {
+    algorithm: 'HS256',
+    expiresIn: '24h'
+  });
+  
+  return token;
+}
+```
+
+### 3. Wallet Connection Security
+```typescript
+import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import {
+  PhantomWalletAdapter,
+  BackpackWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
+
+export function WalletConnectionProvider({ children }: { children: React.ReactNode }) {
+  const network = WalletAdapterNetwork.Mainnet;
+  const endpoint = process.env.NEXT_PUBLIC_HELIUS_RPC_URL!;
+  
+  const wallets = useMemo(() => [
+    new PhantomWalletAdapter(),
+    new BackpackWalletAdapter(),
+  ], [network]);
+  
+  return (
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider 
+        wallets={wallets} 
+        autoConnect={true}
+        onError={(error) => {
+          // Log wallet connection errors securely
+          console.error('Wallet connection error:', error.message);
+          // Don't expose internal error details to user
+        }}
+      >
+        <WalletModalProvider>
+          {children}
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
+  );
+}
+```
+
+## Error Handling
+
+### 1. Wallet Detection
+```typescript
+export function useWalletStatus() {
+  const { wallet, connected, connecting, disconnecting } = useWallet();
+  const [walletReady, setWalletReady] = useState(false);
+  
+  useEffect(() => {
+    setWalletReady(!!(wallet && wallet.readyState === WalletReadyState.Installed));
+  }, [wallet]);
+  
+  const connectWallet = useCallback(async () => {
+    try {
+      if (!walletReady) {
+        throw new Error('Wallet not installed');
+      }
+      
+      await wallet?.adapter.connect();
+    } catch (error) {
+      if (error instanceof WalletConnectionError) {
+        // Handle connection-specific errors
+        console.error('Failed to connect wallet:', error.message);
+      } else {
+        // Handle other errors
+        console.error('Unexpected wallet error:', error);
+      }
+    }
+  }, [wallet, walletReady]);
+  
+  return {
+    connected,
+    connecting,
+    disconnecting,
+    walletReady,
+    connectWallet
+  };
+}
+```
+
+### 2. Network Validation
+```typescript
+export function validateNetworkConnection(connection: Connection): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(false), 5000);
+    
+    connection.getLatestBlockhash()
+      .then(() => {
+        clearTimeout(timeout);
+        resolve(true);
+      })
+      .catch(() => {
+        clearTimeout(timeout);
+        resolve(false);
+      });
+  });
+}
+```
+
+## Rate Limiting
+
+### Wallet-Based Rate Limiting
+```typescript
+interface WalletRateLimit {
+  publicKey: string;
+  requestCount: number;
+  windowStart: number;
+  blocked: boolean;
+}
+
+const rateLimits = new Map<string, WalletRateLimit>();
+
+export function checkWalletRateLimit(
+  publicKey: string, 
+  maxRequests = 100, 
+  windowMs = 60000
+): boolean {
+  const now = Date.now();
+  const limit = rateLimits.get(publicKey);
+  
+  if (!limit || now - limit.windowStart > windowMs) {
+    rateLimits.set(publicKey, {
+      publicKey,
+      requestCount: 1,
+      windowStart: now,
+      blocked: false
+    });
+    return true;
+  }
+  
+  if (limit.requestCount >= maxRequests) {
+    limit.blocked = true;
+    return false;
+  }
+  
+  limit.requestCount++;
+  return true;
+}
+```

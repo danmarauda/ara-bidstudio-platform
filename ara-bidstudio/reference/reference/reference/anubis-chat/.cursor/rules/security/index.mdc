@@ -1,0 +1,213 @@
+---
+category: security
+subcategory: overview
+tags: [security, web3, wallet-auth, data-isolation]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["auto"]
+relations:
+  imports: ["../web3/wallet-auth.mdc"]
+  exports: ["security-patterns", "auth-flows"]
+  references: ["../backend/database-schema.mdc"]
+---
+
+# Security Overview - abubis.chat
+
+## Security Philosophy
+
+abubis.chat employs a **wallet-native security model** where the Solana wallet serves as the primary identity and authentication mechanism. This eliminates traditional password-based vulnerabilities while introducing Web3-specific security considerations.
+
+## Core Security Principles
+
+### 1. Defense in Depth
+Multiple layers of security controls:
+- **Wallet Authentication**: Cryptographic signature verification
+- **Data Isolation**: Per-wallet data segregation
+- **Rate Limiting**: Wallet-based usage controls
+- **Network Security**: CSP headers, HTTPS enforcement
+- **Smart Contract Security**: Anchor program audits
+
+### 2. Zero Trust Architecture
+- Verify every wallet signature
+- Validate all on-chain data
+- Assume compromised environments
+- Implement least privilege access
+
+### 3. Privacy by Design
+- No PII collection beyond wallet addresses
+- Wallet-keyed data encryption
+- Memory isolation per user
+- Audit trails without exposing user data
+
+## Threat Model
+
+### 1. Authentication Threats
+- **Wallet Compromise**: Private key theft or loss
+- **Signature Replay**: Malicious reuse of valid signatures
+- **Man-in-the-Middle**: Intercepted wallet connections
+- **Social Engineering**: Phishing for wallet access
+
+**Mitigations**:
+- Time-bounded authentication messages
+- Nonce-based signature verification
+- HTTPS enforcement with HSTS
+- User education and wallet best practices
+
+### 2. Data Security Threats
+- **Cross-User Data Leakage**: Accessing other users' data
+- **Memory Poisoning**: RAG data contamination
+- **Subscription Bypass**: Free usage of paid features
+- **Conversation Theft**: Unauthorized access to chat history
+
+**Mitigations**:
+- Wallet-based data isolation
+- Vector store access controls
+- On-chain subscription verification
+- End-to-end encryption for sensitive data
+
+### 3. Smart Contract Threats
+- **Reentrancy Attacks**: Malicious contract calls
+- **Integer Overflow/Underflow**: Arithmetic vulnerabilities
+- **Access Control Bypass**: Unauthorized program access
+- **Fund Draining**: SOL theft from treasury
+
+**Mitigations**:
+- Anchor framework safeguards
+- Comprehensive program testing
+- Multi-signature treasury controls
+- Regular security audits
+
+### 4. Infrastructure Threats
+- **DDoS Attacks**: Service availability disruption
+- **RPC Manipulation**: Malicious RPC responses
+- **Supply Chain**: Compromised dependencies
+- **Insider Threats**: Privileged access abuse
+
+**Mitigations**:
+- Multi-provider RPC fallbacks
+- Dependency scanning and pinning
+- Principle of least privilege
+- Audit logging and monitoring
+
+## Security Architecture
+
+### 1. Authentication Layer
+```
+Wallet Connection → Message Signing → Server Verification → Session Creation
+```
+
+### 2. Authorization Layer
+```
+Session Token → Wallet Verification → Resource Access Control → Action Logging
+```
+
+### 3. Data Layer
+```
+User Data → Wallet-Key Encryption → Isolated Storage → Access Auditing
+```
+
+### 4. Network Layer
+```
+HTTPS/WSS → CSP Headers → Rate Limiting → DDoS Protection
+```
+
+## Implementation Files
+
+```
+security/
+├── authentication.mdc      # Wallet-based auth security patterns
+├── data-isolation.mdc      # Per-wallet data isolation strategies
+├── rate-limiting.mdc       # Wallet-based rate limiting implementation
+├── csp-headers.mdc        # Content Security Policy configuration
+├── audit-checklist.mdc    # Comprehensive security audit requirements
+└── index.mdc             # This overview file
+```
+
+## Security Metrics
+
+### 1. Authentication Security
+- **Signature Verification Rate**: >99.9%
+- **Failed Authentication Attempts**: <0.1% of total
+- **Session Hijacking Incidents**: 0 per month
+- **Wallet Connection Success Rate**: >95%
+
+### 2. Data Protection
+- **Cross-User Data Leakage**: 0 incidents per month
+- **Data Encryption Coverage**: 100% of sensitive data
+- **Access Control Violations**: <5 per month (automated blocks)
+- **Data Retention Compliance**: 100%
+
+### 3. Infrastructure Security
+- **Uptime with Security Controls**: >99.5%
+- **DDoS Attack Mitigation**: <30 second response time
+- **Security Patch Application**: Within 24 hours
+- **Vulnerability Scan Results**: 0 critical, <5 medium
+
+## Incident Response Plan
+
+### 1. Security Incident Classification
+- **P0 - Critical**: Wallet compromise, fund theft, data breach
+- **P1 - High**: Authentication bypass, subscription fraud
+- **P2 - Medium**: Rate limit bypass, minor data exposure
+- **P3 - Low**: Configuration issues, non-critical vulnerabilities
+
+### 2. Response Procedures
+1. **Detection**: Automated monitoring and manual reporting
+2. **Assessment**: Impact analysis and threat classification
+3. **Containment**: Immediate threat mitigation
+4. **Investigation**: Root cause analysis and evidence collection
+5. **Recovery**: Service restoration and security hardening
+6. **Documentation**: Incident report and lessons learned
+
+### 3. Communication Protocol
+- **Internal**: Immediate team notification via Slack/Discord
+- **Users**: Status page updates for service impacts
+- **Regulatory**: Compliance notifications if required
+- **Public**: Transparent security advisories when appropriate
+
+## Compliance Requirements
+
+### 1. Data Protection
+- **GDPR**: Right to deletion, data portability
+- **CCPA**: Consumer privacy rights
+- **SOC 2**: Security controls and auditing
+
+### 2. Financial Services
+- **AML**: Anti-money laundering monitoring
+- **KYT**: Know Your Transaction tracking
+- **PCI DSS**: Payment card industry standards (future)
+
+### 3. Blockchain Specific
+- **Cryptocurrency Regulations**: Per jurisdiction compliance
+- **DeFi Protocols**: Decentralized finance best practices
+- **Smart Contract Auditing**: Third-party security reviews
+
+## Security Training
+
+### 1. Developer Security Education
+- **Secure Coding**: OWASP guidelines and Web3 patterns
+- **Vulnerability Assessment**: Common attack vectors
+- **Incident Response**: Security incident procedures
+- **Compliance**: Regulatory requirements and updates
+
+### 2. User Security Education
+- **Wallet Security**: Best practices for private key management
+- **Phishing Prevention**: Identifying malicious websites/emails
+- **Transaction Verification**: Confirming legitimate transactions
+- **Recovery Procedures**: Account recovery and backup strategies
+
+## Regular Security Activities
+
+### 1. Automated Security
+- **Daily**: Vulnerability scans and dependency checks
+- **Weekly**: Access control audits and log analysis
+- **Monthly**: Security metrics review and reporting
+- **Quarterly**: Penetration testing and security assessments
+
+### 2. Manual Security Reviews
+- **Code Reviews**: Security-focused peer reviews
+- **Architecture Reviews**: Security design validation
+- **Incident Analysis**: Post-mortem security improvements
+- **Compliance Audits**: Regulatory requirement verification

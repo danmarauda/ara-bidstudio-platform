@@ -1,0 +1,21 @@
+{
+  "name": "gh-issue-triage",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "test:run": "npx tsx --env-file=.env index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "description": "",
+  "dependencies": {
+    "@mastra/client-js": "^0.12.3",
+    "@mastra/mcp": "^0.12.0",
+    "octokit": "^5.0.3"
+  },
+  "devDependencies": {
+    "dotenv": "^17.0.0"
+  }
+}

@@ -1,0 +1,373 @@
+---
+category: ai-rag
+subcategory: streaming
+tags: [streaming, responses, vercel-ai-sdk, real-time]
+cursor:
+  context_window: 16384
+  temperature: 0.3
+  max_tokens: 8192
+  model_preference: ["auto"]
+relations:
+  imports: ["./ai-models.mdc"]
+  exports: ["streaming-patterns", "backpressure-handling"]
+  references: ["../backend/websockets.mdc", "./memory-management.mdc"]
+---
+
+# Streaming Response Patterns (Vercel AI SDK v5.2)
+
+## Core Streaming Architecture
+
+### Stream Protocol Pattern
+The Vercel AI SDK v5.2 uses a start/delta/end pattern with unique IDs for each content block:
+
+```typescript
+import { streamText } from 'ai';
+import { models } from './ai-models.mdc';
+
+export async function createStreamingResponse(prompt: string) {
+  const result = await streamText({
+    model: models.claude,
+    prompt,
+    temperature: 0.4,
+    maxTokens: 8192,
+  });
+
+  return result.toAIStreamResponse();
+}
+```
+
+### Message Parts for Multi-Modal Responses
+Handle different content types in streaming responses:
+
+```typescript
+import { useChat } from 'ai/react';
+
+export function StreamingChat() {
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+    api: '/api/chat',
+    // Handle different message parts
+    onFinish: (message) => {
+      message.content.forEach(part => {
+        switch (part.type) {
+          case 'text':
+            console.log('Text:', part.text);
+            break;
+          case 'tool-call':
+            console.log('Tool call:', part.toolName, part.args);
+            break;
+          case 'reasoning':
+            console.log('Reasoning:', part.content);
+            break;
+        }
+      });
+    }
+  });
+
+  return (
+    <div>
+      {messages.map(message => (
+        <div key={message.id}>
+          {message.content.map((part, index) => {
+            if (part.type === 'text') {
+              return <p key={index}>{part.text}</p>;
+            }
+            // Handle other part types
+          })}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? 'Thinking...' : 'Send'}
+        </button>
+      </form>
+    </div>
+  );
+}
+```
+
+## Advanced Streaming Patterns
+
+### Modular Transport Pattern
+Custom transport for WebSocket streaming:
+
+```typescript
+import { useChat } from 'ai/react';
+
+function createWebSocketTransport(url: string) {
+  return async ({ messages, data }) => {
+    const ws = new WebSocket(url);
+    
+    return new ReadableStream({
+      start(controller) {
+        ws.onmessage = (event) => {
+          const chunk = JSON.parse(event.data);
+          controller.enqueue(chunk);
+        };
+        
+        ws.onclose = () => controller.close();
+        ws.onerror = (error) => controller.error(error);
+        
+        // Send initial message
+        ws.send(JSON.stringify({ messages, data }));
+      },
+      cancel() {
+        ws.close();
+      }
+    });
+  };
+}
+
+export function WebSocketChat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    fetch: createWebSocketTransport('wss://api.abubis.chat/stream')
+  });
+}
+```
+
+### Backpressure Management
+Handle flow control to prevent resource overload:
+
+```typescript
+class StreamingManager {
+  private bufferSize = 1024;
+  private currentBuffer = 0;
+
+  async handleStream(stream: ReadableStream) {
+    const reader = stream.getReader();
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) break;
+      
+      // Check backpressure
+      if (this.currentBuffer > this.bufferSize) {
+        await this.waitForDrain();
+      }
+      
+      await this.processChunk(value);
+      this.currentBuffer += value.length;
+    }
+  }
+  
+  private async waitForDrain() {
+    return new Promise(resolve => {
+      const check = () => {
+        if (this.currentBuffer < this.bufferSize * 0.5) {
+          resolve(void 0);
+        } else {
+          setTimeout(check, 10);
+        }
+      };
+      check();
+    });
+  }
+}
+```
+
+## Tool Calling with Streaming
+
+### Streaming Tool Execution
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const searchTool = tool({
+  description: 'Search the knowledge base',
+  parameters: z.object({
+    query: z.string().describe('Search query'),
+  }),
+  execute: async ({ query }) => {
+    // Perform vector search
+    return await vectorSearch(query);
+  },
+});
+
+export async function streamWithTools(prompt: string) {
+  const result = await streamText({
+    model: models.claude,
+    prompt,
+    tools: { search: searchTool },
+    toolChoice: 'auto',
+  });
+
+  // Stream includes tool calls and results
+  for await (const chunk of result.textStream) {
+    console.log(chunk);
+  }
+  
+  return result.toAIStreamResponse();
+}
+```
+
+### Multi-Turn Tool Execution
+```typescript
+export async function handleToolConversation() {
+  const conversation = [];
+  
+  while (true) {
+    const result = await streamText({
+      model: models.claude,
+      messages: conversation,
+      tools: { search: searchTool },
+    });
+    
+    // Collect all tool calls in this turn
+    const toolCalls = [];
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call') {
+        toolCalls.push(chunk);
+      }
+    }
+    
+    if (toolCalls.length === 0) break;
+    
+    // Execute tools and continue conversation
+    for (const toolCall of toolCalls) {
+      const toolResult = await toolCall.execute();
+      conversation.push({
+        role: 'tool',
+        content: [{ type: 'tool-result', ...toolResult }]
+      });
+    }
+  }
+}
+```
+
+## Performance Optimization
+
+### Chunking Strategy
+```typescript
+export const STREAMING_CONFIG = {
+  chunkSize: 256,  // Optimal for real-time feel
+  bufferTimeout: 50, // ms to wait before sending partial chunks
+  maxConcurrentStreams: 10,
+  
+  // Adaptive chunking based on connection speed
+  adaptiveChunking: true,
+  slowConnection: { chunkSize: 128, bufferTimeout: 100 },
+  fastConnection: { chunkSize: 512, bufferTimeout: 25 }
+};
+
+class AdaptiveStreaming {
+  getChunkConfig(connectionSpeed: 'slow' | 'medium' | 'fast') {
+    switch (connectionSpeed) {
+      case 'slow': return STREAMING_CONFIG.slowConnection;
+      case 'fast': return STREAMING_CONFIG.fastConnection;
+      default: return STREAMING_CONFIG;
+    }
+  }
+}
+```
+
+### Connection Quality Detection
+```typescript
+export function detectConnectionSpeed(): Promise<'slow' | 'medium' | 'fast'> {
+  return new Promise((resolve) => {
+    const startTime = performance.now();
+    const image = new Image();
+    
+    image.onload = () => {
+      const duration = performance.now() - startTime;
+      if (duration < 500) resolve('fast');
+      else if (duration < 1500) resolve('medium');
+      else resolve('slow');
+    };
+    
+    image.src = '/api/speed-test.png?' + Math.random();
+  });
+}
+```
+
+## Error Handling & Recovery
+
+### Stream Error Recovery
+```typescript
+export function createResilientStream(url: string, maxRetries = 3) {
+  let retryCount = 0;
+  
+  const attemptConnection = (): ReadableStream => {
+    return new ReadableStream({
+      start(controller) {
+        const eventSource = new EventSource(url);
+        
+        eventSource.onmessage = (event) => {
+          controller.enqueue(event.data);
+          retryCount = 0; // Reset on successful message
+        };
+        
+        eventSource.onerror = () => {
+          if (retryCount < maxRetries) {
+            retryCount++;
+            setTimeout(() => {
+              eventSource.close();
+              const newStream = attemptConnection();
+              // Reconnect logic here
+            }, Math.pow(2, retryCount) * 1000);
+          } else {
+            controller.error(new Error('Max retries exceeded'));
+          }
+        };
+      }
+    });
+  };
+  
+  return attemptConnection();
+}
+```
+
+## Testing Streaming Responses
+
+### Unit Tests for Streaming
+```typescript
+describe('Streaming Responses', () => {
+  it('should handle partial chunks correctly', async () => {
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue('Hello ');
+        controller.enqueue('world!');
+        controller.close();
+      }
+    });
+    
+    const chunks = [];
+    const reader = mockStream.getReader();
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    
+    expect(chunks).toEqual(['Hello ', 'world!']);
+  });
+});
+```
+
+### Integration Tests
+```typescript
+describe('Streaming API', () => {
+  it('should stream complete responses', async () => {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ prompt: 'Hello' })
+    });
+    
+    expect(response.headers.get('content-type'))
+      .toContain('text/stream');
+    
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    let result = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      result += decoder.decode(value, { stream: true });
+    }
+    
+    expect(result).toContain('Hello');
+  });
+});
+```

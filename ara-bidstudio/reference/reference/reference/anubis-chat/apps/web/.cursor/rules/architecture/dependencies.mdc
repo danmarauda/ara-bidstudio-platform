@@ -1,0 +1,1184 @@
+---
+category: architecture
+subcategory: dependencies
+tags: [dependencies, package-management, version-control, security, monorepo]
+cursor:
+  context_window: 8192
+  temperature: 0.7
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../infrastructure/security.mdc", "../tooling/package-management.mdc"]
+  exports: ["dependency-strategies", "version-policies", "security-scanning"]
+  references: ["system-design.mdc", "performance.mdc"]
+---
+
+# Dependency Management Architecture for abubis.chat
+
+## Dependency Philosophy
+
+::alert{type="success"}
+**Core Principle**: Minimal, secure, and well-maintained dependencies with automated vulnerability scanning and proactive updates.
+::
+
+### Dependency Strategy (2025)
+
+::card{title="Selection Criteria"}
+- **Maintenance**: Active development, regular updates, responsive maintainers
+- **Security**: No known vulnerabilities, security-focused development practices  
+- **Performance**: Minimal bundle impact, tree-shaking support, efficient runtime
+- **Compatibility**: TypeScript support, ESM modules, Node.js LTS compatibility
+- **Community**: Strong community, extensive documentation, proven production use
+::
+
+## Package Management Strategy
+
+### 1. Bun as Primary Package Manager
+
+::tabs
+::div{label="Configuration"}
+```toml
+# bunfig.toml
+[install]
+# Security and performance settings
+optional = false
+peer = true
+production = false
+frozenLockfile = true
+dryRun = false
+
+# Registry settings
+registry = "https://registry.npmjs.org"
+scopes = {}
+
+[install.cache]
+# Cache optimization
+dir = "~/.bun/install/cache"
+disable = false
+disableManifest = false
+
+# Security scanning
+[install.security]
+audit = true
+auditLevel = "moderate"
+
+# Workspace configuration for monorepo
+[workspaces]
+# Define workspace patterns
+packages = [
+  "apps/*",
+  "packages/*",
+  "tools/*"
+]
+```
+
+```json
+// package.json (root)
+{
+  "name": "anubis-chat",
+  "private": true,
+  "workspaces": [
+    "apps/*", 
+    "packages/*",
+    "tools/*"
+  ],
+  "packageManager": "bun@1.1.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "security-audit": "bun audit",
+    "deps-update": "bun update --latest",
+    "deps-check": "bun outdated",
+    "clean": "turbo clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "turbo": "^1.12.0",
+    "typescript": "^5.3.0"
+  }
+}
+```
+::
+
+::div{label="Monorepo Structure"}
+```typescript
+// Workspace dependency management
+export interface WorkspaceConfig {
+  name: string
+  dependencies: DependencyMap
+  devDependencies: DependencyMap
+  peerDependencies?: DependencyMap
+  bundledDependencies?: string[]
+}
+
+const workspaceConfigs: Record<string, WorkspaceConfig> = {
+  // Main web application
+  'apps/web': {
+    name: '@anubis-chat/web',
+    dependencies: {
+      // Next.js 15 and React 19
+      'next': '^15.0.0',
+      'react': '^19.0.0',
+      'react-dom': '^19.0.0',
+      
+      // Convex for real-time database
+      'convex': '^1.7.0',
+      
+      // Vercel AI SDK for AI integration
+      'ai': '^5.2.0',
+      
+      // Solana integration
+      '@solana/web3.js': '^1.87.0',
+      '@coral-xyz/anchor': '^0.29.0',
+      '@solana/wallet-adapter-react': '^0.15.35',
+      
+      // UI and styling
+      'tailwindcss': '^3.4.0',
+      '@radix-ui/react-primitives': '^1.0.0',
+      'lucide-react': '^0.321.0',
+      
+      // State management
+      'zustand': '^4.4.7',
+      
+      // Form handling
+      'react-hook-form': '^7.48.2',
+      '@hookform/resolvers': '^3.3.2',
+      
+      // Validation
+      'zod': '^3.22.4',
+      
+      // Utilities
+      'clsx': '^2.0.0',
+      'date-fns': '^3.0.6'
+    },
+    devDependencies: {
+      '@types/react': '^18.2.45',
+      '@types/react-dom': '^18.2.18',
+      'eslint-config-next': '^15.0.0',
+      'postcss': '^8.4.32',
+      'autoprefixer': '^10.4.16'
+    }
+  },
+  
+  // Documentation site
+  'apps/fumadocs': {
+    name: '@anubis-chat/docs',
+    dependencies: {
+      'next': '^15.0.0',
+      'react': '^19.0.0',
+      'react-dom': '^19.0.0',
+      'fumadocs-core': '^13.0.0',
+      'fumadocs-ui': '^13.0.0',
+      'fumadocs-mdx': '^10.0.0'
+    },
+    devDependencies: {
+      '@types/react': '^18.2.45',
+      '@types/react-dom': '^18.2.18'
+    }
+  },
+  
+  // Shared packages
+  'packages/ui': {
+    name: '@anubis-chat/ui',
+    dependencies: {
+      'react': '^19.0.0',
+      '@radix-ui/react-primitives': '^1.0.0',
+      'tailwindcss': '^3.4.0',
+      'class-variance-authority': '^0.7.0'
+    },
+    peerDependencies: {
+      'react': '^18.0.0 || ^19.0.0',
+      'react-dom': '^18.0.0 || ^19.0.0'
+    },
+    devDependencies: {
+      '@types/react': '^18.2.45',
+      'storybook': '^7.6.0'
+    }
+  },
+  
+  'packages/config': {
+    name: '@anubis-chat/config',
+    dependencies: {
+      'typescript': '^5.3.0',
+      'eslint': '^8.56.0',
+      'prettier': '^3.1.1'
+    },
+    devDependencies: {}
+  }
+}
+```
+::
+::
+
+### 2. Version Management Strategy
+
+::code-group
+```typescript [Semantic Versioning Policy]
+// Version pinning strategy
+export interface VersionPolicy {
+  production: 'exact' | 'patch' | 'minor' | 'latest'
+  development: 'exact' | 'patch' | 'minor' | 'latest'
+  security: 'immediate' | 'scheduled' | 'manual'
+  breaking: 'manual' | 'scheduled' | 'never'
+}
+
+const dependencyVersionPolicies: Record<string, VersionPolicy> = {
+  // Critical infrastructure - exact versions
+  'next': {
+    production: 'exact',
+    development: 'patch',
+    security: 'immediate',
+    breaking: 'manual'
+  },
+  
+  'react': {
+    production: 'exact',
+    development: 'patch', 
+    security: 'immediate',
+    breaking: 'manual'
+  },
+  
+  'convex': {
+    production: 'exact',
+    development: 'patch',
+    security: 'immediate', 
+    breaking: 'manual'
+  },
+  
+  // AI/ML packages - patch updates only
+  'ai': {
+    production: 'patch',
+    development: 'minor',
+    security: 'immediate',
+    breaking: 'scheduled'
+  },
+  
+  '@solana/web3.js': {
+    production: 'patch',
+    development: 'minor',
+    security: 'immediate',
+    breaking: 'scheduled'
+  },
+  
+  // UI libraries - minor updates allowed
+  'tailwindcss': {
+    production: 'minor',
+    development: 'minor',
+    security: 'immediate',
+    breaking: 'scheduled'
+  },
+  
+  '@radix-ui/react-primitives': {
+    production: 'minor',
+    development: 'minor',
+    security: 'immediate',
+    breaking: 'scheduled'
+  },
+  
+  // Utilities - latest (with caution)
+  'zod': {
+    production: 'minor',
+    development: 'latest',
+    security: 'immediate',
+    breaking: 'scheduled'
+  },
+  
+  'date-fns': {
+    production: 'minor', 
+    development: 'latest',
+    security: 'immediate',
+    breaking: 'scheduled'
+  },
+  
+  // Dev dependencies - latest
+  'eslint': {
+    production: 'minor',
+    development: 'latest',
+    security: 'immediate',
+    breaking: 'scheduled'
+  },
+  
+  'typescript': {
+    production: 'minor',
+    development: 'latest',
+    security: 'immediate',
+    breaking: 'manual'
+  }
+}
+```
+
+```typescript [Automated Update Pipeline]
+// Automated dependency updates with safety checks
+export interface UpdatePipeline {
+  schedule: string // cron expression
+  filters: UpdateFilter[]
+  validationSteps: ValidationStep[]
+  rollbackStrategy: RollbackStrategy
+}
+
+export interface UpdateFilter {
+  type: 'security' | 'patch' | 'minor' | 'major'
+  packages?: string[]
+  exclude?: string[]
+  maxVersionJump?: string
+}
+
+export interface ValidationStep {
+  name: string
+  command: string
+  timeout: number
+  required: boolean
+}
+
+const updatePipeline: UpdatePipeline = {
+  // Run every Sunday at 2 AM
+  schedule: '0 2 * * 0',
+  
+  filters: [
+    // Security updates - immediate
+    {
+      type: 'security',
+      packages: ['*'],
+      exclude: []
+    },
+    
+    // Patch updates - weekly
+    {
+      type: 'patch',
+      packages: ['*'],
+      exclude: ['next', 'react', 'convex']
+    },
+    
+    // Minor updates - monthly (selected packages)
+    {
+      type: 'minor',
+      packages: [
+        'tailwindcss',
+        '@radix-ui/*',
+        'zod',
+        'date-fns',
+        'eslint',
+        'prettier'
+      ]
+    }
+  ],
+  
+  validationSteps: [
+    {
+      name: 'Type Check',
+      command: 'bun run type-check',
+      timeout: 300000, // 5 minutes
+      required: true
+    },
+    {
+      name: 'Lint',
+      command: 'bun run lint',
+      timeout: 180000, // 3 minutes
+      required: true
+    },
+    {
+      name: 'Unit Tests',
+      command: 'bun test',
+      timeout: 600000, // 10 minutes
+      required: true
+    },
+    {
+      name: 'Build',
+      command: 'bun run build',
+      timeout: 900000, // 15 minutes
+      required: true
+    },
+    {
+      name: 'E2E Tests',
+      command: 'bun run test:e2e',
+      timeout: 1800000, // 30 minutes
+      required: false
+    }
+  ],
+  
+  rollbackStrategy: {
+    automatic: true,
+    conditions: ['test_failure', 'build_failure', 'type_error'],
+    preserveLogs: true
+  }
+}
+
+// Implementation
+export class DependencyUpdateService {
+  async runUpdatePipeline(): Promise<UpdateResult> {
+    const startTime = Date.now()
+    const results: UpdateResult = {
+      success: false,
+      updatedPackages: [],
+      failedPackages: [],
+      validationResults: [],
+      duration: 0
+    }
+    
+    try {
+      // 1. Check for available updates
+      const availableUpdates = await this.checkAvailableUpdates()
+      
+      // 2. Filter updates based on policy
+      const filteredUpdates = this.filterUpdates(
+        availableUpdates, 
+        updatePipeline.filters
+      )
+      
+      // 3. Apply updates
+      for (const update of filteredUpdates) {
+        try {
+          await this.applyUpdate(update)
+          results.updatedPackages.push(update)
+        } catch (error) {
+          results.failedPackages.push({ ...update, error: error.message })
+        }
+      }
+      
+      // 4. Run validation steps
+      for (const step of updatePipeline.validationSteps) {
+        const stepResult = await this.runValidationStep(step)
+        results.validationResults.push(stepResult)
+        
+        if (!stepResult.success && step.required) {
+          // Rollback if required step fails
+          await this.rollback(results.updatedPackages)
+          throw new Error(`Required validation step failed: ${step.name}`)
+        }
+      }
+      
+      results.success = true
+      
+    } catch (error) {
+      console.error('Update pipeline failed:', error)
+      results.success = false
+      results.error = error.message
+    } finally {
+      results.duration = Date.now() - startTime
+    }
+    
+    return results
+  }
+}
+```
+::
+
+## Security and Vulnerability Management
+
+### 1. Automated Security Scanning
+
+::code-group
+```typescript [Security Scanner Configuration]
+// Comprehensive security scanning pipeline
+export interface SecurityScanConfig {
+  schedule: string
+  scanners: Scanner[]
+  thresholds: SecurityThresholds
+  notifications: NotificationConfig
+}
+
+export interface Scanner {
+  name: string
+  type: 'vulnerability' | 'license' | 'malware' | 'supply-chain'
+  command: string
+  config: any
+}
+
+export interface SecurityThresholds {
+  critical: number // Max critical vulnerabilities allowed
+  high: number     // Max high vulnerabilities allowed
+  medium: number   // Max medium vulnerabilities allowed
+  low: number      // Max low vulnerabilities allowed
+}
+
+const securityScanConfig: SecurityScanConfig = {
+  // Scan daily at 1 AM
+  schedule: '0 1 * * *',
+  
+  scanners: [
+    // Bun's built-in audit
+    {
+      name: 'bun-audit',
+      type: 'vulnerability',
+      command: 'bun audit',
+      config: {
+        level: 'moderate',
+        production: true
+      }
+    },
+    
+    // Snyk for comprehensive scanning
+    {
+      name: 'snyk',
+      type: 'vulnerability',
+      command: 'snyk test',
+      config: {
+        severity: 'high',
+        failOn: 'upgradable'
+      }
+    },
+    
+    // License compliance
+    {
+      name: 'license-checker',
+      type: 'license',
+      command: 'license-checker --onlyAllow "MIT;Apache-2.0;BSD-3-Clause;ISC"',
+      config: {
+        allowedLicenses: [
+          'MIT',
+          'Apache-2.0', 
+          'BSD-3-Clause',
+          'ISC',
+          'BSD-2-Clause',
+          'CC0-1.0'
+        ],
+        excludePackages: []
+      }
+    },
+    
+    // Supply chain analysis
+    {
+      name: 'socket-security',
+      type: 'supply-chain',
+      command: 'socket-security scan',
+      config: {
+        checkMaintainers: true,
+        checkTyeposquatting: true,
+        checkMalware: true
+      }
+    }
+  ],
+  
+  thresholds: {
+    critical: 0,  // No critical vulnerabilities
+    high: 0,      // No high vulnerabilities
+    medium: 5,    // Max 5 medium vulnerabilities
+    low: 20       // Max 20 low vulnerabilities
+  },
+  
+  notifications: {
+    channels: ['slack', 'email'],
+    onSuccess: false,
+    onFailure: true,
+    onThresholdExceeded: true
+  }
+}
+```
+
+```typescript [Vulnerability Response Automation]
+// Automated vulnerability response system
+export class VulnerabilityManager {
+  async handleVulnerability(
+    vulnerability: Vulnerability
+  ): Promise<VulnerabilityResponse> {
+    const response: VulnerabilityResponse = {
+      vulnerability,
+      action: 'none',
+      reason: '',
+      patch: null,
+      timeline: null
+    }
+    
+    // Determine response based on severity and context
+    switch (vulnerability.severity) {
+      case 'critical':
+        response.action = 'immediate-patch'
+        response.timeline = new Date(Date.now() + 3600000) // 1 hour
+        response.reason = 'Critical vulnerability requires immediate attention'
+        break
+        
+      case 'high':
+        if (vulnerability.exploitable) {
+          response.action = 'urgent-patch'
+          response.timeline = new Date(Date.now() + 86400000) // 24 hours
+          response.reason = 'High exploitable vulnerability'
+        } else {
+          response.action = 'scheduled-patch'
+          response.timeline = new Date(Date.now() + 604800000) // 7 days
+          response.reason = 'High vulnerability, not immediately exploitable'
+        }
+        break
+        
+      case 'medium':
+        response.action = 'scheduled-patch'
+        response.timeline = new Date(Date.now() + 2592000000) // 30 days
+        response.reason = 'Medium vulnerability, scheduled for next maintenance'
+        break
+        
+      case 'low':
+        if (vulnerability.hasFixAvailable) {
+          response.action = 'next-update-cycle'
+          response.timeline = new Date(Date.now() + 7776000000) // 90 days
+          response.reason = 'Low vulnerability, include in routine updates'
+        } else {
+          response.action = 'monitor'
+          response.reason = 'Low vulnerability, no fix available - monitoring'
+        }
+        break
+    }
+    
+    // Create patch if action requires it
+    if (response.action.includes('patch')) {
+      response.patch = await this.createVulnerabilityPatch(vulnerability)
+    }
+    
+    // Send notifications
+    await this.notifyTeam(response)
+    
+    return response
+  }
+  
+  private async createVulnerabilityPatch(
+    vulnerability: Vulnerability
+  ): Promise<VulnerabilityPatch> {
+    const patch: VulnerabilityPatch = {
+      packageName: vulnerability.package,
+      currentVersion: vulnerability.currentVersion,
+      targetVersion: vulnerability.fixedVersion || 'latest',
+      patchType: this.determinePatchType(vulnerability),
+      testingRequired: vulnerability.severity === 'critical' || vulnerability.severity === 'high',
+      rollbackPlan: this.createRollbackPlan(vulnerability)
+    }
+    
+    return patch
+  }
+  
+  private determinePatchType(vulnerability: Vulnerability): PatchType {
+    if (vulnerability.fixedVersion) {
+      const currentMajor = semver.major(vulnerability.currentVersion)
+      const fixedMajor = semver.major(vulnerability.fixedVersion)
+      
+      if (currentMajor !== fixedMajor) {
+        return 'major-update'
+      } else if (semver.minor(vulnerability.currentVersion) !== 
+                 semver.minor(vulnerability.fixedVersion)) {
+        return 'minor-update'
+      } else {
+        return 'patch-update'
+      }
+    }
+    
+    return 'alternative-package'
+  }
+}
+```
+::
+
+### 2. License Compliance Management
+
+::code-group
+```typescript [License Policy]
+// License compliance configuration
+export interface LicensePolicy {
+  allowed: string[]
+  forbidden: string[]
+  requiresApproval: string[]
+  customRules: CustomLicenseRule[]
+}
+
+export interface CustomLicenseRule {
+  licensePattern: RegExp
+  packagePattern?: RegExp
+  action: 'allow' | 'forbid' | 'approve' | 'review'
+  reason: string
+}
+
+const licensePolicy: LicensePolicy = {
+  // Pre-approved open source licenses
+  allowed: [
+    'MIT',
+    'Apache-2.0',
+    'BSD-3-Clause',
+    'BSD-2-Clause',
+    'ISC',
+    'CC0-1.0',
+    'Unlicense',
+    'Python-2.0',
+    'Zlib'
+  ],
+  
+  // Forbidden licenses (copyleft, restrictive)
+  forbidden: [
+    'GPL-2.0',
+    'GPL-3.0',
+    'LGPL-2.1',
+    'LGPL-3.0',
+    'AGPL-1.0',
+    'AGPL-3.0',
+    'CC-BY-SA-4.0',
+    'SSPL-1.0'
+  ],
+  
+  // Requires legal team approval
+  requiresApproval: [
+    'MPL-2.0',
+    'EPL-1.0',
+    'EPL-2.0',
+    'CDDL-1.0',
+    'CPL-1.0',
+    'IPL-1.0'
+  ],
+  
+  // Custom rules for specific cases
+  customRules: [
+    {
+      licensePattern: /^Custom/i,
+      action: 'review',
+      reason: 'Custom licenses require manual review'
+    },
+    {
+      licensePattern: /unknown/i,
+      action: 'forbid',
+      reason: 'Unknown licenses are not permitted'
+    },
+    {
+      licensePattern: /proprietary/i,
+      packagePattern: /@anubis-chat\/.*/,
+      action: 'allow',
+      reason: 'Internal proprietary packages are allowed'
+    }
+  ]
+}
+
+export class LicenseComplianceChecker {
+  async checkCompliance(): Promise<ComplianceReport> {
+    const packages = await this.getAllPackages()
+    const report: ComplianceReport = {
+      compliant: true,
+      packages: [],
+      violations: [],
+      warnings: [],
+      summary: {
+        total: packages.length,
+        compliant: 0,
+        violations: 0,
+        warnings: 0,
+        requiresApproval: 0
+      }
+    }
+    
+    for (const pkg of packages) {
+      const analysis = await this.analyzePackageLicense(pkg)
+      report.packages.push(analysis)
+      
+      switch (analysis.status) {
+        case 'compliant':
+          report.summary.compliant++
+          break
+        case 'violation':
+          report.violations.push(analysis)
+          report.summary.violations++
+          report.compliant = false
+          break
+        case 'warning':
+          report.warnings.push(analysis)
+          report.summary.warnings++
+          break
+        case 'requires-approval':
+          report.summary.requiresApproval++
+          break
+      }
+    }
+    
+    return report
+  }
+  
+  private async analyzePackageLicense(
+    pkg: Package
+  ): Promise<PackageLicenseAnalysis> {
+    const analysis: PackageLicenseAnalysis = {
+      package: pkg.name,
+      version: pkg.version,
+      licenses: pkg.licenses || ['UNKNOWN'],
+      status: 'compliant',
+      reason: '',
+      recommendation: ''
+    }
+    
+    // Check each license
+    for (const license of analysis.licenses) {
+      const licenseCheck = this.checkLicense(license, pkg.name)
+      
+      if (licenseCheck.status === 'violation') {
+        analysis.status = 'violation'
+        analysis.reason = licenseCheck.reason
+        analysis.recommendation = `Remove package or find alternative`
+        break
+      } else if (licenseCheck.status === 'warning' && analysis.status === 'compliant') {
+        analysis.status = 'warning'
+        analysis.reason = licenseCheck.reason
+        analysis.recommendation = licenseCheck.recommendation
+      } else if (licenseCheck.status === 'requires-approval' && 
+                 analysis.status === 'compliant') {
+        analysis.status = 'requires-approval'
+        analysis.reason = licenseCheck.reason
+        analysis.recommendation = 'Submit for legal team approval'
+      }
+    }
+    
+    return analysis
+  }
+  
+  private checkLicense(
+    license: string,
+    packageName: string
+  ): LicenseCheckResult {
+    // Check forbidden licenses
+    if (licensePolicy.forbidden.includes(license)) {
+      return {
+        status: 'violation',
+        reason: `License ${license} is forbidden`,
+        recommendation: 'Find alternative package'
+      }
+    }
+    
+    // Check allowed licenses
+    if (licensePolicy.allowed.includes(license)) {
+      return {
+        status: 'compliant',
+        reason: `License ${license} is pre-approved`,
+        recommendation: ''
+      }
+    }
+    
+    // Check requires approval
+    if (licensePolicy.requiresApproval.includes(license)) {
+      return {
+        status: 'requires-approval',
+        reason: `License ${license} requires legal approval`,
+        recommendation: 'Submit to legal team for review'
+      }
+    }
+    
+    // Check custom rules
+    for (const rule of licensePolicy.customRules) {
+      if (rule.licensePattern.test(license)) {
+        if (rule.packagePattern && !rule.packagePattern.test(packageName)) {
+          continue
+        }
+        
+        return {
+          status: rule.action as any,
+          reason: rule.reason,
+          recommendation: this.getRecommendationForAction(rule.action)
+        }
+      }
+    }
+    
+    // Default: requires review
+    return {
+      status: 'warning',
+      reason: `License ${license} not in policy, requires review`,
+      recommendation: 'Add to license policy or find alternative'
+    }
+  }
+}
+```
+::
+
+### 3. Supply Chain Security
+
+::code-group
+```typescript [Package Integrity Verification]
+// Package integrity and supply chain verification
+export class SupplyChainSecurityManager {
+  async verifyPackageIntegrity(packageName: string): Promise<IntegrityReport> {
+    const report: IntegrityReport = {
+      package: packageName,
+      verified: false,
+      checks: [],
+      risks: [],
+      recommendations: []
+    }
+    
+    // 1. Verify package signatures
+    const signatureCheck = await this.verifyPackageSignature(packageName)
+    report.checks.push(signatureCheck)
+    
+    // 2. Check maintainer reputation
+    const maintainerCheck = await this.checkMaintainerReputation(packageName)
+    report.checks.push(maintainerCheck)
+    
+    // 3. Analyze package contents
+    const contentCheck = await this.analyzePackageContents(packageName)
+    report.checks.push(contentCheck)
+    
+    // 4. Check for typosquatting
+    const typosquattingCheck = await this.checkTyposquatting(packageName)
+    report.checks.push(typosquattingCheck)
+    
+    // 5. Verify dependencies
+    const dependencyCheck = await this.verifyDependencies(packageName)
+    report.checks.push(dependencyCheck)
+    
+    // Aggregate results
+    report.verified = report.checks.every(check => check.passed)
+    report.risks = report.checks
+      .filter(check => !check.passed)
+      .map(check => ({
+        level: check.riskLevel,
+        description: check.reason,
+        mitigation: check.mitigation
+      }))
+    
+    return report
+  }
+  
+  private async verifyPackageSignature(
+    packageName: string
+  ): Promise<SecurityCheck> {
+    try {
+      // Use npm audit signatures or similar
+      const result = await execAsync(`npm audit signatures ${packageName}`)
+      
+      return {
+        name: 'Package Signature',
+        passed: !result.stderr,
+        reason: result.stderr || 'Package signature verified',
+        riskLevel: result.stderr ? 'high' : 'none',
+        mitigation: 'Use signed packages only'
+      }
+    } catch (error) {
+      return {
+        name: 'Package Signature',
+        passed: false,
+        reason: 'Could not verify package signature',
+        riskLevel: 'medium',
+        mitigation: 'Manual verification required'
+      }
+    }
+  }
+  
+  private async checkMaintainerReputation(
+    packageName: string
+  ): Promise<SecurityCheck> {
+    // Implement maintainer reputation checking
+    // This could integrate with npm API, GitHub API, etc.
+    
+    const packageInfo = await this.getPackageInfo(packageName)
+    const maintainers = packageInfo.maintainers || []
+    
+    let riskLevel: RiskLevel = 'none'
+    let issues: string[] = []
+    
+    for (const maintainer of maintainers) {
+      // Check maintainer account age
+      if (maintainer.accountAge < 365) { // Less than 1 year
+        issues.push(`Maintainer ${maintainer.name} has a new account`)
+        riskLevel = 'low'
+      }
+      
+      // Check for suspicious patterns
+      if (maintainer.packagesCount < 3 && packageInfo.weeklyDownloads > 10000) {
+        issues.push(`Maintainer ${maintainer.name} has few packages but high downloads`)
+        riskLevel = 'medium'
+      }
+    }
+    
+    return {
+      name: 'Maintainer Reputation',
+      passed: issues.length === 0,
+      reason: issues.length > 0 ? issues.join('; ') : 'Maintainer reputation verified',
+      riskLevel,
+      mitigation: 'Review maintainer activity and package history'
+    }
+  }
+  
+  private async analyzePackageContents(
+    packageName: string
+  ): Promise<SecurityCheck> {
+    // Download and analyze package contents for malicious code
+    const analysis = await this.scanPackageForMalware(packageName)
+    
+    return {
+      name: 'Content Analysis',
+      passed: !analysis.hasMaliciousContent,
+      reason: analysis.findings.join('; ') || 'No malicious content detected',
+      riskLevel: analysis.hasMaliciousContent ? 'high' : 'none',
+      mitigation: 'Remove package and find alternative'
+    }
+  }
+  
+  private async checkTyposquatting(
+    packageName: string
+  ): Promise<SecurityCheck> {
+    const popularPackages = await this.getPopularPackageNames()
+    const suspiciousNames = this.findSimilarNames(packageName, popularPackages)
+    
+    const isTyposquat = suspiciousNames.length > 0 && 
+                      !popularPackages.includes(packageName)
+    
+    return {
+      name: 'Typosquatting Check',
+      passed: !isTyposquat,
+      reason: isTyposquat 
+        ? `Package name similar to: ${suspiciousNames.join(', ')}`
+        : 'No typosquatting detected',
+      riskLevel: isTyposquat ? 'high' : 'none',
+      mitigation: 'Verify package name is correct and legitimate'
+    }
+  }
+}
+```
+
+```typescript [Automated Remediation]
+// Automated security remediation
+export class SecurityRemediationService {
+  async remediateVulnerabilities(
+    vulnerabilities: Vulnerability[]
+  ): Promise<RemediationResult> {
+    const result: RemediationResult = {
+      success: false,
+      remediatedCount: 0,
+      failedCount: 0,
+      details: []
+    }
+    
+    // Group vulnerabilities by remediation strategy
+    const groupedVulnerabilities = this.groupByRemediationStrategy(vulnerabilities)
+    
+    // Apply each remediation strategy
+    for (const [strategy, vulns] of groupedVulnerabilities) {
+      try {
+        const strategyResult = await this.applyRemediationStrategy(strategy, vulns)
+        result.details.push(strategyResult)
+        result.remediatedCount += strategyResult.successCount
+        result.failedCount += strategyResult.failureCount
+      } catch (error) {
+        result.details.push({
+          strategy,
+          successCount: 0,
+          failureCount: vulns.length,
+          error: error.message
+        })
+        result.failedCount += vulns.length
+      }
+    }
+    
+    result.success = result.failedCount === 0
+    
+    // Create security report
+    await this.generateSecurityReport(result)
+    
+    return result
+  }
+  
+  private groupByRemediationStrategy(
+    vulnerabilities: Vulnerability[]
+  ): Map<RemediationStrategy, Vulnerability[]> {
+    const groups = new Map<RemediationStrategy, Vulnerability[]>()
+    
+    for (const vuln of vulnerabilities) {
+      const strategy = this.determineRemediationStrategy(vuln)
+      
+      if (!groups.has(strategy)) {
+        groups.set(strategy, [])
+      }
+      
+      groups.get(strategy)!.push(vuln)
+    }
+    
+    return groups
+  }
+  
+  private determineRemediationStrategy(
+    vulnerability: Vulnerability
+  ): RemediationStrategy {
+    if (vulnerability.fixedVersion) {
+      return 'update-package'
+    }
+    
+    if (vulnerability.alternativePackages.length > 0) {
+      return 'replace-package'
+    }
+    
+    if (vulnerability.workaround) {
+      return 'apply-workaround'
+    }
+    
+    return 'manual-review'
+  }
+  
+  private async applyRemediationStrategy(
+    strategy: RemediationStrategy,
+    vulnerabilities: Vulnerability[]
+  ): Promise<StrategyResult> {
+    const result: StrategyResult = {
+      strategy,
+      successCount: 0,
+      failureCount: 0,
+      details: []
+    }
+    
+    switch (strategy) {
+      case 'update-package':
+        return await this.updatePackages(vulnerabilities)
+        
+      case 'replace-package':
+        return await this.replacePackages(vulnerabilities)
+        
+      case 'apply-workaround':
+        return await this.applyWorkarounds(vulnerabilities)
+        
+      case 'manual-review':
+        return await this.scheduleManualReview(vulnerabilities)
+        
+      default:
+        throw new Error(`Unknown remediation strategy: ${strategy}`)
+    }
+  }
+  
+  private async updatePackages(
+    vulnerabilities: Vulnerability[]
+  ): Promise<StrategyResult> {
+    const result: StrategyResult = {
+      strategy: 'update-package',
+      successCount: 0,
+      failureCount: 0,
+      details: []
+    }
+    
+    // Group by package for batch updates
+    const packageUpdates = new Map<string, string>()
+    
+    for (const vuln of vulnerabilities) {
+      if (vuln.fixedVersion) {
+        packageUpdates.set(vuln.package, vuln.fixedVersion)
+      }
+    }
+    
+    // Apply updates
+    for (const [packageName, version] of packageUpdates) {
+      try {
+        await this.updatePackageVersion(packageName, version)
+        result.successCount++
+        result.details.push({
+          package: packageName,
+          action: `Updated to ${version}`,
+          success: true
+        })
+      } catch (error) {
+        result.failureCount++
+        result.details.push({
+          package: packageName,
+          action: `Failed to update to ${version}`,
+          success: false,
+          error: error.message
+        })
+      }
+    }
+    
+    return result
+  }
+}
+```
+::
+
+This comprehensive dependency management architecture ensures abubis.chat maintains secure, up-to-date, and compliant dependencies while minimizing maintenance overhead through automation.

@@ -1,0 +1,107 @@
+{
+  "python": {
+    "name": "pylsp",
+    "command": ["/Users/mertozoner/Library/Python/3.11/bin/pylsp"],
+    "args": [],
+    "transport": "stdio",
+    "install": "pip install python-lsp-server",
+    "supports": ["*.py"],
+    "description": "Python Language Server Protocol implementation",
+    "capabilities": {
+      "textDocument": {
+        "hover": true,
+        "definition": true,
+        "references": true,
+        "documentSymbol": true,
+        "completion": true
+      },
+      "workspace": {
+        "symbol": true
+      }
+    }
+  },
+  "typescript": {
+    "name": "typescript-language-server",
+    "command": ["typescript-language-server"],
+    "args": ["--stdio"],
+    "transport": "stdio",
+    "install": "npm install -g typescript-language-server typescript",
+    "supports": ["*.ts", "*.tsx", "*.js", "*.jsx"],
+    "description": "TypeScript and JavaScript language server",
+    "capabilities": {
+      "textDocument": {
+        "hover": true,
+        "definition": true,
+        "references": true,
+        "documentSymbol": true,
+        "completion": true
+      },
+      "workspace": {
+        "symbol": true
+      }
+    }
+  },
+  "go": {
+    "name": "gopls",
+    "command": ["gopls"],
+    "args": [],
+    "transport": "stdio",
+    "install": "go install golang.org/x/tools/gopls@latest",
+    "supports": ["*.go"],
+    "description": "Go language server",
+    "capabilities": {
+      "textDocument": {
+        "hover": true,
+        "definition": true,
+        "references": true,
+        "documentSymbol": true,
+        "completion": true
+      },
+      "workspace": {
+        "symbol": true
+      }
+    }
+  },
+  "rust": {
+    "name": "rust-analyzer",
+    "command": ["rust-analyzer"],
+    "args": [],
+    "transport": "stdio",
+    "install": "rustup component add rust-analyzer",
+    "supports": ["*.rs"],
+    "description": "Rust language server",
+    "capabilities": {
+      "textDocument": {
+        "hover": true,
+        "definition": true,
+        "references": true,
+        "documentSymbol": true,
+        "completion": true
+      },
+      "workspace": {
+        "symbol": true
+      }
+    }
+  },
+  "java": {
+    "name": "jdtls",
+    "command": ["jdtls"],
+    "args": [],
+    "transport": "stdio",
+    "install": "Download from https://download.eclipse.org/jdtls/",
+    "supports": ["*.java"],
+    "description": "Eclipse JDT Language Server",
+    "capabilities": {
+      "textDocument": {
+        "hover": true,
+        "definition": true,
+        "references": true,
+        "documentSymbol": true,
+        "completion": true
+      },
+      "workspace": {
+        "symbol": true
+      }
+    }
+  }
+}

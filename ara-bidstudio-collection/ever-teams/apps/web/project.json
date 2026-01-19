@@ -1,0 +1,58 @@
+{
+	"name": "web",
+	"$schema": "../../node_modules/nx/schemas/project-schema.json",
+	"sourceRoot": "apps/web",
+	"projectType": "application",
+	"targets": {
+		"build": {
+			"executor": "@nx/next:build",
+			"outputs": ["{options.outputPath}"],
+			"defaultConfiguration": "production",
+			"options": {
+				"root": "apps/web",
+				"outputPath": "dist/apps/web"
+			},
+			"configurations": {
+				"production": {}
+			}
+		},
+		"serve": {
+			"executor": "@nx/next:server",
+			"options": {
+				"buildTarget": "web:build",
+				"dev": true,
+				"port": 3030,
+				"hostname": "localhost"
+			},
+			"configurations": {
+				"production": {
+					"buildTarget": "web:build:production",
+					"dev": false,
+					"hostname": "app.ever.team"
+				}
+			}
+		},
+		"export": {
+			"executor": "@nx/next:export",
+			"options": {
+				"buildTarget": "web:build:production"
+			}
+		},
+		"test": {
+			"executor": "@nx/jest:jest",
+			"outputs": ["{workspaceRoot}/coverage/apps/web"],
+			"options": {
+				"jestConfig": "apps/web/jest.config.js",
+				"passWithNoTests": true
+			}
+		},
+		"lint": {
+			"executor": "@nx/linter:eslint",
+			"outputs": ["{options.outputFile}"],
+			"options": {
+				"lintFilePatterns": ["apps/web/**/*.{ts,tsx,js,jsx}"]
+			}
+		}
+	},
+	"tags": []
+}

@@ -1,0 +1,982 @@
+---
+category: security
+subcategory: rate-limiting
+tags: [rate-limiting, wallet-based, ddos-protection, usage-control]
+cursor:
+  context_window: 8192
+  temperature: 0.3
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["./authentication.mdc"]
+  exports: ["rate-limit-patterns", "usage-controls"]
+  references: ["../web3/subscriptions.mdc"]
+---
+
+# Wallet-Based Rate Limiting & Usage Controls
+
+## Multi-Tier Rate Limiting Architecture
+
+### 1. Wallet-Based Rate Limiting
+```typescript
+export interface WalletRateLimits {
+  walletAddress: string;
+  subscriptionTier: 'free' | 'monthly' | 'yearly';
+  limits: {
+    chatMessages: {
+      perMinute: number;
+      perHour: number;
+      perDay: number;
+      perMonth: number;
+    };
+    memoryUploads: {
+      perHour: number;
+      perDay: number;
+      maxFileSize: number; // bytes
+      maxTotalStorage: number; // bytes
+    };
+    apiRequests: {
+      perSecond: number;
+      perMinute: number;
+      perHour: number;
+    };
+    tokens: {
+      perDay: number;
+      perMonth: number;
+    };
+  };
+  currentUsage: {
+    chatMessages: UsageWindow;
+    memoryUploads: UsageWindow;
+    apiRequests: UsageWindow;
+    tokens: UsageWindow;
+    storage: number;
+  };
+}
+
+export interface UsageWindow {
+  perSecond?: number;
+  perMinute?: number;
+  perHour?: number;
+  perDay?: number;
+  perMonth?: number;
+  windowStart: number;
+  resetTimes: {
+    second?: number;
+    minute?: number;
+    hour?: number;
+    day?: number;
+    month?: number;
+  };
+}
+
+export class WalletRateLimiter {
+  private walletLimits: Map<string, WalletRateLimits> = new Map();
+  private readonly DEFAULT_LIMITS = this.getDefaultLimits();
+
+  public async initializeWalletLimits(
+    walletAddress: string,
+    subscriptionTier: 'free' | 'monthly' | 'yearly' = 'free'
+  ): Promise<WalletRateLimits> {
+    const limits = this.getTierLimits(subscriptionTier);
+    const now = Date.now();
+
+    const walletLimits: WalletRateLimits = {
+      walletAddress,
+      subscriptionTier,
+      limits,
+      currentUsage: {
+        chatMessages: this.createUsageWindow(now),
+        memoryUploads: this.createUsageWindow(now),
+        apiRequests: this.createUsageWindow(now),
+        tokens: this.createUsageWindow(now),
+        storage: 0
+      }
+    };
+
+    this.walletLimits.set(walletAddress, walletLimits);
+    return walletLimits;
+  }
+
+  public async checkRateLimit(
+    walletAddress: string,
+    resourceType: 'chatMessages' | 'memoryUploads' | 'apiRequests' | 'tokens',
+    requestedAmount: number = 1
+  ): Promise<{
+    allowed: boolean;
+    remainingQuota: {
+      perSecond?: number;
+      perMinute?: number;
+      perHour?: number;
+      perDay?: number;
+      perMonth?: number;
+    };
+    resetTime?: number;
+    reason?: string;
+  }> {
+    let walletLimits = this.walletLimits.get(walletAddress);
+    
+    if (!walletLimits) {
+      // Auto-initialize with free tier
+      walletLimits = await this.initializeWalletLimits(walletAddress, 'free');
+    }
+
+    const now = Date.now();
+    const usage = walletLimits.currentUsage[resourceType];
+    const limits = walletLimits.limits[resourceType] as any;
+
+    // Update usage windows
+    this.updateUsageWindows(usage, now);
+
+    // Check each time window
+    for (const [period, limit] of Object.entries(limits)) {
+      if (typeof limit !== 'number') continue;
+      
+      const currentUsage = usage[period as keyof UsageWindow] as number || 0;
+      
+      if (currentUsage + requestedAmount > limit) {
+        return {
+          allowed: false,
+          remainingQuota: this.calculateRemainingQuota(walletLimits, resourceType),
+          resetTime: this.getNextResetTime(usage, period),
+          reason: `${resourceType} limit exceeded: ${limit}/${period}`
+        };
+      }
+    }
+
+    // Update usage
+    this.incrementUsage(usage, requestedAmount);
+
+    return {
+      allowed: true,
+      remainingQuota: this.calculateRemainingQuota(walletLimits, resourceType)
+    };
+  }
+
+  public async updateSubscriptionTier(
+    walletAddress: string,
+    newTier: 'free' | 'monthly' | 'yearly'
+  ): Promise<void> {
+    const walletLimits = this.walletLimits.get(walletAddress);
+    if (!walletLimits) {
+      await this.initializeWalletLimits(walletAddress, newTier);
+      return;
+    }
+
+    walletLimits.subscriptionTier = newTier;
+    walletLimits.limits = this.getTierLimits(newTier);
+    
+    // Reset usage if upgrading (generous policy)
+    if (newTier !== 'free' && walletLimits.subscriptionTier === 'free') {
+      const now = Date.now();
+      walletLimits.currentUsage = {
+        chatMessages: this.createUsageWindow(now),
+        memoryUploads: this.createUsageWindow(now),
+        apiRequests: this.createUsageWindow(now),
+        tokens: this.createUsageWindow(now),
+        storage: walletLimits.currentUsage.storage // Keep storage usage
+      };
+    }
+  }
+
+  private getTierLimits(tier: 'free' | 'monthly' | 'yearly'): WalletRateLimits['limits'] {
+    switch (tier) {
+      case 'free':
+        return {
+          chatMessages: {
+            perMinute: 5,
+            perHour: 20,
+            perDay: 50,
+            perMonth: 500
+          },
+          memoryUploads: {
+            perHour: 3,
+            perDay: 10,
+            maxFileSize: 5 * 1024 * 1024, // 5MB
+            maxTotalStorage: 50 * 1024 * 1024 // 50MB
+          },
+          apiRequests: {
+            perSecond: 2,
+            perMinute: 60,
+            perHour: 1000
+          },
+          tokens: {
+            perDay: 10000,
+            perMonth: 100000
+          }
+        };
+      
+      case 'monthly':
+        return {
+          chatMessages: {
+            perMinute: 30,
+            perHour: 500,
+            perDay: 2000,
+            perMonth: 20000
+          },
+          memoryUploads: {
+            perHour: 20,
+            perDay: 100,
+            maxFileSize: 50 * 1024 * 1024, // 50MB
+            maxTotalStorage: 1024 * 1024 * 1024 // 1GB
+          },
+          apiRequests: {
+            perSecond: 10,
+            perMinute: 300,
+            perHour: 5000
+          },
+          tokens: {
+            perDay: 100000,
+            perMonth: 2000000
+          }
+        };
+      
+      case 'yearly':
+        return {
+          chatMessages: {
+            perMinute: 50,
+            perHour: 1000,
+            perDay: 5000,
+            perMonth: 50000
+          },
+          memoryUploads: {
+            perHour: 50,
+            perDay: 200,
+            maxFileSize: 100 * 1024 * 1024, // 100MB
+            maxTotalStorage: 5 * 1024 * 1024 * 1024 // 5GB
+          },
+          apiRequests: {
+            perSecond: 20,
+            perMinute: 600,
+            perHour: 10000
+          },
+          tokens: {
+            perDay: 200000,
+            perMonth: 5000000
+          }
+        };
+    }
+  }
+
+  private createUsageWindow(now: number): UsageWindow {
+    return {
+      perSecond: 0,
+      perMinute: 0,
+      perHour: 0,
+      perDay: 0,
+      perMonth: 0,
+      windowStart: now,
+      resetTimes: {
+        second: now + 1000,
+        minute: now + 60000,
+        hour: now + 3600000,
+        day: now + 86400000,
+        month: now + 30 * 86400000
+      }
+    };
+  }
+
+  private updateUsageWindows(usage: UsageWindow, now: number): void {
+    // Reset windows that have expired
+    if (now >= usage.resetTimes.second!) {
+      usage.perSecond = 0;
+      usage.resetTimes.second = now + 1000;
+    }
+    if (now >= usage.resetTimes.minute!) {
+      usage.perMinute = 0;
+      usage.resetTimes.minute = now + 60000;
+    }
+    if (now >= usage.resetTimes.hour!) {
+      usage.perHour = 0;
+      usage.resetTimes.hour = now + 3600000;
+    }
+    if (now >= usage.resetTimes.day!) {
+      usage.perDay = 0;
+      usage.resetTimes.day = now + 86400000;
+    }
+    if (now >= usage.resetTimes.month!) {
+      usage.perMonth = 0;
+      usage.resetTimes.month = now + 30 * 86400000;
+    }
+  }
+
+  private incrementUsage(usage: UsageWindow, amount: number): void {
+    usage.perSecond = (usage.perSecond || 0) + amount;
+    usage.perMinute = (usage.perMinute || 0) + amount;
+    usage.perHour = (usage.perHour || 0) + amount;
+    usage.perDay = (usage.perDay || 0) + amount;
+    usage.perMonth = (usage.perMonth || 0) + amount;
+  }
+
+  private calculateRemainingQuota(
+    walletLimits: WalletRateLimits,
+    resourceType: keyof WalletRateLimits['currentUsage']
+  ): any {
+    if (resourceType === 'storage') return {};
+    
+    const limits = walletLimits.limits[resourceType] as any;
+    const usage = walletLimits.currentUsage[resourceType] as UsageWindow;
+    
+    const remaining: any = {};
+    
+    for (const [period, limit] of Object.entries(limits)) {
+      if (typeof limit === 'number') {
+        const currentUsage = usage[period as keyof UsageWindow] as number || 0;
+        remaining[period] = Math.max(0, limit - currentUsage);
+      }
+    }
+    
+    return remaining;
+  }
+
+  private getNextResetTime(usage: UsageWindow, period: string): number {
+    switch (period) {
+      case 'perSecond': return usage.resetTimes.second!;
+      case 'perMinute': return usage.resetTimes.minute!;
+      case 'perHour': return usage.resetTimes.hour!;
+      case 'perDay': return usage.resetTimes.day!;
+      case 'perMonth': return usage.resetTimes.month!;
+      default: return Date.now() + 60000; // Default to 1 minute
+    }
+  }
+
+  private getDefaultLimits(): WalletRateLimits['limits'] {
+    return this.getTierLimits('free');
+  }
+
+  public getWalletUsageStats(walletAddress: string): {
+    subscriptionTier: string;
+    usage: any;
+    limits: any;
+    utilizationPercentage: any;
+  } | null {
+    const walletLimits = this.walletLimits.get(walletAddress);
+    if (!walletLimits) return null;
+
+    const utilizationPercentage: any = {};
+    
+    for (const [resourceType, limits] of Object.entries(walletLimits.limits)) {
+      if (resourceType === 'storage') continue;
+      
+      utilizationPercentage[resourceType] = {};
+      const usage = walletLimits.currentUsage[resourceType as keyof WalletRateLimits['currentUsage']] as UsageWindow;
+      
+      for (const [period, limit] of Object.entries(limits as any)) {
+        if (typeof limit === 'number') {
+          const currentUsage = usage[period as keyof UsageWindow] as number || 0;
+          utilizationPercentage[resourceType][period] = (currentUsage / limit) * 100;
+        }
+      }
+    }
+
+    return {
+      subscriptionTier: walletLimits.subscriptionTier,
+      usage: walletLimits.currentUsage,
+      limits: walletLimits.limits,
+      utilizationPercentage
+    };
+  }
+}
+```
+
+### 2. IP-Based DDoS Protection
+```typescript
+export interface IPRateLimit {
+  ipAddress: string;
+  requestCounts: {
+    perSecond: number;
+    perMinute: number;
+    perHour: number;
+  };
+  windowStart: number;
+  isBlocked: boolean;
+  blockExpiry?: number;
+  suspiciousActivity: {
+    consecutiveFailures: number;
+    lastFailureTime: number;
+    userAgentVariations: Set<string>;
+    requestPatterns: string[];
+  };
+}
+
+export class IPRateLimiter {
+  private ipLimits: Map<string, IPRateLimit> = new Map();
+  private readonly LIMITS = {
+    perSecond: 10,
+    perMinute: 300,
+    perHour: 5000
+  };
+  private readonly BLOCK_DURATION = 60 * 60 * 1000; // 1 hour
+  private readonly SUSPICIOUS_THRESHOLD = 5;
+
+  public checkIPRateLimit(
+    ipAddress: string,
+    userAgent: string,
+    isAuthRequest: boolean = false
+  ): {
+    allowed: boolean;
+    reason?: string;
+    retryAfter?: number;
+    suspiciousActivity?: boolean;
+  } {
+    let ipLimit = this.ipLimits.get(ipAddress);
+    const now = Date.now();
+
+    if (!ipLimit) {
+      ipLimit = this.initializeIPLimit(ipAddress, now);
+      this.ipLimits.set(ipAddress, ipLimit);
+    }
+
+    // Check if IP is currently blocked
+    if (ipLimit.isBlocked) {
+      if (ipLimit.blockExpiry && now >= ipLimit.blockExpiry) {
+        // Unblock IP
+        ipLimit.isBlocked = false;
+        ipLimit.blockExpiry = undefined;
+        this.resetIPCounters(ipLimit, now);
+      } else {
+        const retryAfter = ipLimit.blockExpiry ? ipLimit.blockExpiry - now : this.BLOCK_DURATION;
+        return {
+          allowed: false,
+          reason: 'IP blocked due to suspicious activity',
+          retryAfter
+        };
+      }
+    }
+
+    // Update time windows
+    this.updateIPWindows(ipLimit, now);
+
+    // Check rate limits
+    const limits = isAuthRequest 
+      ? { perSecond: 2, perMinute: 10, perHour: 100 } // Stricter for auth
+      : this.LIMITS;
+
+    if (ipLimit.requestCounts.perSecond >= limits.perSecond) {
+      this.recordSuspiciousActivity(ipLimit, 'rate_limit_exceeded_second', userAgent);
+      return {
+        allowed: false,
+        reason: 'Rate limit exceeded: too many requests per second'
+      };
+    }
+
+    if (ipLimit.requestCounts.perMinute >= limits.perMinute) {
+      this.recordSuspiciousActivity(ipLimit, 'rate_limit_exceeded_minute', userAgent);
+      return {
+        allowed: false,
+        reason: 'Rate limit exceeded: too many requests per minute'
+      };
+    }
+
+    if (ipLimit.requestCounts.perHour >= limits.perHour) {
+      this.recordSuspiciousActivity(ipLimit, 'rate_limit_exceeded_hour', userAgent);
+      return {
+        allowed: false,
+        reason: 'Rate limit exceeded: too many requests per hour'
+      };
+    }
+
+    // Record successful request
+    this.incrementIPCounters(ipLimit);
+    ipLimit.suspiciousActivity.userAgentVariations.add(userAgent);
+
+    // Check for suspicious patterns
+    const suspiciousActivity = this.detectSuspiciousActivity(ipLimit, userAgent);
+
+    return {
+      allowed: true,
+      suspiciousActivity
+    };
+  }
+
+  public recordFailedRequest(ipAddress: string, userAgent: string, reason: string): void {
+    const ipLimit = this.ipLimits.get(ipAddress);
+    if (!ipLimit) return;
+
+    ipLimit.suspiciousActivity.consecutiveFailures++;
+    ipLimit.suspiciousActivity.lastFailureTime = Date.now();
+    ipLimit.suspiciousActivity.requestPatterns.push(reason);
+
+    // Block IP after too many consecutive failures
+    if (ipLimit.suspiciousActivity.consecutiveFailures >= this.SUSPICIOUS_THRESHOLD) {
+      this.blockIP(ipAddress, 'too_many_failures');
+    }
+  }
+
+  public recordSuccessfulRequest(ipAddress: string): void {
+    const ipLimit = this.ipLimits.get(ipAddress);
+    if (!ipLimit) return;
+
+    // Reset failure counter on success
+    ipLimit.suspiciousActivity.consecutiveFailures = 0;
+  }
+
+  private initializeIPLimit(ipAddress: string, now: number): IPRateLimit {
+    return {
+      ipAddress,
+      requestCounts: {
+        perSecond: 0,
+        perMinute: 0,
+        perHour: 0
+      },
+      windowStart: now,
+      isBlocked: false,
+      suspiciousActivity: {
+        consecutiveFailures: 0,
+        lastFailureTime: 0,
+        userAgentVariations: new Set(),
+        requestPatterns: []
+      }
+    };
+  }
+
+  private updateIPWindows(ipLimit: IPRateLimit, now: number): void {
+    const elapsed = now - ipLimit.windowStart;
+
+    if (elapsed >= 1000) {
+      ipLimit.requestCounts.perSecond = 0;
+    }
+    if (elapsed >= 60000) {
+      ipLimit.requestCounts.perMinute = 0;
+    }
+    if (elapsed >= 3600000) {
+      ipLimit.requestCounts.perHour = 0;
+      ipLimit.windowStart = now;
+    }
+  }
+
+  private incrementIPCounters(ipLimit: IPRateLimit): void {
+    ipLimit.requestCounts.perSecond++;
+    ipLimit.requestCounts.perMinute++;
+    ipLimit.requestCounts.perHour++;
+  }
+
+  private resetIPCounters(ipLimit: IPRateLimit, now: number): void {
+    ipLimit.requestCounts = {
+      perSecond: 0,
+      perMinute: 0,
+      perHour: 0
+    };
+    ipLimit.windowStart = now;
+    ipLimit.suspiciousActivity = {
+      consecutiveFailures: 0,
+      lastFailureTime: 0,
+      userAgentVariations: new Set(),
+      requestPatterns: []
+    };
+  }
+
+  private detectSuspiciousActivity(ipLimit: IPRateLimit, userAgent: string): boolean {
+    const suspicious = 
+      // Too many different user agents from same IP
+      ipLimit.suspiciousActivity.userAgentVariations.size > 10 ||
+      // High failure rate
+      ipLimit.suspiciousActivity.consecutiveFailures > 2 ||
+      // Rapid request patterns
+      ipLimit.requestCounts.perSecond > 5;
+
+    if (suspicious) {
+      this.recordSuspiciousActivity(ipLimit, 'suspicious_pattern_detected', userAgent);
+    }
+
+    return suspicious;
+  }
+
+  private recordSuspiciousActivity(ipLimit: IPRateLimit, pattern: string, userAgent: string): void {
+    ipLimit.suspiciousActivity.requestPatterns.push(pattern);
+    
+    console.warn(`Suspicious activity detected from IP ${ipLimit.ipAddress}:`, {
+      pattern,
+      userAgent,
+      consecutiveFailures: ipLimit.suspiciousActivity.consecutiveFailures,
+      userAgentCount: ipLimit.suspiciousActivity.userAgentVariations.size,
+      requestCounts: ipLimit.requestCounts
+    });
+
+    // Auto-block after multiple suspicious patterns
+    const recentSuspiciousPatterns = ipLimit.suspiciousActivity.requestPatterns
+      .filter(p => p.includes('suspicious') || p.includes('exceeded'))
+      .slice(-5);
+
+    if (recentSuspiciousPatterns.length >= 3) {
+      this.blockIP(ipLimit.ipAddress, 'multiple_suspicious_patterns');
+    }
+  }
+
+  private blockIP(ipAddress: string, reason: string): void {
+    const ipLimit = this.ipLimits.get(ipAddress);
+    if (!ipLimit) return;
+
+    ipLimit.isBlocked = true;
+    ipLimit.blockExpiry = Date.now() + this.BLOCK_DURATION;
+
+    console.warn(`Blocking IP ${ipAddress} for reason: ${reason}`, {
+      consecutiveFailures: ipLimit.suspiciousActivity.consecutiveFailures,
+      userAgentVariations: ipLimit.suspiciousActivity.userAgentVariations.size,
+      requestPatterns: ipLimit.suspiciousActivity.requestPatterns.slice(-10)
+    });
+  }
+
+  public getIPStats(): {
+    totalIPs: number;
+    blockedIPs: number;
+    suspiciousIPs: number;
+    topRequesters: Array<{ ip: string; requestsPerHour: number }>;
+  } {
+    const ips = Array.from(this.ipLimits.values());
+    const blocked = ips.filter(ip => ip.isBlocked).length;
+    const suspicious = ips.filter(ip => 
+      ip.suspiciousActivity.consecutiveFailures > 0 ||
+      ip.suspiciousActivity.userAgentVariations.size > 5
+    ).length;
+
+    const topRequesters = ips
+      .map(ip => ({ ip: ip.ipAddress, requestsPerHour: ip.requestCounts.perHour }))
+      .sort((a, b) => b.requestsPerHour - a.requestsPerHour)
+      .slice(0, 10);
+
+    return {
+      totalIPs: ips.length,
+      blockedIPs: blocked,
+      suspiciousIPs: suspicious,
+      topRequesters
+    };
+  }
+}
+```
+
+### 3. Comprehensive Rate Limiting Middleware
+```typescript
+export interface RateLimitContext {
+  walletAddress?: string;
+  ipAddress: string;
+  userAgent: string;
+  sessionId?: string;
+  resourceType: 'chatMessages' | 'memoryUploads' | 'apiRequests' | 'tokens' | 'auth';
+  requestedAmount?: number;
+}
+
+export class ComprehensiveRateLimiter {
+  private walletLimiter: WalletRateLimiter;
+  private ipLimiter: IPRateLimiter;
+
+  constructor() {
+    this.walletLimiter = new WalletRateLimiter();
+    this.ipLimiter = new IPRateLimiter();
+  }
+
+  public async checkAllLimits(context: RateLimitContext): Promise<{
+    allowed: boolean;
+    reason?: string;
+    retryAfter?: number;
+    rateLimitHeaders: Record<string, string>;
+  }> {
+    const { walletAddress, ipAddress, userAgent, resourceType, requestedAmount = 1 } = context;
+
+    // Always check IP limits first
+    const ipCheck = this.ipLimiter.checkIPRateLimit(
+      ipAddress,
+      userAgent,
+      resourceType === 'auth'
+    );
+
+    if (!ipCheck.allowed) {
+      return {
+        allowed: false,
+        reason: ipCheck.reason,
+        retryAfter: ipCheck.retryAfter,
+        rateLimitHeaders: {
+          'X-RateLimit-Limit': 'IP rate limit exceeded',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(Math.ceil((Date.now() + (ipCheck.retryAfter || 0)) / 1000)),
+          'Retry-After': String(Math.ceil((ipCheck.retryAfter || 0) / 1000))
+        }
+      };
+    }
+
+    // Check wallet limits if wallet is provided and not auth request
+    if (walletAddress && resourceType !== 'auth') {
+      const walletCheck = await this.walletLimiter.checkRateLimit(
+        walletAddress,
+        resourceType as any,
+        requestedAmount
+      );
+
+      if (!walletCheck.allowed) {
+        const headers = this.generateWalletLimitHeaders(walletAddress, resourceType, walletCheck);
+        
+        return {
+          allowed: false,
+          reason: walletCheck.reason,
+          retryAfter: walletCheck.resetTime ? walletCheck.resetTime - Date.now() : undefined,
+          rateLimitHeaders: headers
+        };
+      }
+
+      // Generate success headers with remaining quota
+      const headers = this.generateWalletLimitHeaders(walletAddress, resourceType, walletCheck);
+      
+      return {
+        allowed: true,
+        rateLimitHeaders: headers
+      };
+    }
+
+    // For requests without wallet (auth, public endpoints)
+    return {
+      allowed: true,
+      rateLimitHeaders: {
+        'X-RateLimit-Limit-IP': String(this.ipLimiter['LIMITS'].perMinute),
+        'X-RateLimit-Remaining-IP': String(this.ipLimiter['LIMITS'].perMinute - ipCheck['requestCount'] || 0),
+      }
+    };
+  }
+
+  public recordSuccess(context: RateLimitContext): void {
+    this.ipLimiter.recordSuccessfulRequest(context.ipAddress);
+  }
+
+  public recordFailure(context: RateLimitContext, reason: string): void {
+    this.ipLimiter.recordFailedRequest(context.ipAddress, context.userAgent, reason);
+  }
+
+  private generateWalletLimitHeaders(
+    walletAddress: string,
+    resourceType: string,
+    checkResult: any
+  ): Record<string, string> {
+    const stats = this.walletLimiter.getWalletUsageStats(walletAddress);
+    if (!stats || !checkResult.remainingQuota) {
+      return {};
+    }
+
+    const headers: Record<string, string> = {};
+    const remaining = checkResult.remainingQuota;
+
+    // Add remaining quota headers
+    if (remaining.perMinute !== undefined) {
+      headers['X-RateLimit-Remaining-Minute'] = String(remaining.perMinute);
+    }
+    if (remaining.perHour !== undefined) {
+      headers['X-RateLimit-Remaining-Hour'] = String(remaining.perHour);
+    }
+    if (remaining.perDay !== undefined) {
+      headers['X-RateLimit-Remaining-Day'] = String(remaining.perDay);
+    }
+    if (remaining.perMonth !== undefined) {
+      headers['X-RateLimit-Remaining-Month'] = String(remaining.perMonth);
+    }
+
+    // Add subscription tier info
+    headers['X-Subscription-Tier'] = stats.subscriptionTier;
+    
+    // Add reset time if provided
+    if (checkResult.resetTime) {
+      headers['X-RateLimit-Reset'] = String(Math.ceil(checkResult.resetTime / 1000));
+    }
+
+    return headers;
+  }
+
+  public async upgradeWalletTier(
+    walletAddress: string,
+    newTier: 'monthly' | 'yearly'
+  ): Promise<void> {
+    await this.walletLimiter.updateSubscriptionTier(walletAddress, newTier);
+  }
+
+  public getSystemStats(): {
+    walletStats: any;
+    ipStats: any;
+    totalRequestsLastHour: number;
+    blockedRequestsLastHour: number;
+  } {
+    // This would aggregate stats from both limiters
+    const ipStats = this.ipLimiter.getIPStats();
+    
+    return {
+      walletStats: {
+        // Would aggregate wallet usage stats
+      },
+      ipStats,
+      totalRequestsLastHour: 0, // Would calculate from metrics
+      blockedRequestsLastHour: 0 // Would calculate from metrics
+    };
+  }
+}
+
+// Express middleware integration
+export function createRateLimitMiddleware(rateLimiter: ComprehensiveRateLimiter) {
+  return async (req: any, res: any, next: any) => {
+    const context: RateLimitContext = {
+      walletAddress: req.user?.walletAddress,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('User-Agent') || 'unknown',
+      sessionId: req.user?.sessionId,
+      resourceType: inferResourceType(req.path, req.method),
+      requestedAmount: inferRequestAmount(req)
+    };
+
+    try {
+      const result = await rateLimiter.checkAllLimits(context);
+      
+      // Add rate limit headers to response
+      for (const [key, value] of Object.entries(result.rateLimitHeaders)) {
+        res.set(key, value);
+      }
+
+      if (!result.allowed) {
+        if (result.retryAfter) {
+          res.set('Retry-After', String(Math.ceil(result.retryAfter / 1000)));
+        }
+        
+        rateLimiter.recordFailure(context, result.reason || 'rate_limit');
+        
+        return res.status(429).json({
+          error: 'Rate limit exceeded',
+          reason: result.reason,
+          retryAfter: result.retryAfter
+        });
+      }
+
+      // Record successful request
+      rateLimiter.recordSuccess(context);
+      
+      next();
+    } catch (error) {
+      console.error('Rate limiting error:', error);
+      // Fail open - allow request if rate limiter fails
+      next();
+    }
+  };
+}
+
+function inferResourceType(path: string, method: string): RateLimitContext['resourceType'] {
+  if (path.includes('/auth') || path.includes('/login')) {
+    return 'auth';
+  }
+  if (path.includes('/chat') || path.includes('/message')) {
+    return 'chatMessages';
+  }
+  if (path.includes('/memory') || path.includes('/upload')) {
+    return 'memoryUploads';
+  }
+  return 'apiRequests';
+}
+
+function inferRequestAmount(req: any): number {
+  // For token usage, could parse request to estimate token count
+  // For file uploads, could use file size
+  // For chat messages, usually 1
+  return 1;
+}
+```
+
+### 4. Usage Analytics & Monitoring
+```typescript
+export interface UsageMetrics {
+  walletAddress: string;
+  timestamp: number;
+  resourceType: string;
+  amount: number;
+  subscriptionTier: string;
+  successful: boolean;
+  rateLimited: boolean;
+  ipAddress: string;
+  userAgent: string;
+}
+
+export class UsageAnalytics {
+  private metrics: UsageMetrics[] = [];
+  private readonly MAX_METRICS = 100000;
+
+  public recordUsage(metric: UsageMetrics): void {
+    this.metrics.push(metric);
+    
+    // Maintain metrics size
+    if (this.metrics.length > this.MAX_METRICS) {
+      this.metrics = this.metrics.slice(-this.MAX_METRICS / 2);
+    }
+  }
+
+  public getWalletUsageReport(
+    walletAddress: string,
+    timeWindow: number = 24 * 60 * 60 * 1000 // 24 hours
+  ): {
+    totalRequests: number;
+    successfulRequests: number;
+    rateLimitedRequests: number;
+    resourceBreakdown: Record<string, number>;
+    hourlyUsage: Array<{ hour: number; count: number }>;
+  } {
+    const now = Date.now();
+    const windowStart = now - timeWindow;
+    
+    const walletMetrics = this.metrics.filter(
+      m => m.walletAddress === walletAddress && m.timestamp >= windowStart
+    );
+
+    const resourceBreakdown = walletMetrics.reduce((breakdown, metric) => {
+      breakdown[metric.resourceType] = (breakdown[metric.resourceType] || 0) + metric.amount;
+      return breakdown;
+    }, {} as Record<string, number>);
+
+    // Calculate hourly usage
+    const hourlyUsage = new Array(24).fill(0).map((_, index) => ({
+      hour: index,
+      count: 0
+    }));
+
+    walletMetrics.forEach(metric => {
+      const hour = new Date(metric.timestamp).getHours();
+      hourlyUsage[hour].count += metric.amount;
+    });
+
+    return {
+      totalRequests: walletMetrics.length,
+      successfulRequests: walletMetrics.filter(m => m.successful).length,
+      rateLimitedRequests: walletMetrics.filter(m => m.rateLimited).length,
+      resourceBreakdown,
+      hourlyUsage
+    };
+  }
+
+  public getSystemUsageReport(): {
+    totalRequestsLastHour: number;
+    uniqueWalletsLastHour: number;
+    rateLimitedRequestsLastHour: number;
+    topResourceTypes: Array<{ type: string; count: number }>;
+    subscriptionTierBreakdown: Record<string, number>;
+  } {
+    const now = Date.now();
+    const lastHour = now - 60 * 60 * 1000;
+    
+    const recentMetrics = this.metrics.filter(m => m.timestamp >= lastHour);
+    const uniqueWallets = new Set(recentMetrics.map(m => m.walletAddress)).size;
+    const rateLimited = recentMetrics.filter(m => m.rateLimited).length;
+
+    const resourceTypeCounts = recentMetrics.reduce((counts, metric) => {
+      counts[metric.resourceType] = (counts[metric.resourceType] || 0) + metric.amount;
+      return counts;
+    }, {} as Record<string, number>);
+
+    const topResourceTypes = Object.entries(resourceTypeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const subscriptionTierBreakdown = recentMetrics.reduce((breakdown, metric) => {
+      breakdown[metric.subscriptionTier] = (breakdown[metric.subscriptionTier] || 0) + 1;
+      return breakdown;
+    }, {} as Record<string, number>);
+
+    return {
+      totalRequestsLastHour: recentMetrics.length,
+      uniqueWalletsLastHour: uniqueWallets,
+      rateLimitedRequestsLastHour: rateLimited,
+      topResourceTypes,
+      subscriptionTierBreakdown
+    };
+  }
+}
+```

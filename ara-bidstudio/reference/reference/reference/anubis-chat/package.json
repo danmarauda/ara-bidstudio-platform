@@ -1,0 +1,52 @@
+{
+  "name": "anubis-chat",
+  "private": true,
+  "packageManager": "bun@1.2.19",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "workspaces": [
+    "apps/web",
+    "packages/backend"
+  ],
+  "scripts": {
+    "check": "biome check --write .",
+    "dev": "turbo dev",
+    "dev:all": "turbo dev",
+    "build": "turbo build",
+    "build:all": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:native": "turbo -F native dev",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F @anubis-chat/backend dev",
+    "dev:setup": "turbo -F @anubis-chat/backend dev:setup",
+    "claude:verify": "claude verify --all",
+    "claude:index": "claude index:codebase",
+    "claude:docs": "claude docs:cache --popular",
+    "claude:mode": "claude mode:switch project-default",
+    "claude:loop": "claude loop:start verification build test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.1.2",
+    "@playwright/test": "^1.54.2",
+    "@testing-library/react-hooks": "^8.0.1",
+    "@types/react-window": "^1.8.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
+    "turbo": "^2.5.4",
+    "ultracite": "5.1.1"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx}": [
+      "npx ultracite format"
+    ]
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.85.3",
+    "react-intersection-observer": "^9.16.0",
+    "react-window": "^1.8.11",
+    "react-window-infinite-loader": "^1.0.10",
+    "recharts": "^3.1.2",
+    "zustand": "^5.0.7"
+  }
+}

@@ -1,0 +1,494 @@
+---
+category: backend
+subcategory: convex-database
+tags: [convex, database, realtime, typescript, patterns]
+cursor:
+  context_window: 8192
+  temperature: 0.5
+  max_tokens: 4096
+  model_preference: ["claude-3.5-sonnet", "gpt-4-turbo"]
+relations:
+  imports: ["../architecture/data-flow.mdc"]
+  exports: ["convex-actions", "convex-queries", "convex-mutations"]
+  references: ["./database-schema.mdc", "./api-design.mdc"]
+---
+
+# Convex Database Patterns - v1.7+ Best Practices
+
+## Core Principles
+
+**Reactive by Design**: All database operations automatically trigger UI updates through subscriptions
+**Type Safety First**: Full TypeScript integration with automatic type generation
+**Transaction Integrity**: All mutations run in ACID transactions with automatic conflict resolution
+**Real-time Sync**: Changes propagate instantly to all connected clients
+
+## Function Types & Architecture
+
+### 1. Query Functions (Read-Only)
+```typescript
+// ✅ Optimized query with proper indexing
+export const getChatHistory = query({
+  args: { walletAddress: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, { walletAddress, limit = 50 }) => {
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_wallet_timestamp", (q) => 
+        q.eq("walletAddress", walletAddress)
+      )
+      .order("desc")
+      .take(limit);
+  },
+});
+
+// ❌ Avoid: Unbounded queries without indexes
+export const getBadChatHistory = query({
+  handler: async (ctx) => {
+    return await ctx.db.query("messages").collect(); // DON'T DO THIS
+  },
+});
+```
+
+### 2. Mutation Functions (Write Operations)
+```typescript
+// ✅ Proper mutation with validation and wallet isolation
+export const createMessage = mutation({
+  args: {
+    walletAddress: v.string(),
+    content: v.string(),
+    chatId: v.id("chats"),
+    embedding: v.optional(v.array(v.number())),
+  },
+  handler: async (ctx, args) => {
+    // Validate wallet ownership
+    const chat = await ctx.db.get(args.chatId);
+    if (!chat || chat.walletAddress !== args.walletAddress) {
+      throw new ConvexError("Unauthorized: Chat not found or access denied");
+    }
+
+    // Create message with timestamp
+    const messageId = await ctx.db.insert("messages", {
+      ...args,
+      timestamp: Date.now(),
+      status: "sent",
+    });
+
+    // Schedule background embedding if needed
+    if (!args.embedding) {
+      await ctx.scheduler.runAfter(0, internal.embeddings.generateEmbedding, {
+        messageId,
+        content: args.content,
+      });
+    }
+
+    return messageId;
+  },
+});
+```
+
+### 3. Action Functions (External Operations)
+```typescript
+// ✅ Action for external API calls with proper error handling
+export const generateAIResponse = action({
+  args: { 
+    messageId: v.id("messages"),
+    walletAddress: v.string(),
+  },
+  handler: async (ctx, { messageId, walletAddress }) => {
+    try {
+      // Get message data
+      const message = await ctx.runQuery(api.messages.getMessage, { 
+        messageId, 
+        walletAddress 
+      });
+      
+      if (!message) {
+        throw new Error("Message not found");
+      }
+
+      // Call external AI service
+      const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4",
+          messages: [{ role: "user", content: message.content }],
+        }),
+      });
+
+      const responseData = await aiResponse.json();
+      
+      // Store response via mutation
+      await ctx.runMutation(api.messages.createAIResponse, {
+        originalMessageId: messageId,
+        content: responseData.choices[0].message.content,
+        walletAddress,
+        chatId: message.chatId,
+      });
+
+    } catch (error) {
+      // Log error and update message status
+      console.error("AI response generation failed:", error);
+      await ctx.runMutation(api.messages.updateMessageStatus, {
+        messageId,
+        status: "failed",
+        error: error.message,
+      });
+    }
+  },
+});
+```
+
+## Wallet-Based Data Isolation
+
+::alert{type="warning"}
+**Critical Security Pattern**: All database operations MUST validate wallet ownership to prevent data leakage between users.
+::
+
+### Row-Level Security Pattern
+```typescript
+// ✅ Secure query with wallet isolation
+export const getUserChats = query({
+  args: { walletAddress: v.string() },
+  handler: async (ctx, { walletAddress }) => {
+    return await ctx.db
+      .query("chats")
+      .withIndex("by_wallet", (q) => q.eq("walletAddress", walletAddress))
+      .collect();
+  },
+});
+
+// ✅ Secure mutation with ownership validation
+export const updateChatTitle = mutation({
+  args: {
+    chatId: v.id("chats"),
+    title: v.string(),
+    walletAddress: v.string(),
+  },
+  handler: async (ctx, { chatId, title, walletAddress }) => {
+    const chat = await ctx.db.get(chatId);
+    
+    if (!chat || chat.walletAddress !== walletAddress) {
+      throw new ConvexError("Unauthorized: Access denied");
+    }
+    
+    return await ctx.db.patch(chatId, { title });
+  },
+});
+```
+
+## Real-Time Subscription Patterns
+
+### Efficient Subscription Strategy
+```typescript
+// ✅ Optimized real-time chat subscription
+export const subscribeToChatMessages = query({
+  args: { 
+    chatId: v.id("chats"),
+    walletAddress: v.string(),
+    since: v.optional(v.number()),
+  },
+  handler: async (ctx, { chatId, walletAddress, since }) => {
+    // Verify chat ownership
+    const chat = await ctx.db.get(chatId);
+    if (!chat || chat.walletAddress !== walletAddress) {
+      return [];
+    }
+
+    let query = ctx.db
+      .query("messages")
+      .withIndex("by_chat_timestamp", (q) => q.eq("chatId", chatId));
+    
+    if (since) {
+      query = query.filter((q) => q.gt("timestamp", since));
+    }
+
+    return await query
+      .order("asc")
+      .take(100); // Limit real-time updates
+  },
+});
+```
+
+## Performance Optimization Patterns
+
+### 1. Efficient Indexing Strategy
+```typescript
+// convex/schema.ts
+export default defineSchema({
+  messages: defineTable({
+    chatId: v.id("chats"),
+    walletAddress: v.string(),
+    content: v.string(),
+    timestamp: v.number(),
+    embedding: v.optional(v.array(v.number())),
+    status: v.union(v.literal("sending"), v.literal("sent"), v.literal("failed")),
+  })
+  .index("by_chat_timestamp", ["chatId", "timestamp"])
+  .index("by_wallet_timestamp", ["walletAddress", "timestamp"])
+  .index("by_status", ["status"])
+  .searchIndex("content_search", {
+    searchField: "content",
+    filterFields: ["walletAddress", "chatId"],
+  }),
+});
+```
+
+### 2. Batch Operations for Performance
+```typescript
+// ✅ Efficient batch message processing
+export const batchCreateMessages = mutation({
+  args: {
+    messages: v.array(v.object({
+      content: v.string(),
+      walletAddress: v.string(),
+      chatId: v.id("chats"),
+    })),
+  },
+  handler: async (ctx, { messages }) => {
+    const results = [];
+    
+    for (const msg of messages) {
+      // Validate each message's chat ownership
+      const chat = await ctx.db.get(msg.chatId);
+      if (!chat || chat.walletAddress !== msg.walletAddress) {
+        continue; // Skip unauthorized messages
+      }
+      
+      const messageId = await ctx.db.insert("messages", {
+        ...msg,
+        timestamp: Date.now(),
+        status: "sent",
+      });
+      
+      results.push(messageId);
+    }
+    
+    return results;
+  },
+});
+```
+
+### 3. Pagination with Cursor-Based Navigation
+```typescript
+// ✅ Efficient pagination pattern
+export const getPaginatedMessages = query({
+  args: {
+    chatId: v.id("chats"),
+    walletAddress: v.string(),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { chatId, walletAddress, cursor, limit = 20 }) => {
+    // Verify ownership
+    const chat = await ctx.db.get(chatId);
+    if (!chat || chat.walletAddress !== walletAddress) {
+      return { messages: [], nextCursor: null };
+    }
+
+    let query = ctx.db
+      .query("messages")
+      .withIndex("by_chat_timestamp", (q) => q.eq("chatId", chatId));
+    
+    if (cursor) {
+      const cursorDoc = await ctx.db.get(cursor as Id<"messages">);
+      if (cursorDoc) {
+        query = query.filter((q) => q.lt("timestamp", cursorDoc.timestamp));
+      }
+    }
+
+    const messages = await query
+      .order("desc")
+      .take(limit + 1);
+    
+    const hasMore = messages.length > limit;
+    const result = hasMore ? messages.slice(0, limit) : messages;
+    const nextCursor = hasMore ? result[result.length - 1]._id : null;
+    
+    return {
+      messages: result,
+      nextCursor,
+      hasMore,
+    };
+  },
+});
+```
+
+## Error Handling & Validation
+
+### Comprehensive Validation Pattern
+```typescript
+import { ConvexError } from "convex/values";
+
+// ✅ Robust error handling with user-friendly messages
+export const createChat = mutation({
+  args: {
+    title: v.string(),
+    walletAddress: v.string(),
+    initialMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, { title, walletAddress, initialMessage }) => {
+    // Input validation
+    if (!title.trim()) {
+      throw new ConvexError("Chat title cannot be empty");
+    }
+    
+    if (title.length > 100) {
+      throw new ConvexError("Chat title must be less than 100 characters");
+    }
+    
+    if (!walletAddress.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
+      throw new ConvexError("Invalid Solana wallet address format");
+    }
+
+    try {
+      // Check user limits
+      const userChats = await ctx.db
+        .query("chats")
+        .withIndex("by_wallet", (q) => q.eq("walletAddress", walletAddress))
+        .collect();
+      
+      if (userChats.length >= 100) {
+        throw new ConvexError("Maximum chat limit reached (100)");
+      }
+
+      // Create chat
+      const chatId = await ctx.db.insert("chats", {
+        title: title.trim(),
+        walletAddress,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messageCount: 0,
+      });
+
+      // Create initial message if provided
+      if (initialMessage?.trim()) {
+        await ctx.db.insert("messages", {
+          chatId,
+          walletAddress,
+          content: initialMessage.trim(),
+          timestamp: Date.now(),
+          status: "sent",
+        });
+        
+        await ctx.db.patch(chatId, { messageCount: 1 });
+      }
+
+      return chatId;
+      
+    } catch (error) {
+      if (error instanceof ConvexError) {
+        throw error; // Re-throw user-friendly errors
+      }
+      
+      console.error("Chat creation failed:", error);
+      throw new ConvexError("Failed to create chat. Please try again.");
+    }
+  },
+});
+```
+
+## Background Job Patterns
+
+### Scheduled Task Integration
+```typescript
+// ✅ Background processing with scheduling
+export const processMessageEmbeddings = internalMutation({
+  args: { 
+    messageId: v.id("messages"),
+    retryCount: v.optional(v.number()),
+  },
+  handler: async (ctx, { messageId, retryCount = 0 }) => {
+    const message = await ctx.db.get(messageId);
+    if (!message || message.embedding) return; // Already processed
+    
+    try {
+      // Process embedding via action
+      await ctx.scheduler.runAfter(0, internal.actions.generateEmbedding, {
+        messageId,
+      });
+      
+    } catch (error) {
+      if (retryCount < 3) {
+        // Exponential backoff retry
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        await ctx.scheduler.runAfter(delay, internal.embeddings.processMessageEmbeddings, {
+          messageId,
+          retryCount: retryCount + 1,
+        });
+      } else {
+        // Mark as failed after max retries
+        await ctx.db.patch(messageId, { 
+          status: "embedding_failed",
+          error: error.message,
+        });
+      }
+    }
+  },
+});
+```
+
+## Rate Limiting Patterns
+
+### Per-Wallet Rate Limiting
+```typescript
+// ✅ Wallet-based rate limiting
+export const createMessageWithRateLimit = mutation({
+  args: {
+    walletAddress: v.string(),
+    chatId: v.id("chats"),
+    content: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const fiveMinutesAgo = now - (5 * 60 * 1000);
+    
+    // Check recent message count
+    const recentMessages = await ctx.db
+      .query("messages")
+      .withIndex("by_wallet_timestamp", (q) => 
+        q.eq("walletAddress", args.walletAddress)
+         .gt("timestamp", fiveMinutesAgo)
+      )
+      .collect();
+    
+    if (recentMessages.length >= 20) {
+      throw new ConvexError("Rate limit exceeded. Please wait before sending more messages.");
+    }
+    
+    // Proceed with message creation
+    return await ctx.db.insert("messages", {
+      ...args,
+      timestamp: now,
+      status: "sent",
+    });
+  },
+});
+```
+
+## Migration Patterns
+
+### Safe Schema Evolution
+```typescript
+// ✅ Safe migration pattern
+export const migrateUserPreferences = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    
+    for (const user of users) {
+      if (!user.preferences) {
+        await ctx.db.patch(user._id, {
+          preferences: {
+            theme: "dark",
+            notifications: true,
+            aiModel: "gpt-4",
+          },
+        });
+      }
+    }
+  },
+});
+```

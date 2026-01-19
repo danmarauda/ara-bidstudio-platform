@@ -1,0 +1,82 @@
+dist
+
+tmp
+.cache
+.github
+.circle
+.circleci
+.npmrc
+.husky
+.travis.yml
+greenkeeper.json
+docker-compose*.yml
+*.md
+.git/
+.gitignore
+Jenkinsfile
+
+**/.next
+**/build
+**/dist
+**/out
+
+**/*.log
+
+**/.vscode
+
+**/.env
+**/.env.local
+**/.env*.local
+**/.env*.sample
+apps/**/.env
+apps/**/.env.local
+apps/**/.env*.local
+apps/**/.env*.sample
+
+fly.toml
+
+node_modules
+**/node_modules/*
+apps/mobile/node_modules
+apps/desktop/node_modules
+apps/extensions/node_modules
+apps/web/node_modules
+
+packages/**/node_modules
+packages/plugins/**/node_modules
+
+# IDEs and editors
+.idea
+.vscode
+.project
+.classpath
+*.launch
+.settings/
+
+# e2e
+e2e/*.js
+e2e/*.map
+
+#System Files
+.DS_Store
+Thumbs.db
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Sentry Auth Token
+.sentryclirc

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Load runtime environment. Only one runtime env script should be included -->
+    <script src="/env-config.js"></script>
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="OpenContracts is an Apache2-licensed document analytics and sharing platform designed to make it
+      easy to query, analyze and label complex natural language documents. It's open, extensible, and designed for
+      teams and collaboration."
+    />
+    <meta property="og:type" content="website" key="Type" />
+    <meta
+      property="og:title"
+      content="Open Contracts: Free and Open Source Document Annotation"
+      key="Title"
+    />
+    <meta
+      property="og:description"
+      content="OpenContracts is an Apache2-licensed document analytics and sharing platform designed to make it
+      easy to query, analyze and label complex natural language documents. It's open, extensible, and designed for
+      teams and collaboration."
+      key="Description"
+    />
+    <meta
+      property="og:url"
+      content="https://opencontracts.opensource.legal/"
+      key="Url"
+    />
+    <meta
+      property="og:image"
+      content="/OpenContractsScreenshot.png"
+      key="Image"
+    />
+    <meta property="og:site_name" content="Open Contracts" key="Site" />
+
+    <link rel="apple-touch-icon" href="/logo192.png" />
+    <!--
+      manifest.json provides metadata used when your web app is installed on a
+      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
+    -->
+    <link rel="manifest" href="/manifest.json" />
+    <!--
+      Vite serves files from the 'public' directory at the root path '/'.
+      Make sure your assets (favicon.ico, manifest.json, etc.) are in the 'public' folder.
+    -->
+    <title>Open Contracts</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <!-- Removed duplicate runtime env loader to avoid overrides: env.js -->
+    <script type="module" src="/src/index.tsx"></script>
+    <div id="root" style="overflow-x: hidden"></div>
+    <!--
+      This HTML file is a template.
+      If you open it directly in the browser, you will see an empty page.
+
+      You can add webfonts, meta tags, or analytics to this file.
+      The build step will place the bundled scripts into the <body> tag.
+
+      To begin the development, run `npm start` or `yarn start` (or `yarn dev` with Vite).
+      To create a production bundle, use `npm run build` or `yarn build`.
+    -->
+  </body>
+</html>

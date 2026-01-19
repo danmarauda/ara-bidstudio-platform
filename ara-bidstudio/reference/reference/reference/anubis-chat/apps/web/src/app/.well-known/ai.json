@@ -1,0 +1,27 @@
+{
+  "overview": {
+    "name": "ANUBIS AI Chat",
+    "tagline": "Web3-native multi-model AI chat",
+    "website": "https://anubis.chat",
+    "capabilities": [
+      "Multi-model chat (GPT-5, GPT-5 Mini, Gemini 2.5 Pro, Claude, o4-mini, OSS)",
+      "Solana wallet authentication",
+      "Agent creation and workflows",
+      "RAG retrieval",
+      "Privacy-first, no email required"
+    ],
+    "blockchain": {
+      "primary": "Solana",
+      "walletAuth": true,
+      "payments": ["SOL", "Credit Card"],
+      "notes": "Subscriptions can be paid in SOL; converted at current rate"
+    },
+    "pricing": {
+      "tiers": [
+        { "name": "Free", "monthlyUSD": 0 },
+        { "name": "Pro", "monthlyUSD": 9.99 }
+      ],
+      "solanaAccepted": true
+    }
+  }
+}

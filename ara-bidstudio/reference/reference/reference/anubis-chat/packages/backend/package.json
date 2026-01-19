@@ -1,0 +1,28 @@
+{
+  "name": "@anubis-chat/backend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "convex dev",
+    "dev:setup": "convex dev --configure --until-success"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.1",
+    "@ai-sdk/google": "^2.0.3",
+    "@ai-sdk/openai": "^2.0.7",
+    "@convex-dev/auth": "^0.0.88",
+    "@convex-dev/persistent-text-streaming": "^0.2.3",
+    "@modelcontextprotocol/sdk": "^1.17.3",
+    "@openrouter/ai-sdk-provider": "1.1.1",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.4",
+    "ai": "^5.0.8",
+    "convex": "^1.25.4",
+    "zod": "^4.0.17"
+  }
+}

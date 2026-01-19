@@ -1,0 +1,352 @@
+'use client';
+
+import { Authenticated, Unauthenticated, useQuery } from 'convex/react';
+import { api } from '../convex/_generated/api';
+import { useAuth } from '@workos-inc/authkit-nextjs/components';
+import type { User } from '@workos-inc/node';
+// Temporarily disabled motion for build
+// import { motion } from 'framer-motion';
+import { Brain, Workflow, Database, Sparkles, BarChart3, MessageSquare, Shield, Activity } from 'lucide-react';
+
+export default function Home() {
+  const { user, signOut } = useAuth();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <header className="sticky top-0 z-50 backdrop-blur-md bg-white/80 dark:bg-slate-900/80 border-b border-slate-200/50 dark:border-slate-700/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <Brain className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                ARAPS Platform
+              </span>
+            </motion.div>
+            {user && <UserMenu user={user} onSignOut={signOut} />}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Authenticated>
+          <Dashboard />
+        </Authenticated>
+        <Unauthenticated>
+          <HeroSection />
+        </Unauthenticated>
+      </main>
+    </div>
+  );
+}
+
+function HeroSection() {
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center space-y-8 py-16">
+      <div className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.1 }}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium"
+        >
+          <Sparkles className="w-4 h-4" />
+          Powered by Mastra AI & Convex
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent"
+        >
+          Next-Gen AI Platform
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto leading-relaxed"
+        >
+          Experience the future of intelligent automation with our premium S-Tier platform. Build agents, orchestrate
+          workflows, and unlock unprecedented productivity.
+        </motion.p>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="flex flex-col sm:flex-row gap-4 justify-center items-center"
+      >
+        <a href="/sign-up">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-shadow"
+          >
+            Get Started Free
+          </motion.button>
+        </a>
+        <a href="/sign-in">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-8 py-4 rounded-xl font-semibold border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-shadow"
+          >
+            Sign In
+          </motion.button>
+        </a>
+      </motion.div>
+
+      {/* Feature highlights */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16"
+      >
+        <FeatureCard
+          icon={Brain}
+          title="Intelligent Agents"
+          description="Advanced AI agents that learn and adapt to your needs"
+        />
+        <FeatureCard
+          icon={Workflow}
+          title="Workflow Automation"
+          description="Seamlessly orchestrate complex multi-step processes"
+        />
+        <FeatureCard
+          icon={Shield}
+          title="Enterprise Security"
+          description="Bank-grade security with end-to-end encryption"
+        />
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function FeatureCard({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}) {
+  return (
+    <motion.div
+      whileHover={{ y: -5 }}
+      className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-200 dark:border-slate-700"
+    >
+      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mb-4">
+        <Icon className="w-6 h-6 text-white" />
+      </div>
+      <h3 className="font-semibold text-lg mb-2">{title}</h3>
+      <p className="text-slate-600 dark:text-slate-400">{description}</p>
+    </motion.div>
+  );
+}
+
+function Dashboard() {
+  const { numbers } = useQuery(api.myFunctions.listNumbers, { count: 10 }) ?? {};
+  const agents = useQuery(api.myFunctions.listAgents) ?? [];
+
+  const stats = [
+    { label: 'Active Agents', value: agents.length, icon: Brain, color: 'text-blue-500' },
+    { label: 'Conversations', value: '12', icon: MessageSquare, color: 'text-green-500' },
+    { label: 'Workflows', value: '3', icon: Workflow, color: 'text-purple-500' },
+    { label: 'Data Points', value: numbers?.length || 0, icon: Database, color: 'text-orange-500' },
+  ];
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+      {/* Welcome Section */}
+      <div className="text-center space-y-4">
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent"
+        >
+          Welcome to ARAPS Platform
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto"
+        >
+          Your premium AI-powered platform for intelligent automation, advanced analytics, and seamless workflow
+          orchestration.
+        </motion.p>
+      </div>
+
+      {/* Stats Grid */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+      >
+        {stats.map((stat, index) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.4 + index * 0.1 }}
+            className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-200 dark:border-slate-700 hover:shadow-xl transition-shadow"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{stat.label}</p>
+                <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{stat.value}</p>
+              </div>
+              <stat.icon className={`w-8 h-8 ${stat.color}`} />
+            </div>
+          </motion.div>
+        ))}
+      </motion.div>
+
+      {/* Quick Actions */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="grid grid-cols-1 md:grid-cols-3 gap-6"
+      >
+        <QuickActionCard
+          icon={Brain}
+          title="Create Agent"
+          description="Build custom AI agents for specific tasks"
+          color="from-blue-500 to-blue-600"
+        />
+        <QuickActionCard
+          icon={Workflow}
+          title="Design Workflow"
+          description="Create automated multi-step processes"
+          color="from-purple-500 to-purple-600"
+        />
+        <QuickActionCard
+          icon={BarChart3}
+          title="View Analytics"
+          description="Analyze performance and insights"
+          color="from-green-500 to-green-600"
+        />
+      </motion.div>
+
+      {/* Recent Activity */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+        className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-200 dark:border-slate-700"
+      >
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Activity className="w-5 h-5 text-blue-500" />
+          Recent Activity
+        </h3>
+        <div className="space-y-3">
+          <ActivityItem
+            icon={Sparkles}
+            title="New agent created"
+            description="Code Generation Agent is now active"
+            time="2 minutes ago"
+          />
+          <ActivityItem
+            icon={MessageSquare}
+            title="Conversation started"
+            description="User initiated chat with Data Analysis Agent"
+            time="5 minutes ago"
+          />
+          <ActivityItem
+            icon={Workflow}
+            title="Workflow completed"
+            description="Data processing workflow finished successfully"
+            time="10 minutes ago"
+          />
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function QuickActionCard({
+  icon: Icon,
+  title,
+  description,
+  color,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  color: string;
+}) {
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      className={`bg-gradient-to-r ${color} rounded-xl p-6 text-white cursor-pointer group`}
+    >
+      <Icon className="w-8 h-8 mb-3 group-hover:scale-110 transition-transform" />
+      <h3 className="font-semibold mb-2">{title}</h3>
+      <p className="text-sm opacity-90">{description}</p>
+    </motion.div>
+  );
+}
+
+function ActivityItem({
+  icon: Icon,
+  title,
+  description,
+  time,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  time: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+      <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center">
+        <Icon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-sm">{title}</p>
+        <p className="text-xs text-slate-600 dark:text-slate-400">{description}</p>
+      </div>
+      <span className="text-xs text-slate-500">{time}</span>
+    </div>
+  );
+}
+
+function UserMenu({ user, onSignOut }: { user: User; onSignOut: () => void }) {
+  return (
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        {user.profilePictureUrl && (
+          <img
+            src={user.profilePictureUrl}
+            alt="Profile"
+            className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-700"
+          />
+        )}
+        <div className="hidden sm:block">
+          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{user.firstName || user.email}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
+        </div>
+      </div>
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={onSignOut}
+        className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+      >
+        Sign out
+      </motion.button>
+    </motion.div>
+  );
+}
